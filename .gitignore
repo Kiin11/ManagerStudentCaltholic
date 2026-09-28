@@ -1,0 +1,4 @@
+*.dll
+/.vs
+/ManagerStudentCaltholic/obj
+docker-compose.override.yml
