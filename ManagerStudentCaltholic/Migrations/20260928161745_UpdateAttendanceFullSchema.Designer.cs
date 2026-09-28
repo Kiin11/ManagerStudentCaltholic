@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ManagerStudentCaltholic.Migrations
 {
     [DbContext(typeof(ParishDbContext))]
-    [Migration("20260928101333_InitialParishSchema")]
-    partial class InitialParishSchema
+    [Migration("20260928161745_UpdateAttendanceFullSchema")]
+    partial class UpdateAttendanceFullSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -63,15 +63,33 @@ namespace ManagerStudentCaltholic.Migrations
                     b.Property<DateTime>("AttendanceDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("AttendedMass")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("ClassAttended")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<TimeSpan?>("ClassCheckInTime")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("ClassStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("ABSENT_UNPERMITTED");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
 
                     b.Property<long>("EnrollmentId")
                         .HasColumnType("bigint");
@@ -81,10 +99,15 @@ namespace ManagerStudentCaltholic.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
-                    b.Property<bool>("MassAttended")
+                    b.Property<TimeSpan?>("MassCheckInTime")
+                        .HasColumnType("interval");
+
+                    b.Property<string>("MassStatus")
+                        .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("ABSENT_UNPERMITTED");
 
                     b.Property<string>("Note")
                         .HasColumnType("text");
@@ -92,16 +115,13 @@ namespace ManagerStudentCaltholic.Migrations
                     b.Property<DateTime?>("OriginalMissedDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("PRESENT");
-
                     b.HasKey("Id");
 
                     b.HasIndex("AttendanceDate");
+
+                    b.HasIndex("DayOfWeek");
+
+                    b.HasIndex("DayOfWeek", "AttendedMass");
 
                     b.HasIndex("EnrollmentId", "AttendanceDate")
                         .IsUnique();
