@@ -1,0 +1,47 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-broker
+    restart: unless-stopped
+    ports:
+      - "5672:5672"     
+      - "15672:15672"   
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bff-network
+
+  partner-bff-api:
+    build:
+      context: ./PartnerIntegrationBff
+      dockerfile: Dockerfile
+    container_name: partner-bff-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__UserName=guest
+      - RabbitMQ__Password=guest
+      - RabbitMQ__TransactionsQueue=partner-transactions-queue
+
+      - PartnerService__BaseUrl=http://localhost:8080
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bff-network
+
+networks:
+  bff-network:
+    driver: bridge
