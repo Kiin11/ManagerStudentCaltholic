@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ManagerStudentCaltholic.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialParishSchema : Migration
+    public partial class UpdateAttendanceFullSchema : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -106,9 +106,13 @@ namespace ManagerStudentCaltholic.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     EnrollmentId = table.Column<long>(type: "bigint", nullable: false),
                     AttendanceDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "PRESENT"),
-                    MassAttended = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    DayOfWeek = table.Column<int>(type: "integer", nullable: false),
+                    AttendedMass = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    MassStatus = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "ABSENT_UNPERMITTED"),
+                    MassCheckInTime = table.Column<TimeSpan>(type: "interval", nullable: true),
                     ClassAttended = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    ClassStatus = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "ABSENT_UNPERMITTED"),
+                    ClassCheckInTime = table.Column<TimeSpan>(type: "interval", nullable: true),
                     IsMakeUp = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     OriginalMissedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Note = table.Column<string>(type: "text", nullable: true),
@@ -129,6 +133,16 @@ namespace ManagerStudentCaltholic.Migrations
                 name: "IX_Attendances_AttendanceDate",
                 table: "Attendances",
                 column: "AttendanceDate");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Attendances_DayOfWeek",
+                table: "Attendances",
+                column: "DayOfWeek");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Attendances_DayOfWeek_AttendedMass",
+                table: "Attendances",
+                columns: new[] { "DayOfWeek", "AttendedMass" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Attendances_EnrollmentId_AttendanceDate",
