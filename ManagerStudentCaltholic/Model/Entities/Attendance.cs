@@ -9,17 +9,26 @@ namespace ManagerStudentCaltholic.Model.Entities
         public long EnrollmentId { get; set; }
         public Enrollment Enrollment { get; set; } = null!;
 
-        public DateTime AttendanceDate { get; set; } 
+        public DateTime AttendanceDate { get; set; }
 
-        [Required, MaxLength(20)]
-        public string Status { get; set; } = "PRESENT"; // PRESENT, ABSENT_PERMITTED, ABSENT_UNPERMITTED
+        // Bổ sung: Thứ trong tuần (0: Sunday, 4: Thursday...) để query thống kê nhanh
+        public DayOfWeek DayOfWeek { get; set; }
 
-        public bool MassAttended { get; set; } = false; // Dự Lễ 
-        public bool ClassAttended { get; set; } = false; // Đi học
+        // 1. ĐI LỄ
+        public bool AttendedMass { get; set; } = false;
+        [MaxLength(20)]
+        public string MassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_...
+        public TimeSpan? MassCheckInTime { get; set; }
 
-        // Hỗ trợ điểm danh bù (được thiết lập ở Task-408)
-        public bool IsMakeUp { get; set; } = false;       // Đánh dấu bản ghi là điểm danh bù
-        public DateTime? OriginalMissedDate { get; set; } // Ngày vắng ban đầu cần bù
+        // 2. ĐI HỌC GIÁO LÝ
+        public bool ClassAttended { get; set; } = false;
+        [MaxLength(20)]
+        public string ClassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_...
+        public TimeSpan? ClassCheckInTime { get; set; }
+
+        // Điểm danh bù (TASK-408)
+        public bool IsMakeUp { get; set; } = false;       // Là buổi điểm danh bù
+        public DateTime? OriginalMissedDate { get; set; } // Bù cho ngày vắng nào
 
         public string? Note { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
