@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine
+WORKDIR /app
+
+# Cài đặt múi giờ Việt Nam
+RUN apk add --no-cache tzdata
+ENV TZ=Asia/Ho_Chi_Minh
+
+# Copy file .csproj và nạp thư viện trước
+COPY *.csproj ./
+RUN dotnet restore
+
+# Copy toàn bộ code
+COPY . ./
+
+EXPOSE 5000
+
+# Chế độ Hot-reload cho môi trường phát triển
+ENTRYPOINT ["dotnet", "watch", "run", "--urls", "http://0.0.0.0:5000", "--non-interactive"]
