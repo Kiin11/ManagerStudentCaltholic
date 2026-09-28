@@ -21,20 +21,24 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Enrollment>()
                 .HasIndex(e => new { e.StudentId, e.ClassRoomId }).IsUnique();
 
-            // Ràng buộc duy nhất: 1 học sinh chỉ có 1 bản ghi điểm danh trong 1 ngày
-            modelBuilder.Entity<Attendance>()
-                .HasIndex(a => new { a.EnrollmentId, a.AttendanceDate }).IsUnique();
-
-            // Đánh B-Tree Composite Index tối ưu truy vấn tìm kiếm điểm danh theo ngày
-            modelBuilder.Entity<Attendance>()
-                .HasIndex(a => a.AttendanceDate);
-
             modelBuilder.Entity<Attendance>(entity =>
             {
-                entity.Property(a => a.MassAttended).HasDefaultValue(false);
+                // Đảm bảo 1 học sinh chỉ có 1 dòng ghi nhận trong 1 ngày
+                entity.HasIndex(a => new { a.EnrollmentId, a.AttendanceDate }).IsUnique();
+
+                // B-Tree Index tra cứu theo ngày
+                entity.HasIndex(a => a.AttendanceDate);
+
+                // TỐI ƯU TRUY VẤN THEO THỨ: Đánh Index trên DayOfWeek và trạng thái đi Lễ
+                entity.HasIndex(a => new { a.DayOfWeek, a.AttendedMass });
+                entity.HasIndex(a => a.DayOfWeek);
+
+                entity.Property(a => a.DayOfWeek).HasConversion<int>(); // Lưu vào Postgres dưới dạng số nguyên (0..6)
+                entity.Property(a => a.AttendedMass).HasDefaultValue(false);
+                entity.Property(a => a.MassStatus).HasMaxLength(20).HasDefaultValue("ABSENT_UNPERMITTED");
                 entity.Property(a => a.ClassAttended).HasDefaultValue(false);
+                entity.Property(a => a.ClassStatus).HasMaxLength(20).HasDefaultValue("ABSENT_UNPERMITTED");
                 entity.Property(a => a.IsMakeUp).HasDefaultValue(false);
-                entity.Property(a => a.Status).HasMaxLength(20).HasDefaultValue("PRESENT");
                 entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
             });
         }
