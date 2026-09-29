@@ -20,5 +20,8 @@ namespace ManagerStudentCaltholic.Model.Entities
         public string GradeLevel { get; set; } = string.Empty; // Khai tâm, Rước lễ, Thêm sức, Bao đồng
         [ValidateNever]
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
+        // Thêm danh sách ClassTeachers vào ClassRoom
+        [ValidateNever]
+        public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>();
     }
 }

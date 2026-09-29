@@ -119,13 +119,39 @@
                                 <i class="bi bi-geo-alt me-1"></i>Phòng học: <span class="fw-semibold text-dark">@(string.IsNullOrEmpty(c.RoomName) ? "Chưa bố trí" : c.RoomName)</span>
                             </p>
 
-                            <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3">
-                                <span class="text-secondary small">Sĩ số lớp:</span>
-                                <span class="fw-bold fs-5 text-primary">@c.Enrollments.Count <small class="fs-6 fw-normal text-muted">em</small></span>
+                        </div>
+
+                        <!-- Danh sách GLV phụ trách -->
+                        <div class="mb-3">
+                            <div class="small fw-semibold text-secondary mb-1">
+                                <i class="bi bi-person-badge me-1"></i>Phụ trách:
                             </div>
+                            @if (c.ClassTeachers != null && c.ClassTeachers.Any())
+                            {
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var t in c.ClassTeachers)
+                                    {
+                                        <span class="badge @(t.RoleInClass == "HEAD" ? "bg-primary text-white" : "bg-light text-dark border")" title="@t.PhoneNumber">
+                                            @(t.RoleInClass == "HEAD" ? "[CN]" : "") @t.TeacherName
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small fst-italic">Chưa phân công GLV</span>
+                            }
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3">
+                            <span class="text-secondary small">Sĩ số lớp:</span>
+                            <span class="fw-bold fs-5 text-primary">@c.Enrollments.Count <small class="fs-6 fw-normal text-muted">em</small></span>
                         </div>
 
                         <div class="card-footer bg-white border-0 pt-0 pb-3 px-4 d-grid gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" onclick="openAssignModal(@c.Id, '@c.Name')">
+                                <i class="bi bi-person-plus me-1"></i> Phân Công GLV
+                            </button>
                             <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-primary btn-sm rounded-pill py-2">
                                 <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
                             </a>
@@ -177,7 +203,7 @@
 
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Phòng Học / Địa Điểm</label>
-                    <input type="text" name="RoomNumber" class="form-control" placeholder="Ví dụ: Phòng 101, Hội trường B..." maxlength="20" />
+                    <input type="text" name="RoomName" class="form-control" placeholder="Ví dụ: Phòng 101, Hội trường B..." maxlength="20" />
                 </div>
             </div>
             <div class="modal-footer bg-light">
@@ -189,3 +215,162 @@
         </form>
     </div>
 </div>
+
+<!-- ============================================================== -->
+<!-- Modal Phân công GLV (TASK-207)                             -->
+<!-- ============================================================== -->
+<div class="modal fade" id="assignTeacherModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary">
+                    <i class="bi bi-people-fill me-1"></i> Phân Công GLV - <span id="modalClassName" class="text-dark"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Form thêm GLV -->
+                <form id="assignTeacherForm" class="mb-4 p-3 bg-light rounded-3 border">
+                    <input type="hidden" id="assignClassRoomId" />
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Họ tên Giáo lý viên <span class="text-danger">*</span></label>
+                        <input type="text" id="teacherNameInput" class="form-control form-control-sm" placeholder="Ví dụ: Giuse Nguyễn Văn A" required />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Số điện thoại</label>
+                            <input type="text" id="teacherPhoneInput" class="form-control form-control-sm" placeholder="090..." />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Vai trò phụ trách</label>
+                            <select id="teacherRoleSelect" class="form-select form-select-sm">
+                                <option value="HEAD">Chủ nhiệm (HEAD)</option>
+                                <option value="MEMBER">Đồng hành (MEMBER)</option>
+                                <option value="DEPUTY">Dự bị / Trợ tá</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="submitAssignTeacher()">
+                        <i class="bi bi-plus-circle me-1"></i> Gán GLV Vào Lớp
+                    </button>
+                </form>
+
+                <!-- Bảng danh sách GLV hiện tại -->
+                <h6 class="fw-bold mb-2 text-secondary">Danh Sách GLV Phụ Trách:</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Họ Tên</th>
+                                <th>Vai Trò</th>
+                                <th>SĐT</th>
+                                <th class="text-center" style="width: 50px;">Xóa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherListBody">
+                            <!-- Render bằng JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentClassId = 0;
+
+        function openAssignModal(classId, className) {
+            currentClassId = classId;
+            document.getElementById('modalClassName').innerText = className;
+            document.getElementById('assignClassRoomId').value = classId;
+            document.getElementById('teacherNameInput').value = '';
+            document.getElementById('teacherPhoneInput').value = '';
+            loadTeachers(classId);
+            new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
+        }
+
+        async function loadTeachers(classId) {
+            const res = await fetch(`/Classes/GetTeachers?classId=${classId}`);
+            const result = await res.json();
+            const tbody = document.getElementById('teacherListBody');
+            tbody.innerHTML = '';
+
+            if (result.success && result.data.length > 0) {
+                result.data.forEach(t => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="fw-semibold">${t.teacherName}</td>
+                        <td><span class="badge ${t.roleInClass === 'HEAD' ? 'bg-primary' : 'bg-secondary'}">${t.roleName}</span></td>
+                        <td>${t.phoneNumber || ''}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeTeacher(${t.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-2">Chưa có GLV nào được phân công.</td></tr>';
+            }
+        }
+
+        async function submitAssignTeacher() {
+            const name = document.getElementById('teacherNameInput').value.trim();
+            const phone = document.getElementById('teacherPhoneInput').value.trim();
+            const role = document.getElementById('teacherRoleSelect').value;
+
+            if (!name) {
+                alert('Vui lòng nhập họ tên Giáo lý viên.');
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            const res = await fetch('/Classes/AssignTeacher', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify({
+                    classRoomId: currentClassId,
+                    teacherName: name,
+                    phoneNumber: phone,
+                    roleInClass: role
+                })
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                document.getElementById('teacherNameInput').value = '';
+                document.getElementById('teacherPhoneInput').value = '';
+                loadTeachers(currentClassId);
+            } else {
+                alert(result.message);
+            }
+        }
+
+        async function removeTeacher(id) {
+            if (!confirm('Bạn có chắc muốn hủy phân công GLV này?')) return;
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            const res = await fetch(`/Classes/RemoveTeacher/${id}`, {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': token
+                }
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                loadTeachers(currentClassId);
+            } else {
+                alert(result.message);
+            }
+        }
+    </script>
+}
