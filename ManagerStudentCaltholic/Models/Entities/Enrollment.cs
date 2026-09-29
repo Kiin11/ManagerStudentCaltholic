@@ -1,4 +1,4 @@
-﻿namespace ManagerStudentCaltholic.Model.Entities
+﻿namespace ManagerStudentCaltholic.Models.Entities
 {
     public class Enrollment
     {

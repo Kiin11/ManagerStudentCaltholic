@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Model.Entities;
+﻿using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Data

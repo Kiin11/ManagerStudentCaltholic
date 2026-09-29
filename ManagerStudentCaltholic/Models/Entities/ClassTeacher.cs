@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using System.ComponentModel.DataAnnotations;
 
-namespace ManagerStudentCaltholic.Model.Entities
+namespace ManagerStudentCaltholic.Models.Entities
 {
     public class ClassTeacher
     {

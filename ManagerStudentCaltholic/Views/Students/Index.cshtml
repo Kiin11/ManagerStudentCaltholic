@@ -1,0 +1,326 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.Student>
+@{
+    ViewData["Title"] = "Hồ Sơ Thiếu Nhi";
+    var currentPage = (int)ViewBag.CurrentPage;
+    var totalPages = (int)ViewBag.TotalPages;
+    var totalCount = (int)ViewBag.TotalCount;
+    var searchKeyword = (string)ViewBag.SearchKeyword;
+    var currentGender = (string)ViewBag.Gender;
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-people-fill me-2"></i>Hồ Sơ Thiếu Nhi Giáo Lý
+            </h3>
+            <p class="text-muted mb-0">Quản lý lý lịch bí tích, mã QR điểm danh (Tổng số: <strong>@totalCount</strong> em)</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createStudentModal">
+                <i class="bi bi-person-plus-fill me-1"></i> Thêm Thiếu Nhi
+            </button>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <!-- Search & Filter Bar -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <form method="get" asp-action="Index" class="row g-2 align-items-center">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                        <input type="text" name="searchKeyword" value="@searchKeyword" class="form-control" placeholder="Tìm theo Tên thánh, Họ tên, Mã QR, SĐT..." />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select name="gender" class="form-select">
+                        <option value="ALL" selected="@(currentGender == "ALL")">-- Tất cả giới tính --</option>
+                        <option value="Nam" selected="@(currentGender == "Nam")">Nam</option>
+                        <option value="Nữ" selected="@(currentGender == "Nữ")">Nữ</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">
+                        <i class="bi bi-filter me-1"></i> Tìm Kiếm
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <a asp-action="Index" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Làm mới
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Student Table -->
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Mã QR / Định Danh</th>
+                        <th>Tên Thánh & Họ Tên</th>
+                        <th>Giới Tính</th>
+                        <th>Ngày Sinh</th>
+                        <th>SĐT Phụ Huynh</th>
+                        <th class="text-center">Trạng Thái</th>
+                        <th class="text-end pe-4">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        @foreach (var s in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="badge bg-light text-dark border font-monospace px-2 py-1">
+                                        <i class="bi bi-qr-code me-1"></i>@s.StudentCode
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@s.ChristianName @s.FirstName @s.LastName</div>
+                                    <small class="text-muted">
+                                        @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "")
+                                        @(s.ConfirmationDate.HasValue ? $" | Thêm sức: {s.ConfirmationDate.Value:dd/MM/yyyy}" : "")
+                                    </small>
+                                </td>
+                                <td>
+                                    <span class="badge @(s.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
+                                        @s.Gender
+                                    </span>
+                                </td>
+                                <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(s.ParentPhone))
+                                    {
+                                        <a href="tel:@s.ParentPhone" class="text-decoration-none">
+                                            <i class="bi bi-telephone-outbound me-1"></i>@s.ParentPhone
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Chưa có</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (s.IsActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Đang học</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-pill">Tạm nghỉ</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-circle me-1" onclick="openEditModal(@s.Id)" title="Chỉnh sửa">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-circle" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
+                                            <i class="bi bi-power"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-people fs-1 d-block mb-2"></i>
+                                Không tìm thấy hồ sơ thiếu nhi nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (totalPages > 1)
+        {
+            <div class="card-footer bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Trang @currentPage / @totalPages</span>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage - 1)" asp-route-searchKeyword="@searchKeyword" asp-route-gender="@currentGender">«</a>
+                        </li>
+                        @for (int p = 1; p <= totalPages; p++)
+                        {
+                            <li class="page-item @(p == currentPage ? "active" : "")">
+                                <a class="page-link" asp-action="Index" asp-route-page="@p" asp-route-searchKeyword="@searchKeyword" asp-route-gender="@currentGender">@p</a>
+                            </li>
+                        }
+                        <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                            <a class="page-link" asp-action="Index" asp-route-page="@(currentPage + 1)" asp-route-searchKeyword="@searchKeyword" asp-route-gender="@currentGender">»</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- MODAL THÊM THIẾU NHI -->
+<div class="modal fade" id="createStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form asp-action="Create" method="post" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary"><i class="bi bi-person-plus me-2"></i>Thêm Hồ Sơ Thiếu Nhi Mới</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên Thánh <span class="text-danger">*</span></label>
+                        <input type="text" name="ChristianName" class="form-control" placeholder="Maria, Giuse..." required maxlength="50" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold">Họ và Tên Đệm <span class="text-danger">*</span></label>
+                        <input type="text" name="FirstName" class="form-control" placeholder="Nguyễn Văn" required maxlength="90" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Tên <span class="text-danger">*</span></label>
+                        <input type="text" name="LastName" class="form-control" placeholder="An" required maxlength="10" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Giới Tính <span class="text-danger">*</span></label>
+                        <select name="Gender" class="form-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Ngày Sinh <span class="text-danger">*</span></label>
+                        <input type="date" name="DateOfBirth" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">SĐT Phụ Huynh</label>
+                        <input type="tel" name="ParentPhone" class="form-control" placeholder="0912345678" maxlength="15" />
+                    </div>
+                    <div class="col-12"><hr class="my-2 text-muted" /></div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Rửa Tội</label>
+                        <input type="date" name="BaptismDate" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Thêm Sức</label>
+                        <input type="date" name="ConfirmationDate" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Lưu Hồ Sơ</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL SỬA THIẾU NHI -->
+<div class="modal fade" id="editStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form asp-action="Edit" method="post" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Id" id="edit_Id" />
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary"><i class="bi bi-pencil-square me-2"></i>Chỉnh Sửa Hồ Sơ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Mã Thiếu Nhi</label>
+                        <input type="text" id="edit_StudentCode" class="form-control bg-light" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên Thánh <span class="text-danger">*</span></label>
+                        <input type="text" name="ChristianName" id="edit_ChristianName" class="form-control" required maxlength="50" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Họ và Tên Đệm <span class="text-danger">*</span></label>
+                        <input type="text" name="FirstName" id="edit_FirstName" class="form-control" required maxlength="90" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên <span class="text-danger">*</span></label>
+                        <input type="text" name="LastName" id="edit_LastName" class="form-control" required maxlength="10" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Giới Tính</label>
+                        <select name="Gender" id="edit_Gender" class="form-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Ngày Sinh</label>
+                        <input type="date" name="DateOfBirth" id="edit_DateOfBirth" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">SĐT Phụ Huynh</label>
+                        <input type="tel" name="ParentPhone" id="edit_ParentPhone" class="form-control" maxlength="15" />
+                    </div>
+                    <div class="col-12"><hr class="my-2 text-muted" /></div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Rửa Tội</label>
+                        <input type="date" name="BaptismDate" id="edit_BaptismDate" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Thêm Sức</label>
+                        <input type="date" name="ConfirmationDate" id="edit_ConfirmationDate" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Cập Nhật</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openEditModal(studentId) {
+            fetch(`/Students/GetStudentAjax/${studentId}`)
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('edit_Id').value = data.id;
+                    document.getElementById('edit_StudentCode').value = data.studentCode;
+                    document.getElementById('edit_ChristianName').value = data.christianName;
+                    document.getElementById('edit_FirstName').value = data.firstName;
+                    document.getElementById('edit_LastName').value = data.lastName;
+                    document.getElementById('edit_Gender').value = data.gender;
+                    document.getElementById('edit_DateOfBirth').value = data.dateOfBirth;
+                    document.getElementById('edit_BaptismDate').value = data.baptismDate || '';
+                    document.getElementById('edit_ConfirmationDate').value = data.confirmationDate || '';
+                    document.getElementById('edit_ParentPhone').value = data.parentPhone || '';
+
+                    new bootstrap.Modal(document.getElementById('editStudentModal')).show();
+                })
+                .catch(err => alert('Không thể nạp dữ liệu thiếu nhi: ' + err));
+        }
+    </script>
+}
