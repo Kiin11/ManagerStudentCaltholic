@@ -1,0 +1,304 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassEnrollmentViewModel
+@{
+    ViewData["Title"] = $"Xếp Lớp - {Model.ClassName}";
+}
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <div class="d-flex align-items-center gap-2">
+                <a asp-controller="Classes" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-circle me-1">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h3 class="fw-bold text-primary mb-0">
+                    <i class="bi bi-person-lines-fill me-2"></i>Xếp Lớp: @Model.ClassName
+                </h3>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">@Model.GradeLevel</span>
+                <span class="badge bg-light text-secondary border px-2 py-1">Niên khóa: @Model.AcademicYearName</span>
+            </div>
+            <p class="text-muted mb-0 ms-5 ps-2">Sĩ số hiện tại: <strong id="currentCount">@Model.EnrolledStudents.Count</strong> học sinh</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-success shadow-sm px-3" data-bs-toggle="modal" data-bs-target="#assignStudentsModal">
+                <i class="bi bi-person-plus-fill me-1"></i> Thêm Học Sinh Vào Lớp
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert Box Ajax -->
+    <div id="alertBox" class="alert d-none shadow-sm border-0" role="alert"></div>
+
+    <!-- Bảng danh sách học sinh hiện tại trong lớp -->
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold text-dark mb-0"><i class="bi bi-card-checklist me-2 text-primary"></i>Danh Sách Học Sinh Thuộc Lớp</h5>
+            <input type="text" id="filterInClass" class="form-control form-control-sm w-auto" placeholder="Lọc nhanh tên học sinh..." onkeyup="filterTable('enrolledTable', this.value)" />
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="enrolledTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4" style="width: 50px;">STT</th>
+                        <th>Mã Định Danh / QR</th>
+                        <th>Họ Và Tên</th>
+                        <th>Giới Tính</th>
+                        <th>Ngày Sinh</th>
+                        <th>Ngày Vào Lớp</th>
+                        <th class="text-end pe-4" style="width: 100px;">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="enrolledBody">
+                    @if (Model.EnrolledStudents.Any())
+                    {
+                        var stt = 1;
+                        foreach (var s in Model.EnrolledStudents)
+                        {
+                            <tr id="row-enrollment-@s.EnrollmentId">
+                                <td class="ps-4 fw-bold text-muted">@(stt++)</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border font-monospace px-2 py-1">
+                                        <i class="bi bi-qr-code me-1"></i>@s.StudentCode
+                                    </span>
+                                </td>
+                                <td class="fw-bold text-dark">@s.FullName</td>
+                                <td>
+                                    <span class="badge @(s.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
+                                        @s.Gender
+                                    </span>
+                                </td>
+                                <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                                <td><small class="text-muted">@s.EnrolledAt.ToString("dd/MM/yyyy")</small></td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-circle" onclick="removeStudent(@s.EnrollmentId, '@s.FullName')" title="Rút học sinh khỏi lớp">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr id="noStudentRow">
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-person-x fs-1 d-block mb-2"></i>
+                                Lớp chưa có học sinh nào. Hãy bấm <strong>"Thêm Học Sinh Vào Lớp"</strong>.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- MODAL CHỌN NHANH HỌC SINH CHƯA CÓ LỚP (TASK-307)              -->
+<!-- ============================================================== -->
+<div class="modal fade" id="assignStudentsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-light">
+                <div>
+                    <h5 class="modal-title fw-bold text-primary mb-0">
+                        <i class="bi bi-person-check me-2"></i>Chọn Học Sinh Chưa Có Lớp
+                    </h5>
+                    <small class="text-muted">Niên khóa: @Model.AcademicYearName | Còn lại: <strong>@Model.UnassignedStudents.Count</strong> em chưa xếp lớp</small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Search box in modal -->
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                            <input type="text" id="searchUnassigned" class="form-control" placeholder="Tìm theo Tên, Mã QR, SĐT..." onkeyup="filterTable('unassignedTable', this.value)" />
+                        </div>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-center justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="checkAll(true)">Chọn tất cả</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="checkAll(false)">Bỏ chọn</button>
+                        <span class="badge bg-primary fs-6 px-3 py-2 ms-2">Đã chọn: <span id="selectedCount">0</span> em</span>
+                    </div>
+                </div>
+
+                <!-- Unassigned Table -->
+                <div class="table-responsive" style="max-height: 450px;">
+                    <table class="table table-hover align-middle mb-0" id="unassignedTable">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" class="form-check-input" id="masterCheckbox" onchange="toggleSelectAll(this)" />
+                                </th>
+                                <th>Mã Định Danh</th>
+                                <th>Họ Và Tên</th>
+                                <th>Giới Tính</th>
+                                <th>Ngày Sinh</th>
+                                <th>SĐT Phụ Huynh</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.UnassignedStudents.Any())
+                            {
+                                foreach (var u in Model.UnassignedStudents)
+                                {
+                                    <tr class="unassigned-row cursor-pointer" onclick="toggleRowCheckbox(this, event)">
+                                        <td class="text-center">
+                                            <input type="checkbox" class="form-check-input student-select-checkbox" value="@u.StudentId" onchange="updateSelectedCount()" />
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border font-monospace">@u.StudentCode</span></td>
+                                        <td class="fw-bold text-dark">@u.FullName</td>
+                                        <td>
+                                            <span class="badge @(u.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
+                                                @u.Gender
+                                            </span>
+                                        </td>
+                                        <td>@u.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                                        <td><small class="text-muted">@(u.ParentPhone ?? "—")</small></td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">
+                                        Tất cả học sinh trong hệ thống đã được xếp lớp cho niên khóa này!
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary px-4 shadow-sm" onclick="submitAssign()">
+                    <i class="bi bi-save me-1"></i> Xác Nhận Xếp Lớp
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const classId = @Model.ClassId;
+
+        function showAlert(msg, isSuccess = true) {
+            const box = document.getElementById('alertBox');
+            box.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show shadow-sm border-0`;
+            box.innerHTML = `<i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2"></i>${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            box.classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function filterTable(tableId, term) {
+            term = term.toLowerCase();
+            const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+            rows.forEach(r => {
+                const text = r.innerText.toLowerCase();
+                r.style.display = text.includes(term) ? '' : 'none';
+            });
+        }
+
+        function toggleRowCheckbox(tr, e) {
+            if (e.target.type === 'checkbox') return;
+            const cb = tr.querySelector('.student-select-checkbox');
+            if (cb) {
+                cb.checked = !cb.checked;
+                updateSelectedCount();
+            }
+        }
+
+        function toggleSelectAll(masterCb) {
+            checkAll(masterCb.checked);
+        }
+
+        function checkAll(checked) {
+            const checkboxes = document.querySelectorAll('.student-select-checkbox');
+            checkboxes.forEach(c => {
+                if (c.closest('tr').style.display !== 'none') {
+                    c.checked = checked;
+                }
+            });
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const checked = document.querySelectorAll('.student-select-checkbox:checked');
+            document.getElementById('selectedCount').innerText = checked.length;
+        }
+
+        async function submitAssign() {
+            const checkedBoxes = Array.from(document.querySelectorAll('.student-select-checkbox:checked'));
+            const studentIds = checkedBoxes.map(c => parseInt(c.value));
+
+            if (studentIds.length === 0) {
+                alert('Vui lòng tích chọn ít nhất 1 học sinh!');
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch('/Enrollments/AssignStudents', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        classId: classId,
+                        studentIds: studentIds
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    bootstrap.Modal.getInstance(document.getElementById('assignStudentsModal')).hide();
+                    showAlert(data.message, true);
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    alert(data.message);
+                }
+            } catch (err) {
+                alert('Có lỗi kết nối: ' + err);
+            }
+        }
+
+        async function removeStudent(enrollmentId, name) {
+            if (!confirm(`Bạn có chắc muốn rút em "${name}" ra khỏi lớp này?`)) return;
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('enrollmentId', enrollmentId);
+
+            try {
+                const res = await fetch('/Enrollments/RemoveStudent', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    const row = document.getElementById(`row-enrollment-${enrollmentId}`);
+                    if (row) row.remove();
+                    showAlert(data.message, true);
+                    const currentSpan = document.getElementById('currentCount');
+                    if (currentSpan) {
+                        currentSpan.innerText = Math.max(0, parseInt(currentSpan.innerText) - 1);
+                    }
+                } else {
+                    alert(data.message);
+                }
+            } catch (err) {
+                alert('Lỗi: ' + err);
+            }
+        }
+    </script>
+}

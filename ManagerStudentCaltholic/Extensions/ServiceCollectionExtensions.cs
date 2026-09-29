@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,6 +56,8 @@ namespace ManagerStudentCaltholic.Extensions
         public static IServiceCollection AddApplicationServices(this IServiceCollection services)
         {
             // Sẽ đăng ký các Service như IAttendanceService, IStudentService ở đây
+            services.AddScoped<IStudentCodeGenerator, StudentCodeGenerator>();
+            services.AddScoped<IStudentExcelService, StudentExcelService>();
             return services;
         }
     }

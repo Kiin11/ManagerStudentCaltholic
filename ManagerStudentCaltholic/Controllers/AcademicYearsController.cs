@@ -1,5 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
-using ManagerStudentCaltholic.Model.Entities;
+using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

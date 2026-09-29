@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace ManagerStudentCaltholic.Model.Entities
+namespace ManagerStudentCaltholic.Models.Entities
 {
     public class Student
     {
