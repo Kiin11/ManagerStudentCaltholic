@@ -321,3 +321,54 @@ ORDER BY "MigrationId";
 2026-09-29 11:41:21.237 +07:00 [INF] Request starting HTTP/2 GET https://localhost:44309/_framework/aspnetcore-browser-refresh.js - null null
 2026-09-29 11:41:21.241 +07:00 [INF] Request finished HTTP/2 GET https://localhost:44309/_framework/aspnetcore-browser-refresh.js - 200 16531 application/javascript; charset=utf-8 4.3908ms
 2026-09-29 11:41:21.272 +07:00 [INF] Request finished HTTP/2 GET https://localhost:44309/_vs/browserLink - 200 null text/javascript; charset=UTF-8 36.0995ms
+2026-09-29 11:51:04.947 +07:00 [INF] Đang kiểm tra và áp dụng Migrations cơ sở dữ liệu...
+2026-09-29 11:51:05.693 +07:00 [INF] Executed DbCommand (50ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+2026-09-29 11:51:05.711 +07:00 [INF] Executed DbCommand (2ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory"
+ORDER BY "MigrationId";
+2026-09-29 11:51:05.744 +07:00 [INF] Executed DbCommand (1ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+2026-09-29 11:51:05.770 +07:00 [INF] Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+2026-09-29 11:51:05.770 +07:00 [INF] Executed DbCommand (0ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory"
+ORDER BY "MigrationId";
+2026-09-29 11:51:05.783 +07:00 [INF] No migrations were applied. The database is already up to date.
+2026-09-29 11:51:05.783 +07:00 [INF] Áp dụng Migrations thành công!
+2026-09-29 11:51:05.828 +07:00 [INF] User profile is available. Using 'C:\Users\ghost\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-09-29 11:51:05.957 +07:00 [INF] Request starting HTTP/2 GET https://localhost:44309/ - null null
+2026-09-29 11:51:05.972 +07:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-09-29 11:51:05.973 +07:00 [INF] Hosting environment: Development
+2026-09-29 11:51:05.973 +07:00 [INF] Content root path: D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic
+2026-09-29 11:51:06.032 +07:00 [INF] Executing endpoint '/Index'
+2026-09-29 11:51:06.063 +07:00 [INF] Route matched with {page = "/Index", action = "", controller = ""}. Executing page /Index
+2026-09-29 11:51:06.071 +07:00 [INF] Executing handler method ManagerStudentCaltholic.Pages.IndexModel.OnGet - ModelState is "Valid"
+2026-09-29 11:51:06.071 +07:00 [INF] Executed handler method OnGet, returned result .
+2026-09-29 11:51:06.074 +07:00 [INF] Executing an implicit handler method - ModelState is "Valid"
+2026-09-29 11:51:06.074 +07:00 [INF] Executed an implicit handler method, returned result Microsoft.AspNetCore.Mvc.RazorPages.PageResult.
+2026-09-29 11:51:06.144 +07:00 [INF] Executed page /Index in 78.3765ms
+2026-09-29 11:51:06.146 +07:00 [INF] Executed endpoint '/Index'
+2026-09-29 11:51:06.146 +07:00 [INF] HTTP GET / phản hồi 200 trong 126 ms
+2026-09-29 11:51:06.153 +07:00 [INF] Request finished HTTP/2 GET https://localhost:44309/ - 200 null text/html; charset=utf-8 200.5944ms
+2026-09-29 11:51:06.183 +07:00 [INF] Request starting HTTP/2 GET https://localhost:44309/_vs/browserLink - null null
+2026-09-29 11:51:06.184 +07:00 [INF] Request starting HTTP/2 GET https://localhost:44309/_framework/aspnetcore-browser-refresh.js - null null
+2026-09-29 11:51:06.188 +07:00 [INF] Request finished HTTP/2 GET https://localhost:44309/_framework/aspnetcore-browser-refresh.js - 200 16531 application/javascript; charset=utf-8 3.4255ms
+2026-09-29 11:51:06.219 +07:00 [INF] Request finished HTTP/2 GET https://localhost:44309/_vs/browserLink - 200 null text/javascript; charset=UTF-8 36.4418ms

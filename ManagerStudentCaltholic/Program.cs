@@ -24,6 +24,9 @@ var app = builder.Build();
 // Apply database migrations automatically on application startup
 app.ApplyDatabaseMigrations();
 
+// 5. ACTIVE CUSTOM LOGGING MIDDLEWARE
+app.UseCustomRequestLogging();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
