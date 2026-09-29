@@ -46,6 +46,7 @@ namespace ManagerStudentCaltholic.Controllers
             var query = _context.Classes
                 .Include(c => c.AcademicYear)
                 .Include(c => c.Enrollments)
+                .Include(c=> c.ClassTeachers)
                 .Where(c => c.AcademicYearId == selectedYearId);
 
             // Lọc theo Khối / Ngành nếu có chọn
@@ -74,7 +75,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <returns></returns>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Name,GradeLevel,RoomNumber,AcademicYearId")] ClassRoom classRoom)
+        public async Task<IActionResult> Create([Bind("Name,GradeLevel,RoomName,AcademicYearId")] ClassRoom classRoom)
         {
             // Kiểm tra trùng tên lớp trong cùng một niên khóa
             var isDuplicate = await _context.Classes.AnyAsync(c =>
@@ -151,6 +152,90 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             return RedirectToAction(nameof(Index), new { academicYearId = targetClass.AcademicYearId });
+        }
+
+        /// <summary>
+        /// Get Techers for a specific class, ordered by role (HEAD, MEMBER, then others).
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> GetTeachers(int classId)
+        {
+            var teachers = await _context.ClassTeachers
+                .Where(t => t.ClassRoomId == classId)
+                .OrderBy(t => t.RoleInClass == "HEAD" ? 1 : (t.RoleInClass == "MEMBER" ? 2 : 3))
+                .Select(t => new
+                {
+                    t.Id,
+                    t.TeacherName,
+                    t.PhoneNumber,
+                    t.RoleInClass,
+                    RoleName = t.RoleInClass == "HEAD" ? "Chủ nhiệm" : (t.RoleInClass == "MEMBER" ? "Đồng hành" : "Dự bị / Trợ tá")
+                })
+                .ToListAsync();
+
+            return Json(new { success = true, data = teachers });
+        }
+
+        /// <summary>
+        /// Action Phân công thêm GLV vào lớp
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AssignTeacher([FromBody] ClassTeacher model)
+        {
+            if (string.IsNullOrWhiteSpace(model.TeacherName))
+            {
+                return Json(new { success = false, message = "Vui lòng nhập tên Giáo lý viên." });
+            }
+
+            var targetClass = await _context.Classes.FindAsync(model.ClassRoomId);
+            if (targetClass == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy lớp học." });
+            }
+
+            var isExist = await _context.ClassTeachers.AnyAsync(ct =>
+                ct.ClassRoomId == model.ClassRoomId &&
+                ct.AcademicYearId == targetClass.AcademicYearId &&
+                ct.TeacherName.Trim().ToLower() == model.TeacherName.Trim().ToLower());
+
+            if (isExist)
+            {
+                return Json(new { success = false, message = $"Giáo lý viên '{model.TeacherName}' đã được phân công vào lớp này rồi." });
+            }
+
+            model.AcademicYearId = targetClass.AcademicYearId;
+            model.AssignedAt = DateTime.UtcNow;
+
+            _context.ClassTeachers.Add(model);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = $"Đã phân công GLV '{model.TeacherName}' thành công!" });
+        }
+
+        /// <summary>
+        /// Action Hủy phân công GLV
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveTeacher(long id)
+        {
+            var item = await _context.ClassTeachers.FindAsync(id);
+            if (item == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy bản ghi phân công." });
+            }
+
+            _context.ClassTeachers.Remove(item);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Đã hủy phân công GLV." });
         }
     }
 }
