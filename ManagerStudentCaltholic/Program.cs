@@ -8,9 +8,6 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddRazorPages();
-
 // 2. Add Serilog Logging
 builder.Host.AddSerilogLogging();
 
@@ -18,6 +15,9 @@ builder.Host.AddSerilogLogging();
 builder.Services.AddDatabaseConfiguration(builder.Configuration)
                 .AddReverseProxyConfiguration()
                 .AddApplicationServices();
+
+builder.Services.AddAuthorization();
+builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
@@ -42,6 +42,8 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapRazorPages();
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
