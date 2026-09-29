@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ManagerStudentCaltholic.Migrations
 {
     /// <inheritdoc />
-    public partial class UpdateAttendanceFullSchema : Migration
+    public partial class InitialParishDbWithAuditLogs : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -129,6 +129,47 @@ namespace ManagerStudentCaltholic.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "AttendanceAuditLogs",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    AttendanceId = table.Column<long>(type: "bigint", nullable: false),
+                    ActionType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    OldValues = table.Column<string>(type: "text", nullable: true),
+                    NewValues = table.Column<string>(type: "text", nullable: true),
+                    ModifiedBy = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: "SYSTEM"),
+                    Reason = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    IpAddress = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AttendanceAuditLogs", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AttendanceAuditLogs_Attendances_AttendanceId",
+                        column: x => x.AttendanceId,
+                        principalTable: "Attendances",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceAuditLogs_ActionType",
+                table: "AttendanceAuditLogs",
+                column: "ActionType");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceAuditLogs_AttendanceId",
+                table: "AttendanceAuditLogs",
+                column: "AttendanceId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AttendanceAuditLogs_CreatedAt",
+                table: "AttendanceAuditLogs",
+                column: "CreatedAt");
+
             migrationBuilder.CreateIndex(
                 name: "IX_Attendances_AttendanceDate",
                 table: "Attendances",
@@ -170,6 +211,9 @@ namespace ManagerStudentCaltholic.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "AttendanceAuditLogs");
+
             migrationBuilder.DropTable(
                 name: "Attendances");
 

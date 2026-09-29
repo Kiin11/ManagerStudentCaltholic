@@ -126,6 +126,59 @@ namespace ManagerStudentCaltholic.Migrations
                     b.ToTable("Attendances");
                 });
 
+            modelBuilder.Entity("ManagerStudentCaltholic.Model.Entities.AttendanceAuditLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long>("AttendanceId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("ModifiedBy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("SYSTEM");
+
+                    b.Property<string>("NewValues")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OldValues")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActionType");
+
+                    b.HasIndex("AttendanceId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("AttendanceAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("ManagerStudentCaltholic.Model.Entities.ClassRoom", b =>
                 {
                     b.Property<int>("Id")
@@ -244,6 +297,17 @@ namespace ManagerStudentCaltholic.Migrations
                         .IsRequired();
 
                     b.Navigation("Enrollment");
+                });
+
+            modelBuilder.Entity("ManagerStudentCaltholic.Model.Entities.AttendanceAuditLog", b =>
+                {
+                    b.HasOne("ManagerStudentCaltholic.Model.Entities.Attendance", "Attendance")
+                        .WithMany()
+                        .HasForeignKey("AttendanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Attendance");
                 });
 
             modelBuilder.Entity("ManagerStudentCaltholic.Model.Entities.ClassRoom", b =>
