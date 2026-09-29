@@ -13,6 +13,7 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<Enrollment> Enrollments => Set<Enrollment>();
         public DbSet<Attendance> Attendances => Set<Attendance>();
         public DbSet<AttendanceAuditLog> AttendanceAuditLogs => Set<AttendanceAuditLog>();
+        public DbSet<ClassTeacher> ClassTeachers => Set<ClassTeacher>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -65,6 +66,30 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(a => a.Reason).HasMaxLength(255);
                 entity.Property(a => a.IpAddress).HasMaxLength(45);
                 entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+
+            modelBuilder.Entity<ClassTeacher>(entity =>
+            {
+                entity.ToTable("ClassTeachers");
+                entity.HasKey(ct => ct.Id);
+
+                // Ràng buộc duy nhất: Một GLV chỉ nhận 1 vai trò phân công trong 1 lớp của 1 niên khóa
+                entity.HasIndex(ct => new { ct.ClassRoomId, ct.TeacherName, ct.AcademicYearId })
+                      .IsUnique();
+
+                entity.HasOne(ct => ct.ClassRoom)
+                      .WithMany(c => c.ClassTeachers)
+                      .HasForeignKey(ct => ct.ClassRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(ct => ct.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(ct => ct.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(ct => ct.TeacherName).HasMaxLength(100).IsRequired();
+                entity.Property(ct => ct.RoleInClass).HasMaxLength(20).HasDefaultValue("HEAD");
+                entity.Property(ct => ct.AssignedAt).HasDefaultValueSql("NOW()");
             });
         }
     }
