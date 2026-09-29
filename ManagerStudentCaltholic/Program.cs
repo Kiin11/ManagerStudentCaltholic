@@ -1,9 +1,18 @@
 using ManagerStudentCaltholic.Extensions;
+using Serilog;
+
+// 1. Init Bootstrap Logger
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+
+// 2. Add Serilog Logging
+builder.Host.AddSerilogLogging();
 
 // Addd Extensions for Database Configuration, Reverse Proxy, and Application Services
 builder.Services.AddDatabaseConfiguration(builder.Configuration)
