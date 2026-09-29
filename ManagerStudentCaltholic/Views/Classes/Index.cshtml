@@ -1,0 +1,191 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Model.Entities.ClassRoom>
+@{
+    ViewData["Title"] = "Quản lý Lớp Học Giáo Lý";
+    var selectedYearId = (int)ViewBag.SelectedYearId;
+    var selectedGrade = (string)ViewBag.SelectedGrade;
+}
+
+<div class="container-fluid py-4">
+    <!-- Header Section -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-mortarboard-fill me-2"></i>Danh Sách Lớp Học Giáo Lý
+            </h3>
+            <p class="text-muted mb-0">Thiết lập các lớp học theo từng khối ngành thuộc niên khóa vận hành</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createClassModal">
+                <i class="bi bi-plus-circle me-1"></i> Thêm Lớp Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert Thông báo -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- THANH BỘ LỌC NIÊN KHÓA VÀ KHỐI NGÀNH -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <form method="get" asp-controller="Classes" asp-action="Index" class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-secondary mb-1">Niên Khóa Học:</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
+                        <select name="academicYearId" class="form-select fw-semibold" asp-items="ViewBag.AcademicYears" onchange="this.form.submit()"></select>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold text-secondary mb-1">Khối / Ngành:</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="bi bi-filter"></i></span>
+                        <select name="gradeLevel" class="form-select fw-semibold" onchange="this.form.submit()">
+                            <option value="ALL" selected="@(selectedGrade == "ALL")">-- Tất cả các khối ngành --</option>
+                            <option value="Khai Tâm" selected="@(selectedGrade == "Khai Tâm")">Khối Khai Tâm (Lễ sáng 6h30 / Học 9h00)</option>
+                            <option value="Rước Lễ" selected="@(selectedGrade == "Rước Lễ")">Khối Rước Lễ (Lễ sáng 6h30 / Học 9h00)</option>
+                            <option value="Thêm Sức" selected="@(selectedGrade == "Thêm Sức")">Khối Thêm Sức (Lễ sáng 6h30 / Học 9h00)</option>
+                            <option value="Bao Đồng" selected="@(selectedGrade == "Bao Đồng")">Khối Bao Đồng (Lễ sáng 6h30 / Học 15h00)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <a asp-action="Index" class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i> Đặt lại bộ lọc
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- HIỂN THỊ DẠNG THẺ GRID (CARD/GRID VIEW) -->
+    <div class="row g-3">
+        @if (Model != null && Model.Any())
+        {
+            @foreach (var c in Model)
+            {
+                <div class="col-12 col-md-6 col-lg-4 col-xl-3">
+                    <div class="card h-100 border-0 shadow-sm rounded-3 class-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                @if (c.GradeLevel == "Khai Tâm")
+                                {
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1 rounded-pill">Khai Tâm</span>
+                                }
+                                else if (c.GradeLevel == "Rước Lễ")
+                                {
+                                    <span class="badge bg-info-subtle text-primary border border-info-subtle px-2 py-1 rounded-pill">Rước Lễ</span>
+                                }
+                                else if (c.GradeLevel == "Thêm Sức")
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">Thêm Sức</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Bao Đồng</span>
+                                }
+
+                                <div class="dropdown">
+                                    <button class="btn btn-link text-secondary p-0" type="button" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots-vertical fs-5"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                        <li>
+                                            <form asp-action="Delete" asp-route-id="@c.Id" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa lớp @c.Name không?');">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="dropdown-item text-danger">
+                                                    <i class="bi bi-trash3 me-2"></i> Xóa Lớp Học
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <h4 class="card-title fw-bold text-dark mb-1">@c.Name</h4>
+                            <p class="text-muted small mb-3">
+                                <i class="bi bi-geo-alt me-1"></i>Phòng học: <span class="fw-semibold text-dark">@(string.IsNullOrEmpty(c.RoomName) ? "Chưa bố trí" : c.RoomName)</span>
+                            </p>
+
+                            <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3">
+                                <span class="text-secondary small">Sĩ số lớp:</span>
+                                <span class="fw-bold fs-5 text-primary">@c.Enrollments.Count <small class="fs-6 fw-normal text-muted">em</small></span>
+                            </div>
+                        </div>
+
+                        <div class="card-footer bg-white border-0 pt-0 pb-3 px-4 d-grid gap-2">
+                            <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-primary btn-sm rounded-pill py-2">
+                                <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="col-12 py-5 text-center text-muted">
+                <i class="bi bi-folder-x fs-1 d-block mb-2"></i>
+                Không tìm thấy lớp học nào phù hợp với bộ lọc hiện tại.
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- MODAL THÊM LỚP HỌC MỚI (TASK-204)                             -->
+<!-- ============================================================== -->
+<div class="modal fade" id="createClassModal" tabindex="-1" aria-labelledby="createClassModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form asp-controller="Classes" asp-action="Create" method="post" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="AcademicYearId" value="@selectedYearId" />
+
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary" id="createClassModalLabel">
+                    <i class="bi bi-plus-circle me-1"></i> Tạo Lớp Học Mới
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Tên Lớp Học <span class="text-danger">*</span></label>
+                    <input type="text" name="Name" class="form-control" placeholder="Ví dụ: Khai Tâm 1A, Rước Lễ 2B..." required maxlength="50" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Khối / Ngành <span class="text-danger">*</span></label>
+                    <select name="GradeLevel" class="form-select" required>
+                        <option value="Khai Tâm">Khối Khai Tâm (Học sáng 9h00)</option>
+                        <option value="Rước Lễ">Khối Rước Lễ (Học sáng 9h00)</option>
+                        <option value="Thêm Sức">Khối Thêm Sức (Học sáng 9h00)</option>
+                        <option value="Bao Đồng">Khối Bao Đồng (Học chiều 15h00)</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Phòng Học / Địa Điểm</label>
+                    <input type="text" name="RoomNumber" class="form-control" placeholder="Ví dụ: Phòng 101, Hội trường B..." maxlength="20" />
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-save me-1"></i> Lưu Lớp Học
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
