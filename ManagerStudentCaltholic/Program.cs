@@ -1,19 +1,31 @@
 using ManagerStudentCaltholic.Extensions;
+using Serilog;
+
+// 1. Init Bootstrap Logger
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddRazorPages();
+// 2. Add Serilog Logging
+builder.Host.AddSerilogLogging();
 
 // Addd Extensions for Database Configuration, Reverse Proxy, and Application Services
 builder.Services.AddDatabaseConfiguration(builder.Configuration)
                 .AddReverseProxyConfiguration()
                 .AddApplicationServices();
 
+builder.Services.AddAuthorization();
+builder.Services.AddControllersWithViews();
+
 var app = builder.Build();
 
 // Apply database migrations automatically on application startup
 app.ApplyDatabaseMigrations();
+
+// 5. ACTIVE CUSTOM LOGGING MIDDLEWARE
+app.UseCustomRequestLogging();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -30,6 +42,8 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapRazorPages();
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();

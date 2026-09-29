@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Model.Entities
 {
@@ -7,14 +8,17 @@ namespace ManagerStudentCaltholic.Model.Entities
         public int Id { get; set; }
 
         public int AcademicYearId { get; set; }
-        public AcademicYear AcademicYear { get; set; } = null!;
+        [ValidateNever]
+        public AcademicYear? AcademicYear { get; set; }
+
+        public string RoomName { get;set; } = string.Empty; // Ví dụ: "1A", "2B", "3C"
 
         [Required, MaxLength(50)]
         public string Name { get; set; } = string.Empty; // Ví dụ: "Xưng Tội 1A"
 
         [MaxLength(20)]
         public string GradeLevel { get; set; } = string.Empty; // Khai tâm, Rước lễ, Thêm sức, Bao đồng
-
+        [ValidateNever]
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
     }
 }

@@ -1,0 +1,172 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Model.Entities.AcademicYear>
+@{
+    ViewData["Title"] = "Quản lý Niên Khóa";
+}
+
+<div class="container-fluid py-4">
+    <!-- Header Section -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-calendar-range me-2"></i>Niên Khóa Giáo Lý
+            </h3>
+            <p class="text-muted mb-0">Quản lý và kích hoạt niên khóa vận hành của toàn giáo xứ</p>
+        </div>
+        <div>
+            <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createYearModal">
+                <i class="bi bi-plus-circle me-1"></i> Thêm Niên Khóa Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Thông báo Alert TempData -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Bảng danh sách Niên khóa -->
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="card-title fw-bold text-dark mb-0">Danh Sách Các Năm Học</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4 py-3" style="width: 25%;">Tên Niên Khóa</th>
+                        <th style="width: 20%;">Ngày Bắt Đầu</th>
+                        <th style="width: 20%;">Ngày Kết Thúc</th>
+                        <th class="text-center" style="width: 20%;">Trạng Thái Vận Hành</th>
+                        <th class="text-end pe-4" style="width: 15%;">Hành Động</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        @foreach (var year in Model)
+                        {
+                            <tr class="@(year.IsCurrent ? "table-success-subtle bg-opacity-25" : "")">
+                                <td class="ps-4 fw-bold">
+                                    @year.Name
+                                    @if (year.IsCurrent)
+                                    {
+                                        <span class="badge bg-success ms-2 small">Hiện tại</span>
+                                    }
+                                </td>
+                                <td>
+                                    <i class="bi bi-calendar-event text-secondary me-1"></i>
+                                    @year.StartDate.ToString("dd/MM/yyyy")
+                                </td>
+                                <td>
+                                    <i class="bi bi-calendar-check text-secondary me-1"></i>
+                                    @year.EndDate.ToString("dd/MM/yyyy")
+                                </td>
+                                <td class="text-center">
+                                    @if (year.IsCurrent)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                                            <i class="bi bi-record-circle-fill me-1"></i> Đang Kích Hoạt
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-secondary border px-3 py-2 rounded-pill">
+                                            Chưa Kích Hoạt
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    @if (!year.IsCurrent)
+                                    {
+                                        <form asp-controller="AcademicYears" asp-action="SetCurrent" asp-route-id="@year.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-success btn-sm rounded-pill px-3"
+                                                    onclick="return confirm('Bạn có chắc chắn muốn đặt niên khóa @year.Name làm niên khóa chính thức đang vận hành?');">
+                                                <i class="bi bi-arrow-repeat me-1"></i> Kích Hoạt
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-success rounded-pill px-3" disabled>
+                                            <i class="bi bi-check-lg me-1"></i> Mặc Định
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                                Chưa có niên khóa nào trong hệ thống. Hãy bấm <strong>"Thêm Niên Khóa Mới"</strong> để khởi tạo.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- MODAL THÊM NIÊN KHÓA MỚI (TASK-202)                           -->
+<!-- ============================================================== -->
+<div class="modal fade" id="createYearModal" tabindex="-1" aria-labelledby="createYearModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form asp-controller="AcademicYears" asp-action="Create" method="post" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary" id="createYearModalLabel">
+                    <i class="bi bi-plus-circle me-1"></i> Thêm Niên Khóa Mới
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Tên Niên Khóa <span class="text-danger">*</span></label>
+                    <input type="text" name="Name" class="form-control" placeholder="Ví dụ: 2026-2027" required maxlength="50" />
+                    <div class="form-text">Tên định danh niên khóa để hiển thị trong các danh mục và sổ điểm.</div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Ngày Bắt Đầu <span class="text-danger">*</span></label>
+                        <input type="date" name="StartDate" class="form-control" required />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-semibold">Ngày Kết Thúc <span class="text-danger">*</span></label>
+                        <input type="date" name="EndDate" class="form-control" required />
+                    </div>
+                </div>
+
+                <div class="form-check form-switch mt-2">
+                    <input class="form-check-input" type="checkbox" name="IsCurrent" value="true" id="isCurrentCheckbox">
+                    <label class="form-check-label fw-semibold" for="isCurrentCheckbox">
+                        Đặt làm niên khóa hoạt động ngay
+                    </label>
+                    <div class="form-text text-muted">Nếu bật, các niên khóa khác sẽ tự động chuyển về trạng thái không kích hoạt.</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy bỏ</button>
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="bi bi-save me-1"></i> Lưu Niên Khóa
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
