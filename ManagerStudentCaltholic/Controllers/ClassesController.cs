@@ -1,5 +1,6 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -10,11 +11,14 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly ILogger<ClassesController> _logger;
+        private readonly IStudentExcelService _excelService;
 
-        public ClassesController(ParishDbContext context, ILogger<ClassesController> logger)
+        public ClassesController(ParishDbContext context, ILogger<ClassesController> logger,
+            IStudentExcelService excelService)
         {
             _context = context;
             _logger = logger;
+            _excelService = excelService;
         }
 
         /// <summary>
@@ -236,6 +240,31 @@ namespace ManagerStudentCaltholic.Controllers
             await _context.SaveChangesAsync();
 
             return Json(new { success = true, message = "Đã hủy phân công GLV." });
+        }
+
+        /// <summary>
+        /// Export Excel danh sách thiếu nhi trong lớp học
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> ExportExcel(int id)
+        {
+            try
+            {
+                var targetClass = await _context.Classes.FindAsync(id);
+                if (targetClass == null) return NotFound();
+
+                var bytes = await _excelService.ExportClassListToExcelAsync(id);
+                var fileName = $"Danh_Sach_Lop_{targetClass.Name.Replace(" ", "_")}.xlsx";
+
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = "Lỗi khi xuất danh sách: " + ex.Message;
+                return RedirectToAction(nameof(Index));
+            }
         }
     }
 }

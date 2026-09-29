@@ -12,12 +12,15 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly IStudentCodeGenerator _codeGenerator;
         private readonly ILogger<StudentsController> _logger;
+        private readonly IStudentExcelService _excelService;
 
-        public StudentsController(ParishDbContext context, IStudentCodeGenerator codeGenerator, ILogger<StudentsController> logger)
+        public StudentsController(ParishDbContext context, IStudentCodeGenerator codeGenerator, 
+            ILogger<StudentsController> logger, IStudentExcelService excelService)
         {
             _context = context;
             _codeGenerator = codeGenerator;
             _logger = logger;
+            _excelService = excelService;
         }
 
         /// <summary>
@@ -203,6 +206,56 @@ namespace ManagerStudentCaltholic.Controllers
                 await _context.SaveChangesAsync();
                 TempData["SuccessMessage"] = $"Đã {(target.IsActive ? "kích hoạt" : "tạm dừng")} hồ sơ {target.FirstName} {target.LastName}!";
             }
+            return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>
+        /// Tải file mẫu Excel
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        public IActionResult DownloadTemplate()
+        {
+            var content = _excelService.GenerateTemplateFile();
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Mau_Danh_Sach_Thieu_Nhi.xlsx");
+        }
+
+        /// <summary>
+        /// Upload và Import Excel hàng loạt
+        /// </summary>
+        /// <param name="excelFile"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ImportExcel(IFormFile excelFile)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["ErrorMessage"] = "Vui lòng chọn 1 file Excel (.xlsx) hợp lệ.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            try
+            {
+                using var stream = excelFile.OpenReadStream();
+                var result = await _excelService.ImportStudentsFromExcelAsync(stream);
+
+                if (result.SuccessCount > 0)
+                {
+                    TempData["SuccessMessage"] = $"Nạp thành công {result.SuccessCount} hồ sơ thiếu nhi vào hệ thống!";
+                }
+
+                if (result.FailureCount > 0)
+                {
+                    TempData["ErrorMessage"] = $"Có {result.FailureCount} dòng bị lỗi: " + string.Join("; ", result.ErrorMessages.Take(3));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi nạp file Excel");
+                TempData["ErrorMessage"] = "Lỗi khi xử lý file Excel: " + ex.Message;
+            }
+
             return RedirectToAction(nameof(Index));
         }
     }
