@@ -16,13 +16,13 @@ namespace ManagerStudentCaltholic.Model.Entities
 
         // 1. ĐI LỄ
         public bool AttendedMass { get; set; } = false;
-        [MaxLength(20)]
+        [Required, MaxLength(20)]
         public string MassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_...
         public TimeSpan? MassCheckInTime { get; set; }
 
         // 2. ĐI HỌC GIÁO LÝ
         public bool ClassAttended { get; set; } = false;
-        [MaxLength(20)]
+        [Required, MaxLength(20)]
         public string ClassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_...
         public TimeSpan? ClassCheckInTime { get; set; }
 
