@@ -1,6 +1,8 @@
-﻿namespace ManagerStudentCaltholic.Models.Entities
+﻿using ManagerStudentCaltholic.Interface.Models;
+
+namespace ManagerStudentCaltholic.Models.Entities
 {
-    public class Enrollment
+    public class Enrollment : ISoftDelete
     {
         public long Id { get; set; }
 
@@ -12,6 +14,8 @@
 
         public DateTime EnrolledAt { get; set; } = DateTime.UtcNow;
 
-        public ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
+        public ICollection<Attendance> Attendances { get; set; } = new List<Attendance>(); 
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
     }
 }

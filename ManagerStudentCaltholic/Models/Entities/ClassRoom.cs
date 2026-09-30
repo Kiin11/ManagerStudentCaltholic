@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+﻿using ManagerStudentCaltholic.Interface.Models;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Models.Entities
 {
-    public class ClassRoom
+    public class ClassRoom : ISoftDelete
     {
         public int Id { get; set; }
 
@@ -22,6 +23,8 @@ namespace ManagerStudentCaltholic.Models.Entities
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
         // Thêm danh sách ClassTeachers vào ClassRoom
         [ValidateNever]
-        public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>();
+        public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>(); 
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
     }
 }

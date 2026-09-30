@@ -1,8 +1,9 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using ManagerStudentCaltholic.Interface.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Models.Entities
 {
-    public class Student
+    public class Student : ISoftDelete
     {
         public long Id { get; set; }
 
@@ -31,5 +32,7 @@ namespace ManagerStudentCaltholic.Models.Entities
         public bool IsActive { get; set; } = true;
 
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
     }
 }

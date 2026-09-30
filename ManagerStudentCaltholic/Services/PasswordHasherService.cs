@@ -1,13 +1,8 @@
-﻿using System.Security.Cryptography;
+﻿using ManagerStudentCaltholic.Interface.Services;
+using System.Security.Cryptography;
 
 namespace ManagerStudentCaltholic.Services
 {
-    public interface IPasswordHasherService
-    {
-        string HashPassword(string password);
-        bool VerifyPassword(string password, string hashedPassword);
-    }
-
     public class PasswordHasherService : IPasswordHasherService
     {
         private const int SaltSize = 16;      // 128 bit

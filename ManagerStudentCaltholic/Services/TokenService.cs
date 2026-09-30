@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -9,14 +10,6 @@ using System.Text;
 
 namespace ManagerStudentCaltholic.Services
 {
-    public interface ITokenService
-    {
-        string GenerateAccessToken(User user);
-        RefreshToken GenerateRefreshToken(long userId, string? ipAddress);
-        Task<(bool Success, string? AccessToken, RefreshToken? NewRefreshToken, string Message)> RotateRefreshTokenAsync(string token, string? ipAddress);
-        Task<bool> RevokeTokenAsync(string token, string? ipAddress);
-    }
-
     public class TokenService : ITokenService
     {
         private readonly IConfiguration _configuration;

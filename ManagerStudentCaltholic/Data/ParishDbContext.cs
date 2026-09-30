@@ -1,4 +1,5 @@
-﻿using ManagerStudentCaltholic.Models.Entities;
+﻿using ManagerStudentCaltholic.Interface.Models;
+using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Data
@@ -20,6 +21,16 @@ namespace ManagerStudentCaltholic.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // TASK-710: Thiết lập Global Query Filter (Tự động lọc các bản ghi đã xóa mềm)
+            modelBuilder.Entity<Student>().HasQueryFilter(e => !e.IsDeleted);
+            modelBuilder.Entity<ClassRoom>().HasQueryFilter(e => !e.IsDeleted);
+            modelBuilder.Entity<Enrollment>().HasQueryFilter(e => !e.IsDeleted);
+
+            // Đánh index cho trường IsDeleted để truy vấn cực nhanh
+            modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);
+            modelBuilder.Entity<ClassRoom>().HasIndex(e => e.IsDeleted);
+            modelBuilder.Entity<Enrollment>().HasIndex(e => e.IsDeleted);
 
             // Ràng buộc duy nhất: 1 học sinh chỉ xếp vào 1 lớp trong cùng 1 niên khóa
             modelBuilder.Entity<Enrollment>()
@@ -136,6 +147,26 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(rt => rt.Token).HasMaxLength(255).IsRequired();
                 entity.Property(rt => rt.CreatedAt).HasDefaultValueSql("NOW()");
             });
+        }
+
+        /// <summary>
+        /// TASK-710: Ghi đè SaveChangesAsync để khi gọi _context.Remove(), 
+        /// EF Core tự động chuyển thành Soft Delete (cập nhật IsDeleted = true và DeletedAt)
+        /// </summary>
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            foreach (var entry in ChangeTracker.Entries<ISoftDelete>())
+            {
+                if (entry.State == EntityState.Deleted)
+                {
+                    // Chuyển hành vi Delete thành Modify
+                    entry.State = EntityState.Modified;
+                    entry.Entity.IsDeleted = true;
+                    entry.Entity.DeletedAt = DateTime.UtcNow;
+                }
+            }
+
+            return base.SaveChangesAsync(cancellationToken);
         }
     }
 }
