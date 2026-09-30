@@ -1,5 +1,6 @@
 ﻿using ClosedXML.Excel;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
@@ -790,5 +791,94 @@ namespace ManagerStudentCaltholic.Controllers
             return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
         #endregion
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="studentId"></param>
+        /// <param name="date"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> GetAuditHistory(long studentId, DateTime date)
+        {
+            var targetDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+
+            // 1. Tìm thông tin học sinh
+            var student = await _context.Students
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == studentId);
+
+            if (student == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy hồ sơ thiếu nhi." });
+            }
+
+            var studentFullName = $"{student.ChristianName} {student.FirstName} {student.LastName}".Trim();
+
+            // 2. Tìm bản ghi điểm danh trong ngày
+            var attendance = await _context.Attendances
+                .AsNoTracking()
+                .Include(a => a.Enrollment)
+                .FirstOrDefaultAsync(a => a.Enrollment.StudentId == studentId && a.AttendanceDate == targetDate);
+
+            var timeline = new List<AttendanceHistoryDto>();
+
+            if (attendance != null)
+            {
+                // Tra cứu tất cả nhật ký kiểm toán từ bảng AttendanceAuditLogs
+                var auditLogs = await _context.AttendanceAuditLogs
+                    .AsNoTracking()
+                    .Where(log => log.AttendanceId == attendance.Id)
+                    .OrderByDescending(log => log.CreatedAt)
+                    .ToListAsync();
+
+                if (auditLogs.Any())
+                {
+                    foreach (var log in auditLogs)
+                    {
+                        timeline.Add(new AttendanceHistoryDto
+                        {
+                            StudentId = student.Id,
+                            StudentName = studentFullName,
+                            ActionType = log.ActionType,
+                            Description = !string.IsNullOrEmpty(log.Reason)
+                                ? log.Reason
+                                : $"Thao tác {log.ActionType}: {log.NewValues}",
+                            PerformedBy = string.IsNullOrEmpty(log.ModifiedBy) ? "Hệ thống" : log.ModifiedBy,
+                            Timestamp = log.CreatedAt
+                        });
+                    }
+                }
+                else
+                {
+                    // Nếu chưa có audit log, hiển thị mốc tạo ban đầu
+                    timeline.Add(new AttendanceHistoryDto
+                    {
+                        StudentId = student.Id,
+                        StudentName = studentFullName,
+                        ActionType = attendance.IsMakeUp ? "MakeupApproval" : "CheckIn",
+                        Description = attendance.IsMakeUp
+                            ? "Duyệt điểm danh bù / Bổ sung chuyên cần"
+                            : (attendance.AttendedMass ? "Quét mã QR điểm danh đầu giờ Lễ" : "Khởi tạo trạng thái điểm danh"),
+                        PerformedBy = "Hệ thống",
+                        Timestamp = attendance.CreatedAt
+                    });
+                }
+            }
+            else
+            {
+                timeline.Add(new AttendanceHistoryDto
+                {
+                    StudentId = student.Id,
+                    StudentName = studentFullName,
+                    ActionType = "NoRecord",
+                    Description = "Chưa có lượt ghi nhận điểm danh nào trong ngày này.",
+                    PerformedBy = "Hệ thống",
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+            return Json(new { success = true, data = timeline.OrderByDescending(t => t.Timestamp).ToList() });
+        }
     }
 }

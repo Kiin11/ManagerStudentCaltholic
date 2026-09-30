@@ -85,6 +85,7 @@
                         </th>
                         <th>Ghi Chú</th>
                         <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
+                        <th class="text-center" style="width: 100px;">Xem lịch sử</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -153,6 +154,13 @@
                                             title="Điểm danh bù"
                                             onclick="openMakeUpModal(@s.EnrollmentId, '@s.ChristianName @s.FullName')">
                                         <i class="bi bi-arrow-repeat"></i> Bù
+                                    </button>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-outline-info rounded-circle ms-1 p-1"
+                                            title="Xem lịch sử điểm danh"
+                                            onclick="openAuditTimeline(@s.StudentId, '@s.FullName')">
+                                        <i class="bi bi-clock-history"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -225,6 +233,28 @@
     </div>
 </div>
 
+<!-- Modal Audit Trail Timeline (TASK-713) -->
+<div class="modal fade" id="auditTimelineModal" tabindex="-1" aria-labelledby="auditTimelineLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6" id="auditTimelineLabel">
+                    <i class="bi bi-clock-history me-2"></i>Dòng thời gian kiểm toán: <span id="auditStudentName" class="fw-bold"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="timelineLoading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted mb-0 small">Đang tải lịch sử...</p>
+                </div>
+                <ul class="timeline list-unstyled position-relative ps-4 mb-0" id="timelineList" style="display: none;">
+                    <!-- Nội dung các mốc thời gian sẽ nạp qua Ajax -->
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     <script>
@@ -433,5 +463,76 @@
                 alert('Lỗi kết nối máy chủ: ' + err);
             }
         }
+                function openAuditTimeline(studentId, studentName) {
+            document.getElementById('auditStudentName').innerText = studentName;
+            const modal = new bootstrap.Modal(document.getElementById('auditTimelineModal'));
+            modal.show();
+
+            const loading = document.getElementById('timelineLoading');
+            const list = document.getElementById('timelineList');
+            loading.style.display = 'block';
+            list.style.display = 'none';
+            list.innerHTML = '';
+
+            const selectedDate = document.getElementById('attendanceDatePicker')?.value || new Date().toISOString().split('T')[0];
+
+            fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${selectedDate}`)
+                .then(res => res.json())
+                .then(response => {
+                    loading.style.display = 'none';
+                    list.style.display = 'block';
+
+                    if (!response.success || response.data.length === 0) {
+                        list.innerHTML = '<li class="text-muted small">Không tìm thấy thông tin kiểm toán.</li>';
+                        return;
+                    }
+
+                    response.data.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'timeline-item';
+                        li.innerHTML = `
+                            <span class="timeline-badge"></span>
+                            <div class="fw-semibold text-primary small">${item.timeDisplay}</div>
+                            <div class="text-dark small">${item.description}</div>
+                            <div class="text-muted fst-italic" style="font-size: 0.75rem;">Thực hiện bởi: ${item.performedBy}</div>
+                        `;
+                        list.appendChild(li);
+                    });
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    list.style.display = 'block';
+                    list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
+                });
+        }
     </script>
 }
+
+<style>
+    /* CSS Timeline mượt mà */
+    .timeline::before {
+        content: '';
+        position: absolute;
+        top: 5px;
+        bottom: 5px;
+        left: 12px;
+        width: 2px;
+        background: #dee2e6;
+    }
+
+    .timeline-item {
+        position: relative;
+        margin-bottom: 20px;
+    }
+
+    .timeline-badge {
+        position: absolute;
+        left: -28px;
+        top: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: #0d6efd;
+        border: 2px solid #fff;
+    }
+</style>
