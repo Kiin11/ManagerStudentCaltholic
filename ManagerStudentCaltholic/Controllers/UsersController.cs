@@ -46,7 +46,8 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 var s = search.Trim().ToLower();
                 query = query.Where(u => u.Username.ToLower().Contains(s) ||
-                                         u.FullName.ToLower().Contains(s) ||
+                                         u.FirstName.ToLower().Contains(s) ||
+                                         u.LastName.ToLower().Contains(s) ||
                                          (u.PhoneNumber != null && u.PhoneNumber.Contains(s)));
             }
 
@@ -91,7 +92,9 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 Username = usernameClean,
                 PasswordHash = _passwordHasher.HashPassword(model.Password),
-                FullName = model.FullName.Trim(),
+                FirstName = model.FirstName.Trim(),
+                LastName = model.LastName.Trim(),
+                ChristianName = model.ChristianName.Trim(),
                 Email = model.Email?.Trim(),
                 PhoneNumber = model.PhoneNumber?.Trim(),
                 Role = model.Role,

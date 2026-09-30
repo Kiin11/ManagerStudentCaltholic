@@ -43,7 +43,7 @@ namespace ManagerStudentCaltholic.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim("FullName", user.FullName),
+                new Claim("FullName", $"{user.FirstName} {user.LastName}"),
                 new Claim(ClaimTypes.Role, user.Role)
             };
 
