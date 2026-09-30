@@ -36,7 +36,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? PhoneNumber { get; set; }
 
         [StringLength(200)]
-        [Display(Name = "Giáo Họ / Địa Chỉ")]
+        [Display(Name = "Giáo Khu / Địa Chỉ")]
         public string? Address { get; set; }
 
         public string? AvatarUrl { get; set; }
