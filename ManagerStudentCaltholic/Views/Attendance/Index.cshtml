@@ -84,6 +84,7 @@
                             <i class="bi bi-bell-fill me-1"></i>THÁNH LỄ (@(Model.DayOfWeek == DayOfWeek.Thursday ? "T5 17h45" : "CN 6h30"))
                         </th>
                         <th>Ghi Chú</th>
+                        <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -147,6 +148,13 @@
                                 <td>
                                     <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
                                 </td>
+                                <td>
+                                    <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
+                                            title="Điểm danh bù"
+                                            onclick="openMakeUpModal(@s.EnrollmentId, '@s.ChristianName @s.FullName')">
+                                        <i class="bi bi-arrow-repeat"></i> Bù
+                                    </button>
+                                </td>
                             </tr>
                         }
                     }
@@ -161,6 +169,58 @@
                     }
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Điểm Danh Bù (TASK-409) -->
+<div class="modal fade" id="makeUpModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning bg-opacity-25">
+                <h5 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-arrow-repeat me-2"></i>Điểm Danh Bù: <span id="modalStudentName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="makeUpEnrollmentId" />
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Chọn Ngày Đã Vắng Cần Bù:</label>
+                    <select id="selectMissedDate" class="form-select"></select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Nội dung xác nhận bù:</label>
+                    <div class="d-flex gap-3 mt-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkMakeUpMass" checked>
+                            <label class="form-check-label fw-semibold" for="chkMakeUpMass">Bù Thánh Lễ</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkMakeUpClass" checked>
+                            <label class="form-check-label fw-semibold" for="chkMakeUpClass">Bù Bài Giáo Lý</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Ngày Thực Hiện Bù:</label>
+                    <input type="date" id="inputMakeUpDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Hình Thức / Lý Do Bù:</label>
+                    <textarea id="textMakeUpReason" class="form-control" rows="2" placeholder="Ví dụ: Đã dự lễ bù tối Thứ 7 hoặc đã trả bài kinh cho GLV..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm" onclick="submitMakeUpAttendance()">
+                    <i class="bi bi-check2-circle me-1"></i> Xác Nhận Bù
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -287,6 +347,90 @@
                 }
             } catch (err) {
                 showAlert('Lỗi kết nối máy chủ: ' + err, false);
+            }
+        }
+
+                let makeUpModalInstance = null;
+
+        async function openMakeUpModal(enrollmentId, studentName) {
+            document.getElementById('makeUpEnrollmentId').value = enrollmentId;
+            document.getElementById('modalStudentName').innerText = studentName;
+            document.getElementById('textMakeUpReason').value = '';
+
+            const select = document.getElementById('selectMissedDate');
+            select.innerHTML = '<option value="">Đang tải danh sách buổi vắng...</option>';
+
+            if (!makeUpModalInstance) {
+                makeUpModalInstance = new bootstrap.Modal(document.getElementById('makeUpModal'));
+            }
+            makeUpModalInstance.show();
+
+            try {
+                const res = await fetch(`/Attendance/GetMissedDates?enrollmentId=${enrollmentId}`);
+                const result = await res.json();
+
+                select.innerHTML = '';
+                if (result.success && result.data.length > 0) {
+                    result.data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.missedDate;
+                        opt.text = `${item.dayOfWeekName} (Vắng: ${item.missedMass ? 'Lễ ' : ''}${item.missedClass ? 'Học' : ''})`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">(Không có buổi vắng nào cần bù)</option>';
+                }
+            } catch (e) {
+                select.innerHTML = '<option value="">Lỗi tải dữ liệu</option>';
+            }
+        }
+
+        async function submitMakeUpAttendance() {
+            const enrollmentId = parseInt(document.getElementById('makeUpEnrollmentId').value);
+            const missedDate = document.getElementById('selectMissedDate').value;
+            const makeUpDate = document.getElementById('inputMakeUpDate').value;
+            const makeUpMass = document.getElementById('chkMakeUpMass').checked;
+            const makeUpClass = document.getElementById('chkMakeUpClass').checked;
+            const reason = document.getElementById('textMakeUpReason').value.trim();
+
+            if (!missedDate) {
+                alert('Vui lòng chọn ngày vắng cần bù!');
+                return;
+            }
+            if (!reason) {
+                alert('Vui lòng nhập hình thức hoặc lý do bù!');
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch('/Attendance/SubmitMakeUp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        enrollmentId: enrollmentId,
+                        originalMissedDate: missedDate,
+                        makeUpDate: makeUpDate,
+                        makeUpMass: makeUpMass,
+                        makeUpClass: makeUpClass,
+                        reason: reason
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    makeUpModalInstance.hide();
+                    showAlert(data.message, true);
+                    setTimeout(() => { location.reload(); }, 1200);
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ: ' + err);
             }
         }
     </script>

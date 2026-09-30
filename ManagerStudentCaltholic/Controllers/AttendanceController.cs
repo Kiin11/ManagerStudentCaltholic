@@ -1,4 +1,5 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using ClosedXML.Excel;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
@@ -345,5 +346,446 @@ namespace ManagerStudentCaltholic.Controllers
                 });
             }
         }
+
+
+        #region diem danh bù (TASK-408 & TASK-410)
+        /// <summary>
+        /// 1. GET: /Attendance/GetMissedDates?enrollmentId=... (Lấy danh sách các ngày vắng)
+        /// </summary>
+        /// <param name="enrollmentId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> GetMissedDates(long enrollmentId)
+        {
+            var missedRecords = await _context.Attendances
+                .Where(a => a.EnrollmentId == enrollmentId && !a.IsMakeUp
+                       && (a.MassStatus == AttendanceStatus.AbsentUnpermitted || a.MassStatus == AttendanceStatus.AbsentPermitted
+                           || a.ClassStatus == AttendanceStatus.AbsentUnpermitted || a.ClassStatus == AttendanceStatus.AbsentPermitted))
+                .OrderByDescending(a => a.AttendanceDate)
+                .AsNoTracking()
+                .Select(a => new MissedDateItemDto
+                {
+                    AttendanceId = a.Id,
+                    MissedDate = a.AttendanceDate,
+                    DayOfWeekName = a.AttendanceDate.ToString("dddd, dd/MM/yyyy"),
+                    MissedMass = a.MassStatus.StartsWith("ABSENT"),
+                    MissedClass = a.ClassStatus.StartsWith("ABSENT"),
+                    Reason = a.Note ?? ""
+                })
+                .ToListAsync();
+
+            return Json(new { success = true, data = missedRecords });
+        }
+
+        /// <summary>
+        /// POST: /Attendance/SubmitMakeUp (TASK-408 & TASK-410: Ghi nhận bù & Ghi Audit Log)
+        /// </summary>
+        /// <param name="dto"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitMakeUp([FromBody] MakeUpAttendanceRequestDto dto)
+        {
+            if (dto == null || dto.EnrollmentId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu yêu cầu không hợp lệ!" });
+            }
+
+            var origDate = DateTime.SpecifyKind(dto.OriginalMissedDate.Date, DateTimeKind.Utc);
+            var makeUpDate = DateTime.SpecifyKind(dto.MakeUpDate.Date, DateTimeKind.Utc);
+
+            var enrollment = await _context.Enrollments
+                .Include(e => e.Student)
+                .Include(e => e.ClassRoom)
+                .FirstOrDefaultAsync(e => e.Id == dto.EnrollmentId);
+
+            if (enrollment == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy hồ sơ xếp lớp của thiếu nhi!" });
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    // Tìm bản ghi của ngày vắng ban đầu
+                    var origRecord = await _context.Attendances
+                        .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == origDate);
+
+                    var oldMassStatus = origRecord?.MassStatus ?? "NONE";
+                    var oldClassStatus = origRecord?.ClassStatus ?? "NONE";
+
+                    if (origRecord == null)
+                    {
+                        origRecord = new Attendance
+                        {
+                            EnrollmentId = dto.EnrollmentId,
+                            AttendanceDate = origDate,
+                            DayOfWeek = origDate.DayOfWeek,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Attendances.Add(origRecord);
+                    }
+
+                    // Cập nhật trạng thái ngày vắng thành đã bù
+                    origRecord.IsMakeUp = true;
+                    origRecord.OriginalMissedDate = origDate;
+                    origRecord.Note = $"[Điểm danh bù ngày {makeUpDate:dd/MM/yyyy}]: {dto.Reason}";
+
+                    if (dto.MakeUpMass)
+                    {
+                        origRecord.AttendedMass = true;
+                        origRecord.MassStatus = AttendanceStatus.Present;
+                    }
+
+                    if (dto.MakeUpClass)
+                    {
+                        origRecord.ClassAttended = true;
+                        origRecord.ClassStatus = AttendanceStatus.Present;
+                    }
+
+                    await _context.SaveChangesAsync();
+
+                    // TỰ ĐỘNG GHI AUDIT LOG VÀO BẢNG AttendanceAuditLogs (TASK-410)
+                    var auditLog = new AttendanceAuditLog
+                    {
+                        AttendanceId = origRecord.Id,
+                        ActionType = "MAKE_UP",
+                        OldValues = $"MassStatus: {oldMassStatus}, ClassStatus: {oldClassStatus}",
+                        NewValues = $"MassStatus: {origRecord.MassStatus}, ClassStatus: {origRecord.ClassStatus}, IsMakeUp: true, MakeUpDate: {makeUpDate:yyyy-MM-dd}",
+                        ModifiedBy = User.Identity?.Name ?? "GLV_IN_CHARGE",
+                        Reason = dto.Reason,
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.AttendanceAuditLogs.Add(auditLog);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                return Json(new
+                {
+                    success = true,
+                    message = $"Đã ghi nhận điểm danh bù thành công cho em {enrollment.Student.ChristianName} {enrollment.Student.FirstName} {enrollment.Student.LastName}!"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi xử lý điểm danh bù cho EnrollmentId: {Id}", dto.EnrollmentId);
+                return Json(new { success = false, message = "Lỗi hệ thống: " + ex.Message });
+            }
+        }
+
+        #endregion
+
+        #region Thong ke
+        /// <summary>
+        /// GET: /Attendance/Statistics?classId=... (TASK-411: Báo cáo Thống kê)
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> Statistics(int? classId)
+        {
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
+
+            var classes = await _context.Classes
+                .Where(c => c.AcademicYearId == yearId)
+                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
+                .AsNoTracking()
+                .ToListAsync();
+
+            ViewBag.Classes = classes;
+
+            if (!classes.Any())
+            {
+                return View(new AttendanceStatisticsViewModel());
+            }
+
+            var targetClassId = classId ?? classes.First().Id;
+            var targetClass = classes.FirstOrDefault(c => c.Id == targetClassId) ?? classes.First();
+            ViewBag.SelectedClassId = targetClass.Id;
+
+            // Danh sách học sinh trong lớp
+            var enrollments = await _context.Enrollments
+                .Include(e => e.Student)
+                .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
+                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var enrollmentIds = enrollments.Select(e => e.Id).ToList();
+
+            // Toàn bộ dữ liệu điểm danh của lớp trong niên khóa
+            var allAttendances = await _context.Attendances
+                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
+                .AsNoTracking()
+                .ToListAsync();
+
+            // Tổng số buổi lễ và buổi học đã diễn ra
+            var distinctMassDates = allAttendances.Where(a => a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted).Select(a => a.AttendanceDate).Distinct().Count();
+            var distinctClassDates = allAttendances.Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted).Select(a => a.AttendanceDate).Distinct().Count();
+
+            var totalMassSessions = Math.Max(1, distinctMassDates);
+            var totalClassSessions = Math.Max(1, distinctClassDates);
+
+            var statRows = enrollments.Select(e =>
+            {
+                var attList = allAttendances.Where(a => a.EnrollmentId == e.Id).ToList();
+
+                var massPresent = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Sunday);
+                var massLate = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Sunday);
+                var massAbsPermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Sunday);
+                var massAbsUnpermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday);
+
+                var massThuPresent = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Thursday);
+                var massThuLate = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Thursday);
+                var massThuAbsPermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Thursday);
+                var massThuAbsUnpermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Thursday);
+
+                var classPresent = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Sunday);
+                var classLate = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Sunday);
+                var classAbsPermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Sunday);
+                var classAbsUnpermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday );
+
+                var makeUps = attList.Count(a => a.IsMakeUp);
+
+                // Tính % chuyên cần (Có mặt + 0.5 * Đi trễ)
+                var massRate = Math.Round(((massPresent + massLate * 0.8) / (double)totalMassSessions) * 100, 1);
+                var massThuRate = Math.Round(((massThuPresent + massThuLate * 0.8) / (double)totalMassSessions) * 100, 1);
+                var classRate = Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1);
+
+                return new StudentAttendanceStatRow
+                {
+                    StudentId = e.StudentId,
+                    StudentCode = e.Student.StudentCode,
+                    ChristianName = e.Student.ChristianName,
+                    FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
+                    MassPresentCount = massPresent,
+                    MassLateCount = massLate,
+                    MassAbsentPermitted = massAbsPermitted,
+                    MassAbsentUnpermitted = massAbsUnpermitted,
+                    MassAttendanceRate = Math.Min(100, massRate),
+
+                    MassThuPresentCount = massThuPresent,
+                    MassThuLateCount = massThuLate,
+                    MassThuAbsentPermitted = massThuAbsPermitted,
+                    MassThuAbsentUnpermitted = massThuAbsUnpermitted,
+                    MassThuAttendanceRate = Math.Min(100, massThuRate),
+
+                    ClassPresentCount = classPresent,
+                    ClassLateCount = classLate,
+                    ClassAbsentPermitted = classAbsPermitted,
+                    ClassAbsentUnpermitted = classAbsUnpermitted,
+                    ClassAttendanceRate = Math.Min(100, classRate),
+
+                    TotalMakeUpCount = makeUps,
+                    // Quy chuẩn lãnh bí tích: Cả 2 tỷ lệ >= 80%
+                    IsEligibleForSacrament = false // (massRate >= 80 && classRate >= 80)
+                };
+            }).ToList();
+
+            var viewModel = new AttendanceStatisticsViewModel
+            {
+                ClassId = targetClass.Id,
+                ClassName = targetClass.Name,
+                GradeLevel = targetClass.GradeLevel,
+                AcademicYearName = currentYear?.Name ?? "",
+                TotalMassSessions = totalMassSessions,
+                TotalClassSessions = totalClassSessions,
+                StudentStats = statRows
+            };
+
+            return View(viewModel);
+        }
+
+        /// <summary>
+        /// GET: /Attendance/ExportStatisticsExcel?classId=... (TASK-413)
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> ExportStatisticsExcel(int classId)
+        {
+            var targetClass = await _context.Classes
+                .Include(c => c.AcademicYear)
+                .Include(c => c.Enrollments)
+                    .ThenInclude(e => e.Student)
+                .FirstOrDefaultAsync(c => c.Id == classId);
+
+            if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
+
+            var enrollments = targetClass.Enrollments
+                .Where(e => e.Student.IsActive)
+                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .ToList();
+
+            var enrollmentIds = enrollments.Select(e => e.Id).ToList();
+
+            var allAttendances = await _context.Attendances
+                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
+                .AsNoTracking()
+                .ToListAsync();
+
+            // Buổi lễ Chúa Nhật & Lễ Thứ 5
+            var totalSundayMass = Math.Max(1, allAttendances.Where(a => a.DayOfWeek == DayOfWeek.Sunday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted)).Select(a => a.AttendanceDate).Distinct().Count());
+            var totalThuMass = Math.Max(0, allAttendances.Where(a => a.DayOfWeek == DayOfWeek.Thursday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted)).Select(a => a.AttendanceDate).Distinct().Count());
+            var totalClassSessions = Math.Max(1, allAttendances.Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted).Select(a => a.AttendanceDate).Distinct().Count());
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("BaoCaoChuyenCan");
+
+            // 1. Tiêu đề chính
+            worksheet.Cell("A1").Value = "BÁO CÁO CHUYÊN CẦN & XÉT ĐIỀU KIỆN LÃNH BÍ TÍCH";
+            worksheet.Cell("A1").Style.Font.Bold = true;
+            worksheet.Cell("A1").Style.Font.FontSize = 15;
+            worksheet.Range("A1:Q1").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) - Niên khóa: {targetClass.AcademicYear.Name} - Sĩ số: {enrollments.Count} em";
+            worksheet.Cell("A2").Style.Font.Italic = true;
+            worksheet.Range("A2:Q2").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            // 2. Dòng Header 1
+            int hRow1 = 4;
+            int hRow2 = 5;
+
+            worksheet.Cell(hRow1, 1).Value = "STT";
+            worksheet.Range(hRow1, 1, hRow2, 1).Merge();
+
+            worksheet.Cell(hRow1, 2).Value = "Mã QR";
+            worksheet.Range(hRow1, 2, hRow2, 2).Merge();
+
+            worksheet.Cell(hRow1, 3).Value = "Tên Thánh, Họ và Tên";
+            worksheet.Range(hRow1, 3, hRow2, 3).Merge();
+
+            // Khối Lễ CN (Cột 4 -> 7)
+            worksheet.Cell(hRow1, 4).Value = $"CHUYÊN CẦN LỄ CHÚA NHẬT ({totalSundayMass} buổi)";
+            worksheet.Range(hRow1, 4, hRow1, 7).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(230, 245, 230);
+
+            // Khối Lễ T5 (Cột 8 -> 11)
+            worksheet.Cell(hRow1, 8).Value = $"CHUYÊN CẦN LỄ THỨ NĂM ({totalThuMass} buổi)";
+            worksheet.Range(hRow1, 8, hRow1, 11).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(235, 245, 240);
+
+            // Khối Học Giáo Lý (Cột 12 -> 15)
+            worksheet.Cell(hRow1, 12).Value = $"CHUYÊN CẦN HỌC GIÁO LÝ ({totalClassSessions} buổi)";
+            worksheet.Range(hRow1, 12, hRow1, 15).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(225, 238, 255);
+
+            worksheet.Cell(hRow1, 16).Value = "Số buổi bù";
+            worksheet.Range(hRow1, 16, hRow2, 16).Merge();
+
+            worksheet.Cell(hRow1, 17).Value = "Xét Bí Tích";
+            worksheet.Range(hRow1, 17, hRow2, 17).Merge();
+
+            // Dòng Header 2 (tiêu đề con)
+            string[] subHeaders = { "Có mặt", "Trễ", "Vắng", "% Lễ", "Có mặt", "Trễ", "Vắng", "% Lễ", "Có mặt", "Trễ", "Vắng", "% Học" };
+            for (int i = 0; i < subHeaders.Length; i++)
+            {
+                worksheet.Cell(hRow2, 4 + i).Value = subHeaders[i];
+            }
+
+            // Format Headers
+            var headerRange = worksheet.Range(hRow1, 1, hRow2, 17);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            headerRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            headerRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+            // 3. Đổ dữ liệu học sinh
+            int currRow = 6;
+            int stt = 1;
+
+            foreach (var e in enrollments)
+            {
+                var attList = allAttendances.Where(a => a.EnrollmentId == e.Id).ToList();
+
+                // Lễ CN
+                var sunAtt = attList.Where(a => a.DayOfWeek == DayOfWeek.Sunday).ToList();
+                var sunPresent = sunAtt.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present);
+                var sunLate = sunAtt.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
+                var sunAbsent = sunAtt.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted || a.MassStatus == AttendanceStatus.AbsentUnpermitted);
+                var sunRate = Math.Min(100.0, Math.Round(((sunPresent + sunLate * 0.8) / (double)totalSundayMass) * 100, 1));
+
+                // Lễ T5
+                var thuAtt = attList.Where(a => a.DayOfWeek == DayOfWeek.Thursday).ToList();
+                var thuPresent = thuAtt.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present);
+                var thuLate = thuAtt.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
+                var thuAbsent = thuAtt.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted || a.MassStatus == AttendanceStatus.AbsentUnpermitted);
+                var thuRate = totalThuMass > 0 ? Math.Min(100.0, Math.Round(((thuPresent + thuLate * 0.8) / (double)totalThuMass) * 100, 1)) : 0;
+
+                // Giờ học
+                var classPresent = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present);
+                var classLate = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
+                var classAbsent = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentPermitted || a.ClassStatus == AttendanceStatus.AbsentUnpermitted);
+                var classRate = Math.Min(100.0, Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1));
+
+                var makeUps = attList.Count(a => a.IsMakeUp);
+                var isEligible = (sunRate >= 80.0 && classRate >= 80.0);
+
+                worksheet.Cell(currRow, 1).Value = stt++;
+                worksheet.Cell(currRow, 2).Value = e.Student.StudentCode;
+                worksheet.Cell(currRow, 3).Value = $"{e.Student.ChristianName} {e.Student.FirstName} {e.Student.LastName}".Trim();
+
+                // Lễ CN
+                worksheet.Cell(currRow, 4).Value = sunPresent;
+                worksheet.Cell(currRow, 5).Value = sunLate;
+                worksheet.Cell(currRow, 6).Value = sunAbsent;
+                worksheet.Cell(currRow, 7).Value = $"{sunRate}%";
+
+                // Lễ T5
+                worksheet.Cell(currRow, 8).Value = thuPresent;
+                worksheet.Cell(currRow, 9).Value = thuLate;
+                worksheet.Cell(currRow, 10).Value = thuAbsent;
+                worksheet.Cell(currRow, 11).Value = $"{thuRate}%";
+
+                // Giờ Học
+                worksheet.Cell(currRow, 12).Value = classPresent;
+                worksheet.Cell(currRow, 13).Value = classLate;
+                worksheet.Cell(currRow, 14).Value = classAbsent;
+                worksheet.Cell(currRow, 15).Value = $"{classRate}%";
+
+                // Khác
+                worksheet.Cell(currRow, 16).Value = makeUps;
+                worksheet.Cell(currRow, 17).Value = isEligible ? "ĐỦ ĐIỀU KIỆN" : "CHƯA ĐỦ ĐK";
+
+                // Style màu cho cột kết quả
+                if (isEligible)
+                {
+                    worksheet.Cell(currRow, 17).Style.Font.FontColor = XLColor.Green;
+                    worksheet.Cell(currRow, 17).Style.Font.Bold = true;
+                }
+                else
+                {
+                    worksheet.Cell(currRow, 17).Style.Font.FontColor = XLColor.Red;
+                }
+
+                // Căn lề
+                for (int c = 1; c <= 17; c++)
+                {
+                    worksheet.Cell(currRow, c).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    if (c != 3)
+                    {
+                        worksheet.Cell(currRow, c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    }
+                }
+
+                currRow++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            var content = stream.ToArray();
+            var fileName = $"BaoCao_ChuyenCan_{targetClass.Name.Replace(" ", "_")}.xlsx";
+
+            return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+        #endregion
     }
 }
