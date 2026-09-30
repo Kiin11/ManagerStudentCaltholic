@@ -1,4 +1,5 @@
-﻿@{
+﻿@using ManagerStudentCaltholic.Models.Entities
+@{
     ViewData["Title"] = "Bảng Điều Khiển Tổng Quan";
     var yearName = ViewBag.CurrentYearName as string;
     var totalStudents = (int)(ViewBag.TotalStudents ?? 0);
@@ -161,6 +162,22 @@
                         </div>
                     </a>
                 </div>
+                @if (User.IsInRole(UserRole.Admin))
+                {
+                    <div class="col-12 col-md-4">
+                        <a href="/Admin/Logs" class="card border p-3 rounded-3 text-decoration-none h-100 hover-shadow transition">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="bg-danger text-white p-3 rounded-3">
+                                    <i class="bi bi-terminal fs-4"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1">Nhật Ký Hệ Thống</h6>
+                                    <small class="text-muted">Đọc và lọc file Serilog, theo dõi ngoại lệ và lỗi máy chủ.</small>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                }
             </div>
         </div>
     </div>
