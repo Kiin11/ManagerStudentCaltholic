@@ -1,18 +1,13 @@
 ﻿using ClosedXML.Excel;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Services
 {
-    public interface IStudentExcelService
-    {
-        byte[] GenerateTemplateFile();
-        Task<StudentImportResultDto> ImportStudentsFromExcelAsync(Stream fileStream);
-        Task<byte[]> ExportClassListToExcelAsync(int classId);
-    }
-
+    
     public class StudentExcelService : IStudentExcelService
     {
         private readonly ParishDbContext _context;

@@ -1,13 +1,9 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Services
 {
-    public interface IStudentCodeGenerator
-    {
-        Task<string> GenerateUniqueCodeAsync();
-    }
-
     public class StudentCodeGenerator : IStudentCodeGenerator
     {
         private readonly ParishDbContext _context;
