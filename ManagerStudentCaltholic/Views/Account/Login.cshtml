@@ -1,0 +1,91 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.LoginRequestDto
+@{
+    ViewData["Title"] = "Đăng Nhập Hệ Thống";
+    Layout = "_Layout";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-5">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <!-- Header Card -->
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <div class="mb-2">
+                        <i class="bi bi-shield-lock-fill" style="font-size: 3rem;"></i>
+                    </div>
+                    <h4 class="fw-bold mb-0">HỆ THỐNG GIÁO LÝ GIÁO XỨ PHÚ TRUNG</h4>
+                    <small class="text-white-50">Đăng nhập tài khoản điều hành & quản lý</small>
+                </div>
+
+                <div class="card-body p-4 p-md-5 bg-white">
+                    <!-- Khu vực hiển thị lỗi -->
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small shadow-sm border-0 mb-3" role="alert"></div>
+
+                    <form asp-action="Login" method="post" id="loginForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="ReturnUrl" value="@ViewData["ReturnUrl"]" />
+
+                        <!-- Tên đăng nhập -->
+                        <div class="mb-3">
+                            <label asp-for="Username" class="form-label fw-bold small text-muted">
+                                <i class="bi bi-person me-1"></i> Tên đăng nhập
+                            </label>
+                            <input asp-for="Username" class="form-control form-control-lg rounded-3"
+                                   placeholder="Nhập username..." autofocus required />
+                            <span asp-validation-for="Username" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Mật khẩu -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label asp-for="Password" class="form-label fw-bold small text-muted mb-0">
+                                    <i class="bi bi-key me-1"></i> Mật khẩu
+                                </label>
+                            </div>
+                            <div class="input-group">
+                                <input asp-for="Password" type="password" id="inputPassword"
+                                       class="form-control form-control-lg rounded-start-3"
+                                       placeholder="••••••••" required />
+                                <button type="button" class="btn btn-outline-secondary rounded-end-3" onclick="togglePasswordVisibility()">
+                                    <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                                </button>
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Ghi nhớ phiên -->
+                        <div class="form-check mb-4">
+                            <input asp-for="RememberMe" class="form-check-input" type="checkbox" id="chkRememberMe" />
+                            <label asp-for="RememberMe" class="form-check-label small text-muted" for="chkRememberMe">
+                                Duy trì đăng nhập (7 ngày)
+                            </label>
+                        </div>
+
+                        <!-- Nút Submit -->
+                        <button type="submit" id="btnLoginSubmit" class="btn btn-primary btn-lg w-100 rounded-pill fw-bold shadow-sm py-2">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
+                        </button>
+                    </form>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        function togglePasswordVisibility() {
+            const pwd = document.getElementById("inputPassword");
+            const icon = document.getElementById("togglePasswordIcon");
+            if (pwd.type === "password") {
+                pwd.type = "text";
+                icon.className = "bi bi-eye-slash";
+            } else {
+                pwd.type = "password";
+                icon.className = "bi bi-eye";
+            }
+        }
+    </script>
+}

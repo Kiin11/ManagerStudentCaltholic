@@ -2,11 +2,13 @@
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Policy = "RequireStaff")]
     public class StudentsController : Controller
     {
         private readonly ParishDbContext _context;
@@ -87,6 +89,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="model"></param>
         /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(StudentViewModel model)
         {

@@ -1,12 +1,14 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Policy = "RequireStaff")]
     public class ClassesController : Controller
     {
         private readonly ParishDbContext _context;
@@ -78,6 +80,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="classRoom"></param>
         /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Name,GradeLevel,RoomName,AcademicYearId")] ClassRoom classRoom)
         {
@@ -122,6 +125,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id)
         {
@@ -188,6 +192,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="model"></param>
         /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AssignTeacher([FromBody] ClassTeacher model)
         {
@@ -227,6 +232,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveTeacher(long id)
         {

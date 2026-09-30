@@ -1,4 +1,5 @@
 using ManagerStudentCaltholic.Extensions;
+using ManagerStudentCaltholic.Models.Entities;
 using Serilog;
 
 // 1. Init Bootstrap Logger
@@ -16,9 +17,26 @@ builder.Host.AddSerilogLogging();
 // Addd Extensions for Database Configuration, Reverse Proxy, and Application Services
 builder.Services.AddDatabaseConfiguration(builder.Configuration)
                 .AddReverseProxyConfiguration()
-                .AddApplicationServices();
+                .AddApplicationServices()
+                .AddHybridAuthentication(builder.Configuration);
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdminOnly", policy =>
+        policy.RequireRole(UserRole.Admin));
+
+    options.AddPolicy("RequireSpiritualDirector", policy =>
+        policy.RequireRole(UserRole.SpiritualDirector));
+
+    options.AddPolicy("RequireExecutiveBoard", policy =>
+        policy.RequireRole(UserRole.ExecutiveBoard, UserRole.Admin));
+
+    options.AddPolicy("RequireLeadership", policy =>
+        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard));
+
+    options.AddPolicy("RequireStaff", policy =>
+        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
+});
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();

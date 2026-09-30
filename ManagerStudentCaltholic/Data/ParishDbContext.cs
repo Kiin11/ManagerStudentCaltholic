@@ -14,6 +14,8 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<Attendance> Attendances => Set<Attendance>();
         public DbSet<AttendanceAuditLog> AttendanceAuditLogs => Set<AttendanceAuditLog>();
         public DbSet<ClassTeacher> ClassTeachers => Set<ClassTeacher>();
+        public DbSet<User> Users => Set<User>();
+        public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -90,6 +92,45 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(ct => ct.TeacherName).HasMaxLength(100).IsRequired();
                 entity.Property(ct => ct.RoleInClass).HasMaxLength(20).HasDefaultValue("HEAD");
                 entity.Property(ct => ct.AssignedAt).HasDefaultValueSql("NOW()");
+            });
+
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.ToTable("Users");
+                entity.HasKey(u => u.Id);
+
+                // Username là duy nhất trên toàn hệ thống
+                entity.HasIndex(u => u.Username).IsUnique();
+
+                // Index tìm kiếm nhanh theo Email / SĐT / Role
+                entity.HasIndex(u => u.Email);
+                entity.HasIndex(u => u.PhoneNumber);
+                entity.HasIndex(u => u.Role);
+
+                entity.Property(u => u.Username).HasMaxLength(50).IsRequired();
+                entity.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
+                entity.Property(u => u.FullName).HasMaxLength(100).IsRequired();
+                entity.Property(u => u.Role).HasMaxLength(30).HasDefaultValue(UserRole.Teacher);
+                entity.Property(u => u.IsActive).HasDefaultValue(true);
+                entity.Property(u => u.AccessFailedCount).HasDefaultValue(0);
+                entity.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+
+            modelBuilder.Entity<RefreshToken>(entity =>
+            {
+                entity.ToTable("RefreshTokens");
+                entity.HasKey(rt => rt.Id);
+
+                entity.HasIndex(rt => rt.Token).IsUnique();
+                entity.HasIndex(rt => rt.UserId);
+
+                entity.HasOne(rt => rt.User)
+                      .WithMany(u => u.RefreshTokens)
+                      .HasForeignKey(rt => rt.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(rt => rt.Token).HasMaxLength(255).IsRequired();
+                entity.Property(rt => rt.CreatedAt).HasDefaultValueSql("NOW()");
             });
         }
     }

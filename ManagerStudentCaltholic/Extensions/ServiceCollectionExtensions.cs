@@ -1,7 +1,12 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace ManagerStudentCaltholic.Extensions
 {
@@ -59,6 +64,79 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IStudentCodeGenerator, StudentCodeGenerator>();
             services.AddScoped<IStudentExcelService, StudentExcelService>();
             services.AddScoped<IQrCodeService, QrCodeService>();
+            services.AddScoped<IPasswordHasherService, PasswordHasherService>();
+            services.AddScoped<ITokenService, TokenService>();
+
+            return services;
+        }
+
+
+        /// <summary>
+        /// CẤU HÌNH HYBRID AUTHENTICATION
+        /// </summary>
+        /// <param name="services"></param>
+        /// <param name="configuration"></param>
+        /// <returns></returns>
+        public static IServiceCollection AddHybridAuthentication(this IServiceCollection services, IConfiguration configuration)
+        {
+            var jwtSettings = configuration.GetSection("JwtSettings");
+            var secretKey = jwtSettings["SecretKey"] ?? "ParishSecretKeyForAuthenticationToken2026!MustBeVeryLongAndSecureString";
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+
+            // Đăng ký cả Cookie (cho Razor) và JWT (cho API/Fetch)
+            services.AddAuthentication(options =>
+            {
+                // Mặc định cho Web MVC là Cookie
+                options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+            })
+            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
+            {
+                options.Cookie.Name = "ParishSessionCookie";
+                options.LoginPath = "/Account/Login";
+                options.AccessDeniedPath = "/Account/AccessDenied";
+                options.ExpireTimeSpan = TimeSpan.FromDays(7);
+                options.SlidingExpiration = true;
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Lax;
+            })
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                options.RequireHttpsMetadata = false; // Phù hợp chạy trong Docker/Proxy nội bộ
+                options.SaveToken = true;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidIssuer = jwtSettings["Issuer"],
+                    ValidAudience = jwtSettings["Audience"],
+                    IssuerSigningKey = key,
+                    ClockSkew = TimeSpan.Zero
+                };
+            });
+
+            // Cấu hình các Authorization Policies
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("RequireAdminOnly", policy =>
+                    policy.RequireRole(UserRole.Admin));
+
+                options.AddPolicy("RequireSpiritualDirector", policy =>
+                    policy.RequireRole(UserRole.SpiritualDirector));
+
+                options.AddPolicy("RequireExecutiveBoard", policy =>
+                    policy.RequireRole(UserRole.ExecutiveBoard, UserRole.Admin));
+
+                options.AddPolicy("RequireLeadership", policy =>
+                    policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard));
+
+                options.AddPolicy("RequireStaff", policy =>
+                    policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
+            });
+
             return services;
         }
     }
