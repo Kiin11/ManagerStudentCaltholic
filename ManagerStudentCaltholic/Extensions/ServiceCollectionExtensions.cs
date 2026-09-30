@@ -58,6 +58,7 @@ namespace ManagerStudentCaltholic.Extensions
             // Sẽ đăng ký các Service như IAttendanceService, IStudentService ở đây
             services.AddScoped<IStudentCodeGenerator, StudentCodeGenerator>();
             services.AddScoped<IStudentExcelService, StudentExcelService>();
+            services.AddScoped<IQrCodeService, QrCodeService>();
             return services;
         }
     }

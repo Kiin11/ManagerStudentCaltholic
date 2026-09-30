@@ -1,0 +1,173 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.PrintStudentBadgesViewModel
+@{
+    Layout = null; // Tách biệt Layout để khi in không bị dính thanh Menu và Footer
+}
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>In Thẻ Thiếu Nhi - Lớp @Model.ClassName</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .badge-card {
+            width: 8.5cm;
+            height: 5.4cm;
+            border: 2px dashed #0d6efd;
+            border-radius: 12px;
+            padding: 10px;
+            background: #ffffff;
+            page-break-inside: avoid;
+            position: relative;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+
+        .badge-header {
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .badge-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0d6efd;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }
+
+        .badge-subtitle {
+            font-size: 9px;
+            color: #6c757d;
+            margin: 0;
+        }
+
+        .badge-qr-img {
+            width: 85px;
+            height: 85px;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            padding: 2px;
+        }
+
+        .student-name {
+            font-size: 13px;
+            font-weight: bold;
+            color: #212529;
+            line-height: 1.2;
+        }
+
+        .student-code-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            font-weight: bold;
+            color: #0d6efd;
+        }
+
+        /* Tối ưu khi bấm In (Ctrl + P) */
+        @@media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #ffffff !important;
+                padding: 0 !important;
+            }
+
+            .badge-card {
+                border: 1px solid #aaa !important;
+                box-shadow: none !important;
+                margin-bottom: 12px !important;
+            }
+
+            .page-container {
+                padding: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Thanh công cụ phía trên (Ẩn khi in) -->
+    <div class="no-print bg-white border-bottom shadow-sm py-3 mb-4 sticky-top">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold mb-0 text-primary">
+                    <i class="bi bi-qr-code me-2"></i>Thẻ Điểm Danh QR - Lớp: @Model.ClassName
+                </h5>
+                <small class="text-muted">Niên khóa: @Model.AcademicYearName | Tổng cộng: <strong>@Model.Badges.Count</strong> em</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-primary px-4 fw-bold shadow-sm" onclick="window.print()">
+                    <i class="bi bi-printer-fill me-1"></i> In Thẻ Học Viên (Ctrl + P)
+                </button>
+                <button type="button" class="btn btn-outline-secondary px-3" onclick="window.close()">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Khung hiển thị các thẻ danh sách học sinh -->
+    <div class="container page-container pb-5">
+        <div class="row g-3 justify-content-center">
+            @if (Model.Badges.Any())
+            {
+                foreach (var b in Model.Badges)
+                {
+                    <div class="col-auto">
+                        <div class="badge-card d-flex flex-column justify-content-between">
+                            <div class="badge-header">
+                                <div class="badge-title">XỨ ĐOÀN THIẾU NHI THÁNH THỂ</div>
+                                <div class="badge-subtitle">Niên khóa: @Model.AcademicYearName</div>
+                            </div>
+
+                            <div class="d-flex align-items-center justify-content-between px-1">
+                                <!-- Thông tin thiếu nhi -->
+                                <div style="max-width: 175px;">
+                                    <div class="text-muted" style="font-size: 10px;">Tên Thánh:</div>
+                                    <div class="fw-bold text-primary" style="font-size: 12px;">@b.ChristianName</div>
+
+                                    <div class="student-name text-truncate mt-1" title="@b.FullName">@b.FullName</div>
+
+                                    <div class="mt-2 text-muted" style="font-size: 10px;">
+                                        Lớp: <strong class="text-dark">@b.ClassName</strong> | Phái: @b.Gender<br />
+                                        Ngày sinh: @b.DateOfBirth.ToString("dd/MM/yyyy")
+                                    </div>
+                                </div>
+
+                                <!-- Hình ảnh QR Code Base64 -->
+                                <div class="text-center">
+                                    <img src="@b.QrBase64" class="badge-qr-img" alt="QR Code" />
+                                    <div class="student-code-text mt-1">@b.StudentCode</div>
+                                </div>
+                            </div>
+
+                            <div class="text-center text-muted" style="font-size: 8px; border-top: 1px dotted #ccc; padding-top: 2px;">
+                                Thẻ dùng để quét điểm danh Thánh Lễ và Giờ Học Giáo Lý
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="col-12 text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    Lớp chưa có học sinh nào. Vui lòng xếp lớp trước khi in thẻ.
+                </div>
+            }
+        </div>
+    </div>
+</body>
+</html>

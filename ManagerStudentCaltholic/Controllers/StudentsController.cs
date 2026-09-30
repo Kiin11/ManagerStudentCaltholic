@@ -13,14 +13,16 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IStudentCodeGenerator _codeGenerator;
         private readonly ILogger<StudentsController> _logger;
         private readonly IStudentExcelService _excelService;
+        private readonly IQrCodeService _qrService;
 
         public StudentsController(ParishDbContext context, IStudentCodeGenerator codeGenerator, 
-            ILogger<StudentsController> logger, IStudentExcelService excelService)
+            ILogger<StudentsController> logger, IStudentExcelService excelService, IQrCodeService qrCodeService)
         {
             _context = context;
             _codeGenerator = codeGenerator;
             _logger = logger;
             _excelService = excelService;
+            _qrService = qrCodeService;
         }
 
         /// <summary>
@@ -257,6 +259,74 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>
+        /// GET: /Students/DownloadQr/{studentCode} (Tải ảnh PNG lẻ)
+        /// </summary>
+        /// <param name="studentCode"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public IActionResult DownloadQr(string studentCode)
+        {
+            if (string.IsNullOrWhiteSpace(studentCode)) return NotFound();
+
+            var cleanCode = studentCode.Trim().ToUpper();
+            var pngBytes = _qrService.GenerateQrCodePng(cleanCode, pixelsPerModule: 15);
+
+            if (pngBytes.Length == 0) return BadRequest("Không thể sinh mã QR");
+
+            return File(pngBytes, "image/png", $"QR_{cleanCode}.png");
+        }
+
+        /// <summary>
+        /// GET: /Students/PrintBadges?classId=... (Trang in thẻ học viên có QR)
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> PrintBadges(int classId)
+        {
+            var targetClass = await _context.Classes
+                .Include(c => c.AcademicYear)
+                .Include(c => c.Enrollments)
+                    .ThenInclude(e => e.Student)
+                .FirstOrDefaultAsync(c => c.Id == classId);
+
+            if (targetClass == null)
+            {
+                TempData["ErrorMessage"] = "Không tìm thấy lớp học yêu cầu.";
+                return RedirectToAction("Index", "Classes");
+            }
+
+            var activeStudents = targetClass.Enrollments
+                .Select(e => e.Student)
+                .Where(s => s.IsActive)
+                .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
+                .ToList();
+
+            var badgeItems = activeStudents.Select(s => new StudentBadgeCardItem
+            {
+                StudentId = s.Id,
+                StudentCode = s.StudentCode,
+                ChristianName = s.ChristianName,
+                FullName = $"{s.FirstName} {s.LastName}".Trim(),
+                Gender = s.Gender,
+                DateOfBirth = s.DateOfBirth,
+                ClassName = targetClass.Name,
+                QrBase64 = _qrService.GenerateQrCodeBase64(s.StudentCode, pixelsPerModule: 6)
+            }).ToList();
+
+            var viewModel = new PrintStudentBadgesViewModel
+            {
+                ClassId = targetClass.Id,
+                ClassName = targetClass.Name,
+                GradeLevel = targetClass.GradeLevel,
+                AcademicYearName = targetClass.AcademicYear.Name,
+                Badges = badgeItems
+            };
+
+            return View(viewModel);
         }
     }
 }

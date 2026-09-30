@@ -186,5 +186,164 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Lỗi khi lưu dữ liệu điểm danh: " + ex.Message });
             }
         }
+
+        /// <summary>
+        /// GET: /Attendance/ScanQr (TASK-406 - Màn hình quét QR)
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> ScanQr()
+        {
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            ViewBag.AcademicYearName = currentYear?.Name ?? "Chưa kích hoạt niên khóa";
+            return View();
+        }
+
+        /// <summary>
+        /// POST: /Attendance/ScanCheckIn (TASK-407 - API Xử lý quét mã)
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ScanCheckIn([FromBody] QrScanRequestDto request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.StudentCode))
+            {
+                return Json(new QrScanResponseDto
+                {
+                    Success = false,
+                    Message = "Mã QR không hợp lệ hoặc để trống!"
+                });
+            }
+
+            var cleanCode = request.StudentCode.Trim().ToUpper();
+            var scanTime = request.ScanTimestamp ?? DateTime.Now;
+            var today = DateTime.SpecifyKind(scanTime.Date, DateTimeKind.Utc);
+
+            // 1. Tìm thông tin học sinh và lớp trong niên khóa hiện tại
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            if (currentYear == null)
+            {
+                return Json(new QrScanResponseDto { Success = false, Message = "Chưa có niên khóa nào được kích hoạt!" });
+            }
+
+            var enrollment = await _context.Enrollments
+                .Include(e => e.Student)
+                .Include(e => e.ClassRoom)
+                .FirstOrDefaultAsync(e => e.Student.StudentCode.ToUpper() == cleanCode
+                                       && e.ClassRoom.AcademicYearId == currentYear.Id
+                                       && e.Student.IsActive);
+
+            if (enrollment == null)
+            {
+                return Json(new QrScanResponseDto
+                {
+                    Success = false,
+                    StudentCode = cleanCode,
+                    Message = $"Không tìm thấy thiếu nhi có mã '{cleanCode}' trong niên khóa {currentYear.Name}!"
+                });
+            }
+
+            // 2. Tự động nhận diện khung giờ và trạng thái đi trễ
+            var (isMass, isClass, status, timeOfDay) = AttendanceTimeHelper.EvaluateCheckIn(scanTime, enrollment.ClassRoom.GradeLevel);
+
+            if (!isMass && !isClass)
+            {
+                // Nếu quét vào ngày thường không phải T5 hay CN, mặc định tính là giờ học hoặc sự kiện
+                isClass = true;
+                status = AttendanceStatus.Present;
+            }
+
+            var studentFullName = $"{enrollment.Student.FirstName} {enrollment.Student.LastName}".Trim();
+            var isDuplicate = false;
+            var activityTitle = isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ";
+
+            // 3. Thực thi Transaction Upsert an toàn
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    var record = await _context.Attendances
+                        .FirstOrDefaultAsync(a => a.EnrollmentId == enrollment.Id && a.AttendanceDate == today);
+
+                    if (record == null)
+                    {
+                        record = new Attendance
+                        {
+                            EnrollmentId = enrollment.Id,
+                            AttendanceDate = today,
+                            DayOfWeek = today.DayOfWeek,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Attendances.Add(record);
+                    }
+
+                    if (isMass)
+                    {
+                        if (record.AttendedMass)
+                        {
+                            isDuplicate = true; // Đã quét Lễ rồi
+                        }
+                        else
+                        {
+                            record.AttendedMass = true;
+                            record.MassStatus = status;
+                            record.MassCheckInTime = timeOfDay;
+                        }
+                    }
+
+                    if (isClass)
+                    {
+                        if (record.ClassAttended)
+                        {
+                            isDuplicate = true; // Đã điểm danh lớp rồi
+                        }
+                        else
+                        {
+                            record.ClassAttended = true;
+                            record.ClassStatus = status;
+                            record.ClassCheckInTime = timeOfDay;
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                _logger.LogInformation("Quét QR thành công: {Code} - {Name} - Lớp: {Class} - {Activity} ({Status})",
+                    cleanCode, studentFullName, enrollment.ClassRoom.Name, activityTitle, status);
+
+                return Json(new QrScanResponseDto
+                {
+                    Success = true,
+                    IsDuplicate = isDuplicate,
+                    StudentCode = cleanCode,
+                    ChristianName = enrollment.Student.ChristianName,
+                    FullName = studentFullName,
+                    ClassName = enrollment.ClassRoom.Name,
+                    GradeLevel = enrollment.ClassRoom.GradeLevel,
+                    ActivityType = activityTitle,
+                    Status = status,
+                    CheckInTimeStr = timeOfDay.ToString(@"hh\:mm\:ss"),
+                    Message = isDuplicate
+                        ? $"Thiếu nhi đã được điểm danh {activityTitle} trước đó!"
+                        : $"Điểm danh thành công: {studentFullName} ({status})"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi xử lý quét mã QR cho mã: {Code}", cleanCode);
+                return Json(new QrScanResponseDto
+                {
+                    Success = false,
+                    StudentCode = cleanCode,
+                    Message = "Lỗi hệ thống khi lưu kết quả: " + ex.Message
+                });
+            }
+        }
     }
 }

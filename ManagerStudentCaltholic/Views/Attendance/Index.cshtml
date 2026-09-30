@@ -27,6 +27,11 @@
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
                 <div class="col-lg-6 col-md-12 d-flex justify-content-lg-end justify-content-start align-items-end gap-2 mt-3 mt-lg-0">
+                    <div>
+                        <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@Model.ClassId" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm me-2">
+                            <i class="bi bi-printer me-1"></i> In Thẻ QR Lớp
+                        </a>
+                    </div>
                     @if (Model.DayOfWeek == DayOfWeek.Sunday)
                     {
                         <button type="button" class="btn btn-outline-success" onclick="markAllClass(true)">
