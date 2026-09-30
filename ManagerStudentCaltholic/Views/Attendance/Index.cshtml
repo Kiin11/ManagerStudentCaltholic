@@ -1,0 +1,437 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassAttendanceSheetViewModel
+@{
+    ViewData["Title"] = $"Sổ Điểm Danh - {Model.ClassName}";
+    var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <!-- Header & Bộ Lọc Lớp / Ngày -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-door-open me-1"></i>Chọn Lớp Học:</label>
+                    <select id="selectClass" class="form-select" onchange="onFilterChange()">
+                        @foreach (var c in classes)
+                        {
+                            <!option value="@c.Id" @(c.Id == Model.ClassId ? "selected" : "")>
+                            @c.Name (@c.GradeLevel)
+                            </!option>
+                        }
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
+                    <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
+                </div>
+                <div class="col-lg-6 col-md-12 d-flex justify-content-lg-end justify-content-start align-items-end gap-2 mt-3 mt-lg-0">
+                    <div>
+                        <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@Model.ClassId" target="_blank" class="btn btn-outline-info">
+                            <i class="bi bi-printer me-1"></i> In Thẻ QR Lớp
+                        </a>
+                    </div>
+                    @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                    {
+                        <button type="button" class="btn btn-outline-success" onclick="markAllClass(true)">
+                            <i class="bi bi-check-all me-1"></i>Tất cả có mặt học
+                        </button>
+                    }
+                    <button type="button" class="btn btn-outline-primary" onclick="markAllMass(true)">
+                        <i class="bi bi-check2-circle me-1"></i>Tất cả có mặt Lễ
+                    </button>
+                    <button type="button" class="btn btn-primary px-4 shadow-sm" onclick="saveBatchAttendance()">
+                        <i class="bi bi-floppy-fill me-1"></i>Lưu Điểm Danh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Box Thông Báo Toast/Inline -->
+    <div id="attendanceAlert" class="alert d-none shadow-sm border-0" role="alert"></div>
+
+    <!-- Bảng Điểm Danh Chuyên Cần -->
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-0">
+            <div>
+                <h5 class="fw-bold text-dark mb-0">
+                    <i class="bi bi-card-checklist me-2 text-primary"></i>Sổ Chuyên Cần: @Model.ClassName
+                </h5>
+                <small class="text-muted">
+                    Khối: <strong>@Model.GradeLevel</strong> | Ngày: <strong>@Model.AttendanceDate.ToString("dd/MM/yyyy") (@Model.DayOfWeek)</strong> | Sĩ số: <strong>@Model.Students.Count</strong> em
+                </small>
+            </div>
+            <a asp-action="ScanQr" class="btn btn-outline-dark btn-sm rounded-pill px-3">
+                <i class="bi bi-qr-code-scan me-1"></i> Chế độ Quét QR Cổng
+            </a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="tableAttendance">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3 text-center" style="width: 45px;">STT</th>
+                        <th>Mã QR</th>
+                        <th>Họ Và Tên</th>
+                        @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                        {
+                            <th class="text-center bg-primary-subtle text-primary border-start border-end" style="width: 230px;">
+                                <i class="bi bi-book me-1"></i>GIỜ HỌC GIÁO LÝ
+                            </th>
+                        }
+                        <th class="text-center bg-success-subtle text-success border-end" style="width: 230px;">
+                            <i class="bi bi-bell-fill me-1"></i>THÁNH LỄ (@(Model.DayOfWeek == DayOfWeek.Thursday ? "T5 17h45" : "CN 6h30"))
+                        </th>
+                        <th>Ghi Chú</th>
+                        <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Students.Any())
+                    {
+                        var stt = 1;
+                        foreach (var s in Model.Students)
+                        {
+                            <tr data-enrollment-id="@s.EnrollmentId">
+                                <td class="ps-3 text-center fw-bold text-muted">@(stt++)</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                    <small class="text-muted">Giới tính: @s.Gender</small>
+                                </td>
+
+                                <!-- CỘT CHUYÊN CẦN HỌC GIÁO LÝ -->
+                                @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                                {
+                                    <td class="border-start border-end bg-light-subtle">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input chk-class" type="checkbox" role="switch"
+                                                       @(s.ClassAttended ? "checked" : "") onchange="onClassToggle(this)" />
+                                            </div>
+                                            <select class="form-select form-select-sm select-class-status">
+                                                <!option value="PRESENT" @(s.ClassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
+                                                <!option value="LATE" @(s.ClassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
+                                                <!option value="ABSENT_PERMITTED" @(s.ClassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
+                                                <!option value="ABSENT_UNPERMITTED" @(s.ClassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
+                                            </select>
+                                        </div>
+                                        @if (s.ClassCheckInTime.HasValue)
+                                        {
+                                            <small class="text-muted d-block mt-1">Giờ vào: @s.ClassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                        }
+                                    </td>
+                                }
+                                <!-- CỘT CHUYÊN CẦN THÁNH LỄ -->
+                                <td class="border-end bg-light-subtle">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input chk-mass" type="checkbox" role="switch"
+                                                   @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
+                                        </div>
+                                        <select class="form-select form-select-sm select-mass-status">
+                                            <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
+                                            <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
+                                            <!option value="ABSENT_PERMITTED" @(s.MassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
+                                            <!option value="ABSENT_UNPERMITTED" @(s.MassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
+                                        </select>
+                                    </div>
+                                    @if (s.MassCheckInTime.HasValue)
+                                    {
+                                        <small class="text-muted d-block mt-1">Giờ quét: @s.MassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                    }
+                                </td>
+
+                                <td>
+                                    <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
+                                            title="Điểm danh bù"
+                                            onclick="openMakeUpModal(@s.EnrollmentId, '@s.ChristianName @s.FullName')">
+                                        <i class="bi bi-arrow-repeat"></i> Bù
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                Lớp chưa có thiếu nhi nào hoặc chưa được kích hoạt.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Điểm Danh Bù (TASK-409) -->
+<div class="modal fade" id="makeUpModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning bg-opacity-25">
+                <h5 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-arrow-repeat me-2"></i>Điểm Danh Bù: <span id="modalStudentName"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="makeUpEnrollmentId" />
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Chọn Ngày Đã Vắng Cần Bù:</label>
+                    <select id="selectMissedDate" class="form-select"></select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Nội dung xác nhận bù:</label>
+                    <div class="d-flex gap-3 mt-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkMakeUpMass" checked>
+                            <label class="form-check-label fw-semibold" for="chkMakeUpMass">Bù Thánh Lễ</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkMakeUpClass" checked>
+                            <label class="form-check-label fw-semibold" for="chkMakeUpClass">Bù Bài Giáo Lý</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Ngày Thực Hiện Bù:</label>
+                    <input type="date" id="inputMakeUpDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted">Hình Thức / Lý Do Bù:</label>
+                    <textarea id="textMakeUpReason" class="form-control" rows="2" placeholder="Ví dụ: Đã dự lễ bù tối Thứ 7 hoặc đã trả bài kinh cho GLV..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-warning px-4 fw-bold shadow-sm" onclick="submitMakeUpAttendance()">
+                    <i class="bi bi-check2-circle me-1"></i> Xác Nhận Bù
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        function onFilterChange() {
+            const classId = document.getElementById('selectClass').value;
+            const date = document.getElementById('inputDate').value;
+            window.location.href = `/Attendance/Index?classId=${classId}&date=${date}`;
+        }
+
+        function onClassToggle(chk) {
+            const row = chk.closest('tr');
+            const selectStatus = row.querySelector('.select-class-status');
+            if (chk.checked) {
+                if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
+                    selectStatus.value = 'PRESENT';
+                }
+            } else {
+                selectStatus.value = 'ABSENT_UNPERMITTED';
+            }
+        }
+
+        function onMassToggle(chk) {
+            const row = chk.closest('tr');
+            const selectStatus = row.querySelector('.select-mass-status');
+            if (chk.checked) {
+                if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
+                    selectStatus.value = 'PRESENT';
+                }
+            } else {
+                selectStatus.value = 'ABSENT_UNPERMITTED';
+            }
+        }
+
+        function markAllClass(isPresent) {
+            document.querySelectorAll('#tableAttendance tbody tr').forEach(row => {
+                const chk = row.querySelector('.chk-class');
+                const sel = row.querySelector('.select-class-status');
+                if (chk && sel) {
+                    chk.checked = isPresent;
+                    sel.value = isPresent ? 'PRESENT' : 'ABSENT_UNPERMITTED';
+                }
+            });
+        }
+
+        function markAllMass(isAttended) {
+            document.querySelectorAll('#tableAttendance tbody tr').forEach(row => {
+                const chk = row.querySelector('.chk-mass');
+                const sel = row.querySelector('.select-mass-status');
+                if (chk && sel) {
+                    chk.checked = isAttended;
+                    sel.value = isAttended ? 'PRESENT' : 'ABSENT_UNPERMITTED';
+                }
+            });
+        }
+
+        function showAlert(msg, isSuccess = true) {
+            const box = document.getElementById('attendanceAlert');
+            box.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show shadow-sm border-0 mb-4`;
+            box.innerHTML = `<i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2"></i>${msg}
+                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            box.classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function saveBatchAttendance() {
+            const classId = parseInt(document.getElementById('selectClass').value);
+            const date = document.getElementById('inputDate').value;
+            const rows = document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]');
+
+            if (rows.length === 0) {
+                alert('Không có học sinh để lưu điểm danh!');
+                return;
+            }
+
+            const items = [];
+            rows.forEach(r => {
+                const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
+
+                // Nếu là Chúa Nhật thì lấy giá trị trên giao diện, nếu không phải thì mặc định false / ABSENT_UNPERMITTED
+                const chkClass = r.querySelector('.chk-class');
+                const selClass = r.querySelector('.select-class-status');
+                const classAttended = chkClass ? chkClass.checked : false;
+                const classStatus = selClass ? selClass.value : 'ABSENT_UNPERMITTED';
+
+                const attendedMass = r.querySelector('.chk-mass').checked;
+                const massStatus = r.querySelector('.select-mass-status').value;
+                const note = r.querySelector('.input-note').value;
+
+                items.push({
+                    enrollmentId: enrollmentId,
+                    classAttended: classAttended,
+                    classStatus: classStatus,
+                    attendedMass: attendedMass,
+                    massStatus: massStatus,
+                    note: note
+                });
+            });
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch('/Attendance/SaveBatch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        classId: classId,
+                        attendanceDate: date,
+                        items: items
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showAlert(data.message, true);
+                } else {
+                    showAlert(data.message, false);
+                }
+            } catch (err) {
+                showAlert('Lỗi kết nối máy chủ: ' + err, false);
+            }
+        }
+
+                let makeUpModalInstance = null;
+
+        async function openMakeUpModal(enrollmentId, studentName) {
+            document.getElementById('makeUpEnrollmentId').value = enrollmentId;
+            document.getElementById('modalStudentName').innerText = studentName;
+            document.getElementById('textMakeUpReason').value = '';
+
+            const select = document.getElementById('selectMissedDate');
+            select.innerHTML = '<option value="">Đang tải danh sách buổi vắng...</option>';
+
+            if (!makeUpModalInstance) {
+                makeUpModalInstance = new bootstrap.Modal(document.getElementById('makeUpModal'));
+            }
+            makeUpModalInstance.show();
+
+            try {
+                const res = await fetch(`/Attendance/GetMissedDates?enrollmentId=${enrollmentId}`);
+                const result = await res.json();
+
+                select.innerHTML = '';
+                if (result.success && result.data.length > 0) {
+                    result.data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.missedDate;
+                        opt.text = `${item.dayOfWeekName} (Vắng: ${item.missedMass ? 'Lễ ' : ''}${item.missedClass ? 'Học' : ''})`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">(Không có buổi vắng nào cần bù)</option>';
+                }
+            } catch (e) {
+                select.innerHTML = '<option value="">Lỗi tải dữ liệu</option>';
+            }
+        }
+
+        async function submitMakeUpAttendance() {
+            const enrollmentId = parseInt(document.getElementById('makeUpEnrollmentId').value);
+            const missedDate = document.getElementById('selectMissedDate').value;
+            const makeUpDate = document.getElementById('inputMakeUpDate').value;
+            const makeUpMass = document.getElementById('chkMakeUpMass').checked;
+            const makeUpClass = document.getElementById('chkMakeUpClass').checked;
+            const reason = document.getElementById('textMakeUpReason').value.trim();
+
+            if (!missedDate) {
+                alert('Vui lòng chọn ngày vắng cần bù!');
+                return;
+            }
+            if (!reason) {
+                alert('Vui lòng nhập hình thức hoặc lý do bù!');
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch('/Attendance/SubmitMakeUp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        enrollmentId: enrollmentId,
+                        originalMissedDate: missedDate,
+                        makeUpDate: makeUpDate,
+                        makeUpMass: makeUpMass,
+                        makeUpClass: makeUpClass,
+                        reason: reason
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    makeUpModalInstance.hide();
+                    showAlert(data.message, true);
+                    setTimeout(() => { location.reload(); }, 1200);
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ: ' + err);
+            }
+        }
+    </script>
+}
