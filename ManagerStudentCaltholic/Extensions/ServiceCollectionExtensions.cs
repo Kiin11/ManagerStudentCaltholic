@@ -4,6 +4,7 @@ using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -98,8 +99,9 @@ namespace ManagerStudentCaltholic.Extensions
                 options.AccessDeniedPath = "/Account/AccessDenied";
                 options.ExpireTimeSpan = TimeSpan.FromDays(7);
                 options.SlidingExpiration = true;
-                options.Cookie.HttpOnly = true;
-                options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.HttpOnly = true;             // Chống XSS đọc trộm Cookie
+                options.Cookie.SameSite = SameSiteMode.Lax; // Cho phép chuyển hướng an toàn
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             })
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
             {
@@ -135,6 +137,31 @@ namespace ManagerStudentCaltholic.Extensions
 
                 options.AddPolicy("RequireStaff", policy =>
                     policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// Thêm cấu hình chống CSRF toàn cục và Cookie nghiêm ngặt
+        /// </summary>
+        /// <param name="services"></param>
+        /// <returns></returns>
+        public static IServiceCollection AddStrictSecurityConfigurations(this IServiceCollection services)
+        {
+            // TASK-708: Tự động kiểm tra Anti-CSRF Token cho tất cả POST, PUT, DELETE
+            services.AddControllersWithViews(options =>
+            {
+                options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+            });
+
+            services.AddAntiforgery(options =>
+            {
+                options.Cookie.Name = "__Host-Parish-Antiforgery";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Strict;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                options.HeaderName = "X-CSRF-TOKEN"; // Hỗ trợ Fetch / Ajax gửi qua Header
             });
 
             return services;

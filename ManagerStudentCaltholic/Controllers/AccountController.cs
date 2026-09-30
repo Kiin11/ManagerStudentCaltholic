@@ -1,10 +1,12 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -50,6 +52,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyAuth)] // Chặn spam đăng nhập
         public async Task<IActionResult> Login(LoginRequestDto model)
         {
             if (!ModelState.IsValid)
