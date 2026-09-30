@@ -34,7 +34,9 @@ namespace ManagerStudentCaltholic.Extensions
                     {
                         Username = "admin",
                         PasswordHash = passwordHasher.HashPassword("Password_Adm1n"),
-                        FullName = "Quản Trị Viên Kỹ Thuật",
+                        FirstName = "Quản Trị Viên Kỹ Thuật",
+                        LastName = "Hệ Thống",
+                        ChristianName = "",
                         Role = UserRole.Admin,
                         Email = "admin@parish.local",
                         IsActive = true,
@@ -45,7 +47,9 @@ namespace ManagerStudentCaltholic.Extensions
                     {
                         Username = "chaxu",
                         PasswordHash = passwordHasher.HashPassword("ChaTienUy@Ph4Trung"),
-                        FullName = "Cha Tuyên Úy",
+                        FirstName = "Cha",
+                        LastName = "Tuyên Úy",
+                        ChristianName = "",
                         Role = UserRole.SpiritualDirector,
                         Email = "chaxu@parish.local",
                         IsActive = true,

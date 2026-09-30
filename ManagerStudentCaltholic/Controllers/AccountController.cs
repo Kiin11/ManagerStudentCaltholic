@@ -102,7 +102,7 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim("FullName", user.FullName),
+                new Claim("FullName", user.FirstName + " " + user.LastName),
                 new Claim(ClaimTypes.Role, user.Role)
             };
 
@@ -146,7 +146,7 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         Id = user.Id,
                         Username = user.Username,
-                        FullName = user.FullName,
+                        FullName = user.FirstName + " " + user.LastName,
                         Role = user.Role,
                         Email = user.Email
                     }
@@ -245,6 +245,136 @@ namespace ManagerStudentCaltholic.Controllers
             return RedirectToAction("Index", "Home");
         }
         #endregion
+
+        /// <summary>
+        /// 6. GET: /Account/Profile (TASK-616)
+        /// </summary>
+        /// <returns></returns
+        [HttpGet]
+        [Authorize]
+        public async Task<IActionResult> Profile()
+        {
+            var username = User.Identity?.Name;
+            if (string.IsNullOrEmpty(username)) return RedirectToAction(nameof(Login));
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username.ToLower());
+            if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
+
+            // Lấy danh sách lớp được phân công (tương ứng với TeacherName hoặc FullName)
+            var assignedClasses = await _context.ClassTeachers
+                .Include(ct => ct.ClassRoom)
+                    .ThenInclude(c => c.AcademicYear)
+                .Include(ct => ct.ClassRoom)
+                    .ThenInclude(c => c.Enrollments)
+                .Where(ct => ct.TeacherName.ToLower() == user.Username.ToLower() ||
+                             ct.TeacherName.ToLower() == user.FirstName.ToLower() + " " + user.LastName.ToLower() ||
+                             (!string.IsNullOrEmpty(user.PhoneNumber) && ct.PhoneNumber == user.PhoneNumber))
+                .OrderByDescending(ct => ct.ClassRoom.AcademicYear.StartDate)
+                .Select(ct => new AssignedClassItemDto
+                {
+                    ClassId = ct.ClassRoomId,
+                    ClassName = ct.ClassRoom.Name,
+                    GradeLevel = ct.ClassRoom.GradeLevel,
+                    AcademicYearName = ct.ClassRoom.AcademicYear.Name,
+                    RoleInClass = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" : (ct.RoleInClass == "MEMBER" ? "Đồng hành" : "Dự bị"),
+                    RoomNumber = ct.ClassRoom.RoomName,
+                    TotalStudents = ct.ClassRoom.Enrollments.Count
+                })
+                .ToListAsync();
+
+            var viewModel = new UserProfileViewModel
+            {
+                Id = user.Id,
+                Username = user.Username,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                ChristianName = user.ChristianName,
+                DateOfBirth = user.DateOfBirth,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Address = user.Address,
+                AvatarUrl = user.AvatarUrl,
+                Role = user.Role,
+                LastLoginAt = user.LastLoginAt,
+                AssignedClasses = assignedClasses
+            };
+
+            return View(viewModel);
+        }
+
+        /// <summary>
+        /// 7. POST: /Account/UpdateProfile (TASK-616)
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateProfile(UserProfileViewModel model)
+        {
+            var username = User.Identity?.Name;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username!.ToLower());
+            if (user == null) return NotFound();
+
+            if (!ModelState.IsValid)
+            {
+                TempData["ErrorMessage"] = "Dữ liệu nhập chưa hợp lệ, vui lòng kiểm tra lại.";
+                return RedirectToAction(nameof(Profile));
+            }
+
+            user.ChristianName = model.ChristianName?.Trim();
+            user.FirstName = model.FirstName.Trim();
+            user.LastName = model.LastName.Trim();
+            user.DateOfBirth = model.DateOfBirth.HasValue
+                ? DateTime.SpecifyKind(model.DateOfBirth.Value.Date, DateTimeKind.Utc)
+                : null;
+            user.Email = model.Email?.Trim();
+            user.PhoneNumber = model.PhoneNumber?.Trim();
+            user.Address = model.Address?.Trim();
+
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = "Cập nhật hồ sơ cá nhân thành công!";
+            return RedirectToAction(nameof(Profile));
+        }
+
+        /// <summary>
+        /// 8. POST: /Account/ChangePassword (Ajax) (TASK-616)
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordViewModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                return Json(new { success = false, message = string.Join("; ", errors) });
+            }
+
+            var username = User.Identity?.Name;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username!.ToLower());
+            if (user == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy người dùng." });
+            }
+
+            // Kiểm tra mật khẩu cũ bằng băm PBKDF2
+            if (!_passwordHasher.VerifyPassword(model.CurrentPassword, user.PasswordHash))
+            {
+                return Json(new { success = false, message = "Mật khẩu hiện tại không chính xác." });
+            }
+
+            // Băm mật khẩu mới
+            user.PasswordHash = _passwordHasher.HashPassword(model.NewPassword);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Người dùng {Username} đã đổi mật khẩu thành công.", user.Username);
+
+            return Json(new { success = true, message = "Đổi mật khẩu thành công! Vui lòng ghi nhớ mật khẩu mới." });
+        }
     }
 }
 

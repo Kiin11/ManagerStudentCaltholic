@@ -109,7 +109,11 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.Property(u => u.Username).HasMaxLength(50).IsRequired();
                 entity.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
-                entity.Property(u => u.FullName).HasMaxLength(100).IsRequired();
+                entity.Property(u => u.FirstName).HasMaxLength(100).IsRequired();
+                entity.Property(u => u.LastLoginAt).HasMaxLength(10); 
+                entity.Property(u => u.ChristianName).HasMaxLength(50);
+                entity.Property(u => u.Address).HasMaxLength(200);
+                entity.Property(u => u.AvatarUrl).HasMaxLength(255);
                 entity.Property(u => u.Role).HasMaxLength(30).HasDefaultValue(UserRole.Teacher);
                 entity.Property(u => u.IsActive).HasDefaultValue(true);
                 entity.Property(u => u.AccessFailedCount).HasDefaultValue(0);

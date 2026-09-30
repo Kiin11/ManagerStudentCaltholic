@@ -19,7 +19,10 @@ namespace ManagerStudentCaltholic.Models.Entities
         public string? PhoneNumber { get; set; }
 
         [Required, MaxLength(100)]
-        public string FullName { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+
+        [Required, MaxLength(10)]
+        public string LastName { get; set; } = string.Empty;
 
         // Vai trò: Admin, BranchHead, Teacher, Parent
         [Required, MaxLength(30)]
@@ -36,5 +39,15 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         // Quan hệ với các RefreshToken
         public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+        // Bổ sung các trường thông tin cá nhân (TASK-614)
+        [MaxLength(50)]
+        public string? ChristianName { get; set; } // Tên Thánh (ví dụ: Giuse, Maria...)
+        public DateTime? DateOfBirth { get; set; } // Ngày sinh
+
+        [MaxLength(200)]
+        public string? Address { get; set; } // Giáo họ / Địa chỉ cư ngụ
+
+        [MaxLength(255)]
+        public string? AvatarUrl { get; set; } // Đường dẫn ảnh đại diện
     }
 }

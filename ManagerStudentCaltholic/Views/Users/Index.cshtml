@@ -68,7 +68,7 @@
                                         <small class="d-block text-muted">@u.Email</small>
                                     }
                                 </td>
-                                <td class="fw-semibold">@u.FullName</td>
+                                <td class="fw-semibold">@u.FirstName @u.LastName</td>
                                 <td>
                                     <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                                                                    u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
@@ -135,8 +135,16 @@
                         <input type="password" id="newPassword" class="form-control" placeholder="Tối thiểu 6 ký tự" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Họ và Tên <span class="text-danger">*</span></label>
-                        <input type="text" id="newFullName" class="form-control" placeholder="Ví dụ: Giuse Nguyễn Văn A" required />
+                        <label class="form-label small fw-bold">Tên Thánh<span class="text-danger">*</span></label>
+                        <input type="text" id="newChristianName" class="form-control" placeholder="Ví dụ: Phaolo" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Họ <span class="text-danger">*</span></label>
+                        <input type="text" id="newFirstName" class="form-control" placeholder="Ví dụ: Ninh" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tên <span class="text-danger">*</span></label>
+                        <input type="text" id="newLastName" class="form-control" placeholder="Ví dụ: Huân" required />
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
@@ -197,12 +205,14 @@
         async function submitCreateUser() {
             const username = document.getElementById("newUsername").value.trim();
             const password = document.getElementById("newPassword").value;
-            const fullName = document.getElementById("newFullName").value.trim();
+            const christianName = document.getElementById("newChristianName").value.trim();
+            const firstName = document.getElementById("newFirstName").value.trim();
+            const lastName = document.getElementById("newLastName").value.trim();
             const role = document.getElementById("newRole").value;
             const phone = document.getElementById("newPhone").value.trim();
             const email = document.getElementById("newEmail").value.trim();
 
-            if (!username || !password || !fullName) {
+            if (!username || !password || !christianName || !firstName || !lastName) {
                 alert("Vui lòng điền đầy đủ các thông tin bắt buộc!");
                 return;
             }
@@ -215,7 +225,7 @@
                     'Content-Type': 'application/json',
                     'RequestVerificationToken': token
                 },
-                body: JSON.stringify({ username, password, fullName, role, phoneNumber: phone, email })
+                body: JSON.stringify({ username, password, christianName, firstName, lastName, role, phoneNumber: phone, email })
             });
 
             const data = await res.json();
