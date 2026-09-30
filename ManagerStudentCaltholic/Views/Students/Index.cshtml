@@ -166,16 +166,16 @@
                                 <td class="text-end pe-4">
                                     <span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-pill">
                                         <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-circle me-1" title="Tải file ảnh QR">
-                                            <i class="bi bi-qr-code">Tải file ảnh QR</i>
+                                            <i class="bi bi-qr-code">Down QR</i>
                                         </a>
                                     </span>
                                     <button type="button" class="btn btn-outline-secondary btn-sm rounded-circle me-1" onclick="openEditModal(@s.Id)" title="Chỉnh sửa">
-                                        <i class="bi bi-pencil">Chỉnh sửa</i>
+                                        <i class="bi bi-pencil">Edit</i>
                                     </button>
                                     <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
                                         @Html.AntiForgeryToken()
                                         <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-circle" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
-                                            <i class="bi bi-power">@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")</i>
+                                            <i class="bi bi-power">@(s.IsActive ? "Deactive" : "Active")</i>
                                         </button>
                                     </form>
                                 </td>
