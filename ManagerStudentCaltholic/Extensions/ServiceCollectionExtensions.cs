@@ -68,6 +68,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IQrCodeService, QrCodeService>();
             services.AddScoped<IPasswordHasherService, PasswordHasherService>();
             services.AddScoped<ITokenService, TokenService>();
+            services.AddHostedService<LogRetentionBackgroundService>();
 
             return services;
         }
