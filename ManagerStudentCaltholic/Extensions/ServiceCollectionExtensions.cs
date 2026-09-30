@@ -59,6 +59,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IStudentCodeGenerator, StudentCodeGenerator>();
             services.AddScoped<IStudentExcelService, StudentExcelService>();
             services.AddScoped<IQrCodeService, QrCodeService>();
+            services.AddScoped<IPasswordHasherService, PasswordHasherService>();
+            services.AddScoped<ITokenService, TokenService>();
+
             return services;
         }
     }
