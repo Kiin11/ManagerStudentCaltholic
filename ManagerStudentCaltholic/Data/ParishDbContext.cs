@@ -17,6 +17,7 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<ClassTeacher> ClassTeachers => Set<ClassTeacher>();
         public DbSet<User> Users => Set<User>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<Announcement> Announcements => Set<Announcement>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -146,6 +147,30 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.Property(rt => rt.Token).HasMaxLength(255).IsRequired();
                 entity.Property(rt => rt.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+            modelBuilder.Entity<Announcement>(entity =>
+            {
+                entity.ToTable("Announcements");
+                entity.HasKey(a => a.Id);
+
+                entity.Property(a => a.Title).HasMaxLength(200).IsRequired();
+                entity.Property(a => a.Scope).HasMaxLength(20).HasDefaultValue("ALL");
+                entity.Property(a => a.Priority).HasMaxLength(20).HasDefaultValue("NORMAL");
+                entity.Property(a => a.IsPinned).HasDefaultValue(false);
+                entity.Property(a => a.IsActive).HasDefaultValue(true);
+                entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
+
+                // Quan hệ tùy chọn với lớp học khi Scope = CLASS
+                entity.HasOne(a => a.TargetClassRoom)
+                      .WithMany()
+                      .HasForeignKey(a => a.TargetClassRoomId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // B-Tree Indexes phục vụ lọc tin tức theo phạm vi, thời gian và ghim bài
+                entity.HasIndex(a => a.CreatedAt);
+                entity.HasIndex(a => a.Scope);
+                entity.HasIndex(a => a.TargetGradeLevel);
+                entity.HasIndex(a => a.IsPinned);
             });
         }
 
