@@ -17,7 +17,8 @@ builder.Host.AddSerilogLogging();
 // Addd Extensions for Database Configuration, Reverse Proxy, and Application Services
 builder.Services.AddDatabaseConfiguration(builder.Configuration)
                 .AddReverseProxyConfiguration()
-                .AddApplicationServices();
+                .AddApplicationServices()
+                .AddHybridAuthentication(builder.Configuration);
 
 builder.Services.AddAuthorization(options =>
 {
