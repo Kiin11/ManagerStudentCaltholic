@@ -54,6 +54,7 @@ namespace ManagerStudentCaltholic.Controllers
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyAuth)] // Chặn spam đăng nhập
+        [IgnoreAntiforgeryToken] // Bỏ qua kiểm tra Anti-CSRF riêng cho form đăng nhập ban đầu
         public async Task<IActionResult> Login(LoginRequestDto model)
         {
             if (!ModelState.IsValid)

@@ -158,7 +158,7 @@ namespace ManagerStudentCaltholic.Extensions
 
             services.AddAntiforgery(options =>
             {
-                options.Cookie.Name = "__Host-Parish-Antiforgery";
+                options.Cookie.Name = "Parish-Antiforgery";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Strict;
                 options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
