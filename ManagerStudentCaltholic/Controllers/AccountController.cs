@@ -54,7 +54,7 @@ namespace ManagerStudentCaltholic.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return View(model);
+                return Json(new AuthResponseDto { Success = false, Message = "Dữ liệu không hợp lệ." });
             }
 
             var cleanUsername = model.Username.Trim().ToLower();
@@ -62,13 +62,20 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(u => u.Username.ToLower() == cleanUsername);
 
             // Kiểm tra tồn tại và kích hoạt
-            if (user == null || !user.IsActive)
+            if (user == null)
             {
                 ModelState.AddModelError(string.Empty, "Tài khoản hoặc mật khẩu không chính xác.");
                 return View(model);
             }
 
-            // Kiểm tra trạng thái khóa tài khoản (nếu bị khóa bởi Epic 7)
+            // 1. Kiểm tra nếu tài khoản bị Admin vô hiệu hóa vĩnh viễn
+            if (!user.IsActive)
+            {
+                ModelState.AddModelError(string.Empty, "Tài khoản đang bị tạm khóa bởi Ban Quản Trị.");
+                return View(model);
+            }
+
+            // Kiểm tra trạng thái khóa tài khoản (nếu bị khóa bởi Epic 7) 702
             if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow)
             {
                 var remainingMinutes = Math.Ceiling((user.LockoutEnd.Value - DateTime.UtcNow).TotalMinutes);
@@ -83,12 +90,16 @@ namespace ManagerStudentCaltholic.Controllers
                 user.AccessFailedCount++;
                 if (user.AccessFailedCount >= 5)
                 {
-                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(15);
-                    _logger.LogWarning("Tài khoản {Username} bị tạm khóa 15 phút do nhập sai 5 lần.", user.Username);
+                    user.LockoutEnd = DateTime.UtcNow.AddMinutes(30); // Khóa 30 phút
+                    _logger.LogWarning("Tài khoản {Username} bị tạm khóa 30 phút do nhập sai 5 lần.", user.Username);
+                    await _context.SaveChangesAsync();
+                    ModelState.AddModelError(string.Empty, $"Tài khoản {user.Username} bị tạm khóa 30 phút do nhập sai 5 lần.");
+                    return View(model);
                 }
-                await _context.SaveChangesAsync();
 
-                ModelState.AddModelError(string.Empty, "Tài khoản hoặc mật khẩu không chính xác.");
+                int attemptsLeft = 5 - user.AccessFailedCount;
+                ModelState.AddModelError(string.Empty, $"Mật khẩu không chính xác. Bạn còn {attemptsLeft} lần thử trước khi tài khoản bị tạm khóa 30 phút.");
+                await _context.SaveChangesAsync();
                 return View(model);
             }
 
@@ -96,6 +107,7 @@ namespace ManagerStudentCaltholic.Controllers
             user.AccessFailedCount = 0;
             user.LockoutEnd = null;
             user.LastLoginAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
 
             // 1. Tạo Cookie Authentication Claims cho Razor View
             var claims = new List<Claim>
