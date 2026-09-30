@@ -64,7 +64,7 @@
                             </li>
 
                             <!-- 6. Quản trị Tài khoản: Dành riêng cho Admin và Ban Điều Hành -->
-                            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+                            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.SpiritualDirector))
                             {
                                 <li class="nav-item">
                                     <a class="nav-link" asp-controller="Users" asp-action="Index">

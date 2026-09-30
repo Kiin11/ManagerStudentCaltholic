@@ -3,11 +3,13 @@ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Policy = "RequireStaff")]
     public class AttendanceController : Controller
     {
         private readonly ParishDbContext _context;
@@ -489,6 +491,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="classId"></param>
         /// <returns></returns>
         [HttpGet]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> Statistics(int? classId)
         {
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);

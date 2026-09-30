@@ -1,10 +1,12 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Policy = "RequireExecutiveBoard")]
     public class AcademicYearsController : Controller
     {
         private readonly ILogger<AcademicYearsController> _logger;

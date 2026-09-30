@@ -1,11 +1,13 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Policy = "RequireExecutiveBoard")]
     public class EnrollmentsController : Controller
     {
         private readonly ParishDbContext _context;

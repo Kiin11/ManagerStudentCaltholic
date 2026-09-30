@@ -51,7 +51,7 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var users = await query
-                .OrderByDescending(u => u.CreatedAt)
+                .OrderByDescending(u => u.CreatedAt).Where(x=>x.Role != UserRole.Admin)
                 .AsNoTracking()
                 .ToListAsync();
 
