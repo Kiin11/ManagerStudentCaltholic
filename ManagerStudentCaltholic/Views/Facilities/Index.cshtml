@@ -1,0 +1,234 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.BuildingZone>
+@{
+    ViewData["Title"] = "Quản Lý Cơ Sở Vật Chất & Sơ Đồ Phòng Học";
+    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, dynamic>;
+    var pendingIncidents = ViewBag.PendingIncidents as List<ManagerStudentCaltholic.Models.Entities.RoomIncidentReport>;
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-building-gear me-2"></i>Sơ Đồ Phòng Học & Cơ Sở Vật Chất
+            </h3>
+            <p class="text-muted mb-0">Theo dõi trực quan phòng học theo khu/tầng, kiểm soát quá tải sĩ số và báo hỏng thiết bị</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Facilities/LessonPlans" class="btn btn-outline-primary">
+                <i class="bi bi-calendar3 me-1"></i> Xem Kế Hoạch Năm Học
+            </a>
+            <button type="button" class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#reportIncidentModal">
+                <i class="bi bi-exclamation-triangle me-1"></i> Báo Sự Cố Phòng Học
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert cảnh báo sự cố đang chờ xử lý -->
+    @if (pendingIncidents != null && pendingIncidents.Any())
+    {
+        <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-4">
+            <div class="fw-bold mb-2">
+                <i class="bi bi-wrench me-1"></i> Có @pendingIncidents.Count sự cố thiết bị đang chờ bảo trì:
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                @foreach (var inc in pendingIncidents)
+                {
+                    <span class="badge bg-white text-dark border p-2 rounded-3">
+                        <strong class="text-danger">[@inc.ClassRoomLocation.RoomName]</strong> @inc.DeviceType: @inc.Description
+                        @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
+                        {
+                            <button type="button" class="btn btn-sm btn-link text-success p-0 ms-2 fw-bold" onclick="resolveIncident(@inc.Id)">
+                                [Đã sửa]
+                            </button>
+                        }
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Ma trận Grid/Card Sơ đồ phòng học theo từng khu -->
+    @foreach (var zone in Model)
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
+            <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold text-dark mb-0">
+                    <i class="bi bi-geo-alt-fill text-danger me-2"></i>@zone.ZoneName (@zone.ZoneCode)
+                </h5>
+                <span class="badge bg-secondary rounded-pill px-3">@zone.Rooms.Count Phòng học</span>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    @foreach (var room in zone.Rooms.OrderBy(r => r.FloorNumber).ThenBy(r => r.RoomName))
+                    {
+                        var hasOccupancy = roomOccupancy != null && roomOccupancy.ContainsKey(room.Id);
+                        var occInfo = hasOccupancy ? roomOccupancy[room.Id] : null;
+                        int currentEnrolled = occInfo != null ? occInfo.MaxEnrolled : 0;
+                        var isOverflow = currentEnrolled > room.Capacity;
+
+                        <div class="col-12 col-md-6 col-lg-4 col-xl-3">
+                            <div class="card h-100 border @(isOverflow ? "border-danger border-2" : "border-0 shadow-sm") rounded-3">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="fw-bold mb-0">@room.RoomName</h5>
+                                        <span class="badge @(room.IsAvailable ? "bg-success" : "bg-danger")">
+                                            @(room.IsAvailable ? "Sẵn sàng" : "Đang sửa")
+                                        </span>
+                                    </div>
+                                    <p class="text-muted small mb-2">
+                                        <i class="bi bi-layers me-1"></i>Tầng: <strong>@room.FloorNumber</strong> | Sức chứa: <strong>@room.Capacity</strong> chỗ
+                                    </p>
+
+                                    <!-- Cảnh báo quá tải sĩ số (TASK-905) -->
+                                    @if (isOverflow)
+                                    {
+                                        <div class="alert alert-danger py-1 px-2 small mb-2 fw-bold">
+                                            <i class="bi bi-exclamation-octagon-fill me-1"></i> Quá tải: @currentEnrolled / @room.Capacity em!
+                                        </div>
+                                    }
+                                    else if (hasOccupancy)
+                                    {
+                                        <div class="text-secondary small mb-2">
+                                            <i class="bi bi-people me-1"></i> Sĩ số hiện tại: <strong>@currentEnrolled</strong> em
+                                        </div>
+                                    }
+
+                                    <div class="bg-light p-2 rounded-2 small text-secondary">
+                                        <i class="bi bi-tools me-1"></i>@(string.IsNullOrEmpty(room.EquipmentNotes) ? "Thiết bị tiêu chuẩn" : room.EquipmentNotes)
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-white border-0 pt-0 pb-3">
+                                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="openReportModalForRoom(@room.Id, '@room.RoomName')">
+                                        <i class="bi bi-flag me-1"></i> Báo hỏng tại phòng này
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- MODAL BÁO CÁO SỰ CỐ / HƯ HỎNG THIẾT BỊ (TASK-905) -->
+<div class="modal fade" id="reportIncidentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fs-6 fw-bold">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Báo Cáo Sự Cố / Hư Hỏng Thiết Bị
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn phòng học <span class="text-danger">*</span></label>
+                    <select id="modalRoomLocationId" class="form-select">
+                        @foreach (var z in Model)
+                        {
+                            <optgroup label="@z.ZoneName">
+                                @foreach (var r in z.Rooms)
+                                {
+                                    <option value="@r.Id">@r.RoomName (Tầng @r.FloorNumber)</option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Loại thiết bị <span class="text-danger">*</span></label>
+                        <select id="modalDeviceType" class="form-select">
+                            <option value="Đèn">Bóng Đèn / Chiếu sáng</option>
+                            <option value="Quạt">Quạt trần / Quạt tường</option>
+                            <option value="Máy chiếu">Máy chiếu / Màn chiếu</option>
+                            <option value="Micro/Loa">Âm thanh / Micro / Loa</option>
+                            <option value="Bàn ghế">Bàn ghế học sinh</option>
+                            <option value="Khác">Khác</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Mức độ ưu tiên</label>
+                        <select id="modalSeverity" class="form-select">
+                            <option value="NORMAL">Bình thường</option>
+                            <option value="HIGH">Cần gấp (ảnh hưởng tiết học)</option>
+                            <option value="CRITICAL">Khẩn cấp (nguy hiểm điện)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Mô tả sự cố <span class="text-danger">*</span></label>
+                    <textarea id="modalIncidentDesc" class="form-control" rows="3" placeholder="Ví dụ: Đèn số 2 chớp tắt, 3 quạt trần không quay..."></textarea>
+                </div>
+                <button type="button" class="btn btn-danger w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitIncidentReport()">
+                    <i class="bi bi-send me-1"></i> Gửi Báo Cáo Sự Cố
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function openReportModalForRoom(roomId, roomName) {
+            const select = document.getElementById('modalRoomLocationId');
+            if (select) select.value = roomId;
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('reportIncidentModal'));
+            modal.show();
+        }
+
+        async function submitIncidentReport() {
+            const locationId = document.getElementById('modalRoomLocationId').value;
+            const deviceType = document.getElementById('modalDeviceType').value;
+            const severity = document.getElementById('modalSeverity').value;
+            const description = document.getElementById('modalIncidentDesc').value.trim();
+
+            if (!description) {
+                alert('Vui lòng mô tả chi tiết sự cố!');
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('locationId', locationId);
+            formData.append('deviceType', deviceType);
+            formData.append('severity', severity);
+            formData.append('description', description);
+
+            const res = await fetch('/Facilities/ReportIncident', {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token },
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Lỗi: ' + data.message);
+            }
+        }
+
+        async function resolveIncident(reportId) {
+            if (!confirm('Xác nhận sự cố này đã được sửa chữa khắc phục?')) return;
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('reportId', reportId);
+            formData.append('notes', 'Đã khắc phục hoàn tất');
+
+            const res = await fetch('/Facilities/ResolveIncident', {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token },
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            }
+        }
+    </script>
+}

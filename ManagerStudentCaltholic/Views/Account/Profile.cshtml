@@ -22,7 +22,9 @@
                     <span class="badge @(Model.Role == UserRole.Admin ? "bg-danger" :
                                                                    Model.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                    Model.Role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-3 py-1">
-                        @Model.Role
+                        @(Model.Role == UserRole.Admin ? "Quản trị viên" : Model.Role == UserRole.SpiritualDirector ? "Cha" :
+                                                Model.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
+                                                Model.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
                     </span>
                     @if (!string.IsNullOrEmpty(Model.ManagedGradeLevel))
                     {
@@ -166,9 +168,16 @@
                                 <label class="form-label small fw-bold">Tên Thánh</label>
                                 <input type="text" name="ChristianName" class="form-control" value="@Model.ChristianName" placeholder="Phaolô, Giuse..." />
                             </div>
+                            <div>
+
+                            </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold">Họ và Tên <span class="text-danger">*</span></label>
-                                <input type="text" name="FullName" class="form-control" value="@Model.FirstName @Model.LastName" required />
+                                <label class="form-label small fw-bold">Họ và Tên đệm <span class="text-danger">*</span></label>
+                                <input type="text" name="FirstName" class="form-control" value="@Model.FirstName" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Tên <span class="text-danger">*</span></label>
+                                <input type="text" name="LastName" class="form-control" value="@Model.LastName" required />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Số Điện Thoại</label>
@@ -183,8 +192,8 @@
                                 <input type="date" name="DateOfBirth" class="form-control" value="@(Model.DateOfBirth?.ToString("yyyy-MM-dd"))" />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold">Địa Chỉ / Giáo Họ</label>
-                                <input type="text" name="Address" class="form-control" value="@Model.Address" placeholder="Khu phố / Giáo họ..." />
+                                <label class="form-label small fw-bold">Giáo Khu</label>
+                                <input type="text" name="Address" class="form-control" value="@Model.Address" placeholder="Giáo khu..." />
                             </div>
                         </div>
                         <div class="text-end mt-4">

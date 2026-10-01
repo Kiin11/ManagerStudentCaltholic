@@ -303,7 +303,7 @@ namespace ManagerStudentCaltholic.Controllers
                     IsCurrentYear = ct.ClassRoom.AcademicYear.IsCurrent,
                     RoleInClass = ct.RoleInClass,
                     RoleName = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" :
-                               ct.RoleInClass == "MEMBER" ? "Đồng hành" : "Dự bị / Trợ tá",
+                               ct.RoleInClass == "MEMBER" ? "Giáo Lý Viên" : "Dự bị",
                     RoomNumber = ct.ClassRoom.RoomName,
                     TotalStudents = ct.ClassRoom.Enrollments.Count,
                     AssignedAt = ct.AssignedAt

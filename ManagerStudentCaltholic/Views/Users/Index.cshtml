@@ -80,7 +80,9 @@
                                                                                                    u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                                                    u.Role == UserRole.ExecutiveBoard ? "bg-primary" :
                                                                                                    u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
-                                @u.Role
+                                        @(u.Role == UserRole.Admin ? "Quản trị viên" : u.Role == UserRole.SpiritualDirector ? "Cha" :
+                                                                        u.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
+                                                                        u.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
                             </span>
                             @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
                             {
