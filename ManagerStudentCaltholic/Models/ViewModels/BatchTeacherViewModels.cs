@@ -44,4 +44,24 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public List<string> Errors { get; set; } = new();
         public List<CreatedTeacherResultItem> CreatedTeachers { get; set; } = new();
     }
+
+    // DTO gửi yêu cầu vô hiệu hóa hàng loạt
+    public class BatchDeactivateTeachersRequestDto
+    {
+        public List<long> UserIds { get; set; } = new();
+        public string? Reason { get; set; } = "Nghỉ dạy / Tạm ngưng sinh hoạt niên khóa mới";
+    }
+
+    // DTO trả về thông tin GLV chưa phân công lớp
+    public class UnassignedTeacherItemDto
+    {
+        public long Id { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string ChristianName { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string? ManagedGradeLevel { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+    }
 }

@@ -238,9 +238,12 @@ namespace ManagerStudentCaltholic.Controllers
             return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Mau_DanhSach_GLV_Moi.xlsx");
         }
 
-        // =========================================================================
-        // 2. API BATCH IMPORT GLV TỪ FILE EXCEL (TASK-814)
-        // =========================================================================
+        /// <summary>
+        /// 2. API BATCH IMPORT GLV TỪ FILE EXCEL (TASK-814)
+        /// </summary>
+        /// <param name="file"></param>
+        /// <param name="defaultPassword"></param>
+        /// <returns></returns>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
@@ -302,9 +305,11 @@ namespace ManagerStudentCaltholic.Controllers
             return await ExecuteBatchCreate(request);
         }
 
-        // =========================================================================
-        // 3. API TẠO HÀNG LOẠT GLV (BATCH JSON) (TASK-814)
-        // =========================================================================
+        /// <summary>
+        /// 3. API TẠO HÀNG LOẠT GLV (BATCH JSON) (TASK-814)
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
         [HttpPost]
         [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
@@ -416,7 +421,133 @@ namespace ManagerStudentCaltholic.Controllers
                     Message = "Lỗi khi lưu tài khoản vào Database: " + ex.Message
                 });
             }
-            #endregion
         }
+
+        #endregion
+
+        #region Batch Deactivate Teachers
+        /// <summary>
+        /// 1. API: LẤY DANH SÁCH GLV CHƯA ĐƯỢC PHÂN CÔNG LỚP TRONG NIÊN KHÓA HIỆN TẠI (TASK-815)
+        /// </summary>
+        /// <returns></returns>
+        [HttpGet]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
+        public async Task<IActionResult> GetUnassignedTeachersForCurrentYear()
+        {
+            try
+            {
+                // 1. Lấy niên khóa hiện hành
+                var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+                var currentYearId = currentYear?.Id ?? 0;
+
+                // 2. Lấy danh sách UserId đã được phân công vào bất kỳ lớp nào trong niên khóa này
+                var assignedUserIds = await _context.ClassTeachers
+                    .Where(ct => ct.AcademicYearId == currentYearId && ct.UserId.HasValue)
+                    .Select(ct => ct.UserId!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                // 3. Lọc các GLV đang Active nhưng chưa được phân công lớp nào
+                var unassignedTeachers = await _context.Users
+                    .Where(u => u.IsActive &&
+                                (u.Role == UserRole.Teacher || u.Role == UserRole.BranchHead) &&
+                                !assignedUserIds.Contains(u.Id))
+                    .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
+                    .Select(u => new UnassignedTeacherItemDto
+                    {
+                        Id = u.Id,
+                        Username = u.Username,
+                        ChristianName = u.ChristianName ?? "",
+                        FullName = $"{u.ChristianName} {u.FirstName} {u.LastName}".Trim(),
+                        PhoneNumber = u.PhoneNumber ?? "",
+                        Role = u.Role,
+                        ManagedGradeLevel = u.ManagedGradeLevel,
+                        LastLoginAt = u.LastLoginAt
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                return Json(new
+                {
+                    success = true,
+                    academicYearName = currentYear?.Name ?? "Chưa kích hoạt",
+                    data = unassignedTeachers
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Lỗi khi lấy danh sách GLV: " + ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// 2. API: VÔ HIỆU HÓA (DEACTIVATE) HÀNG LOẠT VÀ REVOKE TOKEN (TASK-815)
+        /// </summary>
+        /// <param name="request"></param>
+        /// <returns></returns>
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
+        public async Task<IActionResult> BatchDeactivateTeachers([FromBody] BatchDeactivateTeachersRequestDto request)
+        {
+            if (request == null || !request.UserIds.Any())
+            {
+                return Json(new { success = false, message = "Vui lòng chọn ít nhất một Giáo lý viên để vô hiệu hóa." });
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
+            {
+                int deactivatedCount = 0;
+
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    var usersToDeactivate = await _context.Users
+                        .Include(u => u.RefreshTokens)
+                        .Where(u => request.UserIds.Contains(u.Id) && u.IsActive)
+                        .ToListAsync();
+
+                    // Chặn vô hiệu hóa nhầm tài khoản Admin hoặc Cha Tuyên Úy
+                    usersToDeactivate = usersToDeactivate
+                        .Where(u => u.Role != UserRole.Admin && u.Role != UserRole.SpiritualDirector)
+                        .ToList();
+
+                    foreach (var user in usersToDeactivate)
+                    {
+                        user.IsActive = false;
+
+                        // Thu hồi toàn bộ RefreshToken còn hiệu lực để ngắt phiên đăng nhập
+                        foreach (var token in user.RefreshTokens.Where(rt => rt.IsActive))
+                        {
+                            token.RevokedAt = DateTime.UtcNow;
+                            token.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                            token.ReplacedByToken = "DEACTIVATED_BY_ADMIN";
+                        }
+
+                        deactivatedCount++;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                _logger.LogInformation("Đã vô hiệu hóa hàng loạt {Count} GLV nghỉ niên khóa mới bởi {Admin}. Lý do: {Reason}",
+                    deactivatedCount, User.Identity?.Name, request.Reason);
+
+                return Json(new
+                {
+                    success = true,
+                    message = $"Đã vô hiệu hóa thành công {deactivatedCount} tài khoản Giáo lý viên nghỉ niên khóa mới!"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi xảy ra trong quá trình BatchDeactivateTeachers");
+                return Json(new { success = false, message = "Lỗi khi xử lý dữ liệu: " + ex.Message });
+            }
+        }
+        #endregion
     }
 }

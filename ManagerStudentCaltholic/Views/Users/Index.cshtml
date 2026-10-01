@@ -32,6 +32,9 @@
                     </form>
                 </div>
                 <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-danger rounded-pill px-3 shadow-sm" onclick="openBatchDeactivateModal()">
+                        <i class="bi bi-person-x-fill me-1"></i> Rà Soát GLV Nghỉ Năm Mới
+                    </button>
                     <button type="button" class="btn btn-outline-success rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#batchCreateModal">
                         <i class="bi bi-file-earmark-spreadsheet me-1"></i> Tạo Hàng Loạt GLV Mới
                     </button>
@@ -301,6 +304,70 @@
     </div>
 </div>
 
+<!-- MODAL DEACTIVATE HÀNG LOẠT GLV NGHỈ NIÊN KHÓA MỚI (TASK-815) -->
+<div class="modal fade" id="batchDeactivateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold fs-6">
+                    <i class="bi bi-person-slash me-2"></i>Rà Soát & Vô Hiệu Hóa GLV Nghỉ Dạy (Niên Khóa Mới)
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-warning border-0 rounded-3 small mb-3">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Danh sách dưới đây là những Giáo lý viên <strong>đang hoạt động nhưng CHƯA ĐƯỢC PHÂN CÔNG</strong> vào lớp nào trong niên khóa hiện tại (<span id="spanDeactivateYear" class="fw-bold"></span>).
+                    Bạn có thể chọn các GLV đã nghỉ dạy/tạm ngưng để vô hiệu hóa tài khoản.
+                </div>
+
+                <div class="row g-3 mb-3 align-items-center">
+                    <div class="col-md-7">
+                        <label class="form-label small fw-bold">Lý do vô hiệu hóa</label>
+                        <input type="text" id="deactivateReason" class="form-control" value="Nghỉ dạy / Tạm ngưng sinh hoạt niên khóa mới" />
+                    </div>
+                    <div class="col-md-5 text-md-end mt-4">
+                        <span class="small text-muted me-2">Đã chọn: <strong id="selectedDeactivateCount" class="text-danger fs-6">0</strong> GLV</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="toggleSelectAllDeactivate(true)">Chọn Tất Cả</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" onclick="toggleSelectAllDeactivate(false)">Bỏ Chọn</button>
+                    </div>
+                </div>
+
+                <!-- Bảng danh sách GLV chưa phân công -->
+                <div class="table-responsive border rounded-3" style="max-height: 380px; overflow-y: auto;">
+                    <table class="table table-hover table-striped align-middle mb-0 small">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" class="form-check-input" id="chkSelectAllDeactivate" onchange="toggleSelectAllDeactivate(this.checked)" />
+                                </th>
+                                <th>Họ và Tên</th>
+                                <th>Tên Đăng Nhập</th>
+                                <th>Vai Trò / Khối Cũ</th>
+                                <th>Số Điện Thoại</th>
+                                <th>Đăng Nhập Gần Nhất</th>
+                            </tr>
+                        </thead>
+                        <tbody id="unassignedTeachersTbody">
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    <div class="spinner-border spinner-border-sm me-2"></div> Đang kiểm tra danh sách phân công lớp...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Hủy Bỏ</button>
+                <button type="button" class="btn btn-danger px-4 fw-bold" onclick="submitBatchDeactivate()">
+                    <i class="bi bi-person-x-fill me-1"></i> Xác Nhận Vô Hiệu Hóa
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         async function submitCreateUser() {
@@ -526,6 +593,120 @@
                 } else {
                     alert("Lỗi: " + data.message);
                 }
+            }
+        }
+
+                let unassignedTeachersList = [];
+
+        // Mở modal và nạp danh sách GLV chưa được xếp lớp
+        async function openBatchDeactivateModal() {
+            const modalEl = document.getElementById('batchDeactivateModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+
+            const tbody = document.getElementById('unassignedTeachersTbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div> Đang kiểm tra...</td></tr>';
+            document.getElementById('selectedDeactivateCount').innerText = '0';
+            document.getElementById('chkSelectAllDeactivate').checked = false;
+
+            try {
+                const res = await fetch('/Users/GetUnassignedTeachersForCurrentYear');
+                const json = await res.json();
+
+                if (json.success) {
+                    document.getElementById('spanDeactivateYear').innerText = json.academicYearName;
+                    unassignedTeachersList = json.data;
+                    renderUnassignedTeachersTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">${json.message}</td></tr>`;
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">Lỗi kết nối máy chủ: ${e.message}</td></tr>`;
+            }
+        }
+
+        // Render dữ liệu lên bảng
+        function renderUnassignedTeachersTable() {
+            const tbody = document.getElementById('unassignedTeachersTbody');
+            tbody.innerHTML = '';
+
+            if (!unassignedTeachersList || unassignedTeachersList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Tất cả các GLV đều đã được phân công lớp trong niên khóa này!</td></tr>';
+                return;
+            }
+
+            unassignedTeachersList.forEach(t => {
+                const tr = document.createElement('tr');
+                const lastLogin = t.lastLoginAt ? new Date(t.lastLoginAt).toLocaleDateString('vi-VN') : 'Chưa đăng nhập';
+                const gradeBadge = t.managedGradeLevel ? `<span class="badge bg-primary-subtle text-primary border ms-1">${t.managedGradeLevel}</span>` : '';
+
+                tr.innerHTML = `
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input chk-teacher-deactivate" value="${t.id}" onchange="updateSelectedDeactivateCount()" />
+                    </td>
+                    <td>
+                        <strong class="text-dark">${t.christianName} ${t.fullName}</strong>
+                    </td>
+                    <td><code>${t.username}</code></td>
+                    <td>
+                        <span class="badge bg-secondary">${t.role}</span>
+                        ${gradeBadge}
+                    </td>
+                    <td>${t.phoneNumber || '--'}</td>
+                    <td class="text-muted">${lastLogin}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Cập nhật số lượng checkbox đã chọn
+        function updateSelectedDeactivateCount() {
+            const checkboxes = document.querySelectorAll('.chk-teacher-deactivate:checked');
+            document.getElementById('selectedDeactivateCount').innerText = checkboxes.length;
+        }
+
+        // Chọn tất cả hoặc bỏ chọn
+        function toggleSelectAllDeactivate(checked) {
+            const checkboxes = document.querySelectorAll('.chk-teacher-deactivate');
+            checkboxes.forEach(cb => cb.checked = checked);
+            document.getElementById('chkSelectAllDeactivate').checked = checked;
+            updateSelectedDeactivateCount();
+        }
+
+        // Gửi yêu cầu vô hiệu hóa hàng loạt
+        async function submitBatchDeactivate() {
+            const selectedCheckboxes = document.querySelectorAll('.chk-teacher-deactivate:checked');
+            const ids = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+            const reason = document.getElementById('deactivateReason').value.trim();
+
+            if (ids.length === 0) {
+                alert("Vui lòng chọn ít nhất một Giáo lý viên để vô hiệu hóa!");
+                return;
+            }
+
+            if (!confirm(`Bạn có chắc chắn muốn vô hiệu hóa ${ids.length} tài khoản Giáo lý viên đã chọn? Họ sẽ không thể đăng nhập cho đến khi được kích hoạt lại.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/Users/BatchDeactivateTeachers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userIds: ids,
+                        reason: reason
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert("Lỗi: " + data.message);
+                }
+            } catch (err) {
+                alert("Lỗi kết nối máy chủ: " + err.message);
             }
         }
     </script>
