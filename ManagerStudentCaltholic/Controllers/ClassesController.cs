@@ -1,6 +1,7 @@
 ﻿using DocumentFormat.OpenXml.Office2016.Excel;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -94,29 +95,19 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="classRoom"></param>
         /// <returns></returns>
         [HttpPost]
-        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("Name,GradeLevel,RoomName,AcademicYearId")] ClassRoom classRoom)
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> Create(ClassRoom classRoom)
         {
-            // Nếu là Trưởng khối thì bắt buộc lớp tạo ra phải thuộc khối phụ trách
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.Equals(classRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    TempData["ErrorMessage"] = $"Bạn chỉ có quyền tạo lớp học thuộc khối {managedGrade}!";
-                    return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
-                }
-            }
+            // Bỏ kiểm tra validate các thuộc tính quan hệ (đối tượng điều hướng)
+            ModelState.Remove("AcademicYear");
+            ModelState.Remove("ClassTeachers");
+            ModelState.Remove("Enrollments");
+            ModelState.Remove("ClassRoomLocation");
 
-            // Kiểm tra trùng tên lớp trong cùng một niên khóa
-            var isDuplicate = await _context.Classes.AnyAsync(c =>
-                c.AcademicYearId == classRoom.AcademicYearId &&
-                c.Name.Trim().ToLower() == classRoom.Name.Trim().ToLower());
-
-            if (isDuplicate)
+            if (string.IsNullOrWhiteSpace(classRoom.Name))
             {
-                ModelState.AddModelError("Name", $"Lớp '{classRoom.Name}' đã tồn tại trong niên khóa này.");
+                ModelState.AddModelError("Name", "Tên lớp học không được để trống.");
             }
 
             if (!ModelState.IsValid)
@@ -125,25 +116,43 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
             }
 
-            try
+            // 1. Đồng bộ ClassRoomLocationId và RoomName
+            if (!string.IsNullOrWhiteSpace(classRoom.RoomName))
             {
-                _context.Classes.Add(classRoom);
+                var roomNameTrimmed = classRoom.RoomName.Trim();
+                var location = await _context.ClassRoomLocations
+                    .FirstOrDefaultAsync(r => r.RoomName.ToLower() == roomNameTrimmed.ToLower());
+
+                if (location != null)
+                {
+                    classRoom.ClassRoomLocationId = location.Id;
+                    classRoom.RoomName = location.RoomName;
+                }
+            }
+
+            _context.Classes.Add(classRoom);
+            await _context.SaveChangesAsync();
+
+            // 2. Tự động đồng bộ sang bảng ClassSchedules để sơ đồ mặt bằng hiển thị ngay
+            if (classRoom.ClassRoomLocationId.HasValue)
+            {
+                bool isMorning = classRoom.GradeLevel == "Khai Tâm" || classRoom.GradeLevel == "Rước Lễ";
+                var schedule = new ClassSchedule
+                {
+                    ClassRoomId = classRoom.Id,
+                    ClassRoomLocationId = classRoom.ClassRoomLocationId.Value,
+                    DayOfWeek = DayOfWeek.Sunday,
+                    StartTime = isMorning ? new TimeSpan(9, 0, 0) : new TimeSpan(15, 0, 0),
+                    EndTime = isMorning ? new TimeSpan(10, 30, 0) : new TimeSpan(16, 30, 0),
+                    Shift = isMorning ? "MORNING" : "AFTERNOON"
+                };
+                _context.ClassSchedules.Add(schedule);
                 await _context.SaveChangesAsync();
-
-                _logger.LogInformation("Tạo thành công lớp học: {Name} - Khối: {GradeLevel} - Niên khóa ID: {YearId}",
-                    classRoom.Name, classRoom.GradeLevel, classRoom.AcademicYearId);
-
-                TempData["SuccessMessage"] = $"Tạo lớp '{classRoom.Name}' thành công!";
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi xảy ra khi tạo lớp học {Name}", classRoom.Name);
-                TempData["ErrorMessage"] = "Có lỗi xảy ra khi lưu thông tin lớp học.";
             }
 
-            return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId, gradeLevel = classRoom.GradeLevel });
+            TempData["SuccessMessage"] = $"Tạo lớp '{classRoom.Name}' thành công!";
+            return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
         }
-
         /// <summary>
         /// 3. POST: /Classes/Delete/{id} (Xóa lớp học)
         /// </summary>
@@ -217,13 +226,6 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         /// <param name="model"></param>
         /// <returns></returns>
-        public class AssignTeacherRequestDto
-        {
-            public int ClassRoomId { get; set; }
-            public long UserId { get; set; }
-            public string RoleInClass { get; set; } = "HEAD";
-        }
-
         [HttpPost]
         [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
@@ -543,12 +545,66 @@ namespace ManagerStudentCaltholic.Controllers
             }
         }
 
+        /// <summary>
+        /// API lấy danh sách các phòng học còn trống theo ca học của khối trong niên khóa
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableRooms(int academicYearId, string gradeLevel)
+        {
+            try
+            {
+                // 1. Xác định ca của khối được chọn:
+                // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
+                // Khối Chiều: Bao Đồng
+                bool isMorning = gradeLevel == "Khai Tâm" || gradeLevel == "Rước Lễ" || gradeLevel == "Thêm Sức";
+
+                // 2. Lấy toàn bộ phòng học (bỏ qua phòng HĐGX và Nhà Sinh Hoạt Chung)
+                var allRooms = await _context.ClassRoomLocations
+                    .Include(r => r.BuildingZone)
+                    .Where(r => r.IsAvailable &&
+                                !r.RoomName.Contains("HĐGX") &&
+                                !r.RoomName.Contains("Sinh Hoạt Chung"))
+                    .OrderBy(r => r.BuildingZone.DisplayOrder)
+                    .ThenBy(r => r.FloorNumber)
+                    .ThenBy(r => r.RoomName)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                // 3. Tìm các phòng đã được lớp khác sử dụng cùng ca trong niên khóa này
+                var occupiedRoomIds = await _context.Classes
+                    .Where(c => c.AcademicYearId == academicYearId && c.ClassRoomLocationId.HasValue)
+                    .Where(c => isMorning
+                        ? (c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức")
+                        : (c.GradeLevel == "Bao Đồng"))
+                    .Select(c => c.ClassRoomLocationId!.Value)
+                    .Distinct()
+                    .ToListAsync();
+
+                // 4. Lọc ra các phòng còn trống cho ca này
+                var availableRooms = allRooms
+                    .Where(r => !occupiedRoomIds.Contains(r.Id))
+                    .Select(r => new
+                    {
+                        r.Id,
+                        r.RoomName,
+                        ZoneName = r.BuildingZone?.ZoneName ?? "Khu vực khác",
+                        r.FloorNumber,
+                        r.Capacity
+                    })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    shiftName = isMorning ? "Ca Sáng (09:00)" : "Ca Chiều (15:00)",
+                    data = availableRooms
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Lỗi khi lấy danh sách phòng: " + ex.Message });
+            }
+        }
     }
 
-    public class AssignTeacherRequestDto
-    {
-        public int ClassRoomId { get; set; }
-        public long UserId { get; set; }
-        public string RoleInClass { get; set; } = "HEAD";
-    }
 }

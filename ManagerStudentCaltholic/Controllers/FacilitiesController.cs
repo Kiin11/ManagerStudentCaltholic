@@ -75,8 +75,8 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 var assigned = allClasses.Where(c => c.ClassRoomLocationId == r.Id).ToList();
 
-                var morningClass = assigned.FirstOrDefault(c => c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ");
-                var afternoonClass = assigned.FirstOrDefault(c => c.GradeLevel == "Thêm Sức" || c.GradeLevel == "Bao Đồng");
+                var morningClass = assigned.FirstOrDefault(c => c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức");
+                var afternoonClass = assigned.FirstOrDefault(c => c.GradeLevel == "Bao Đồng");
 
                 int morningPresent = morningClass != null && presentCountsByClass.ContainsKey(morningClass.Id)
                     ? presentCountsByClass[morningClass.Id] : 0;
@@ -304,7 +304,7 @@ namespace ManagerStudentCaltholic.Controllers
                 // 1. Xác định Ca học của lớp mục tiêu:
                 // Khối Sáng: Khai Tâm, Rước Lễ
                 // Khối Chiều: Thêm Sức, Bao Đồng
-                bool isMorning = targetClass.GradeLevel == "Khai Tâm" || targetClass.GradeLevel == "Rước Lễ";
+                bool isMorning = targetClass.GradeLevel == "Khai Tâm" || targetClass.GradeLevel == "Rước Lễ" || targetClass.GradeLevel == "Thêm Sức";
                 string targetShift = isMorning ? "MORNING" : "AFTERNOON";
                 string targetShiftName = isMorning ? "Ca Sáng (09:00)" : "Ca Chiều (15:00)";
 
@@ -318,7 +318,7 @@ namespace ManagerStudentCaltholic.Controllers
                 // 3. Kiểm tra xung đột ca:
                 foreach (var c in existingClassesInRoom)
                 {
-                    bool otherIsMorning = c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ";
+                    bool otherIsMorning = c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức";
                     string otherShift = otherIsMorning ? "MORNING" : "AFTERNOON";
 
                     if (otherShift == targetShift)

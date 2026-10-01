@@ -339,4 +339,165 @@
             </div>
         </div>
     </div>
+</div><!-- MODAL PHÂN PHÒNG HỌC CHO LỚP -->
+<div class="modal fade" id="assignRoomModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold">
+                    <i class="bi bi-door-open-fill me-2"></i>Phân Phòng Học Cho Lớp
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Phòng Học Được Chọn <span class="text-danger">*</span></label>
+                    <select id="modalAssignLocationId" class="form-select">
+                        <option value="">-- Chọn phòng học --</option>
+                        @foreach (var z in Model)
+                        {
+                            <optgroup label="@z.ZoneName (@z.ZoneCode)">
+                                @foreach (var r in z.Rooms.Where(r => !r.RoomName.Contains("HĐGX") && !r.RoomName.Contains("Sinh Hoạt Chung")))
+                                {
+                                    <option value="@r.Id" data-capacity="@r.Capacity">
+                                        @r.RoomName (Tầng @r.FloorNumber) - Sức chứa: @r.Capacity chỗ
+                                    </option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn Lớp Học <span class="text-danger">*</span></label>
+                    <select id="modalAssignClassId" class="form-select" onchange="onClassSelectChange()">
+                        <option value="">-- Chọn lớp cần xếp phòng --</option>
+                        @foreach (var c in (ViewBag.AllClasses as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new()))
+                        {
+                            bool isMorning = c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức";
+                            var shiftLabel = isMorning ? "Ca Sáng (09:00)" : "Ca Chiều (15:00)";
+                            <option value="@c.Id" data-shift="@(isMorning ? "MORNING" : "AFTERNOON")" data-enrolled="@c.Enrollments.Count">
+                                @c.Name (@c.GradeLevel) - @shiftLabel - Sĩ số: @c.Enrollments.Count em
+                            </option>
+                        }
+                    </select>
+                    <div id="classShiftNotice" class="form-text small text-primary fw-semibold mt-1"></div>
+                </div>
+
+                <div class="alert alert-info py-2 px-3 small border-0 mb-3">
+                    <i class="bi bi-info-circle me-1"></i> Một phòng có thể xếp cho <strong>1 lớp Sáng</strong> và <strong>1 lớp Chiều</strong>. Hệ thống sẽ tự động chặn nếu xếp 2 lớp cùng ca vào 1 phòng.
+                </div>
+
+                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitAssignRoom()">
+                    Xác Nhận Phân Phòng
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script>
+        // Hàm mở modal khi người dùng bấm vào ô "Sáng: Trống" hoặc "Chiều: Trống"
+        function openAssignModalForRoom(roomId, preferredShift) {
+            // 1. Chọn đúng phòng trên dropdown modal
+            const locSelect = document.getElementById('modalAssignLocationId');
+            if (locSelect) locSelect.value = roomId;
+
+            // 2. Lọc gợi ý lớp học phù hợp với ca được nhấp
+            const classSelect = document.getElementById('modalAssignClassId');
+            if (classSelect) {
+                let firstMatchFound = false;
+                for (let i = 0; i < classSelect.options.length; i++) {
+                    const opt = classSelect.options[i];
+                    if (opt.value === "") continue;
+
+                    const shift = opt.getAttribute('data-shift');
+                    if (shift === preferredShift) {
+                        opt.style.display = ""; // Hiển thị các lớp cùng ca
+                        if (!firstMatchFound) {
+                            classSelect.selectedIndex = i;
+                            firstMatchFound = true;
+                        }
+                    } else {
+                        opt.style.display = "none"; // Ẩn các lớp khác ca để tránh nhầm
+                    }
+                }
+                if (!firstMatchFound) {
+                    classSelect.value = "";
+                }
+                onClassSelectChange();
+            }
+
+            // 3. Mở Modal
+            const modalEl = document.getElementById('assignRoomModal');
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        function onClassSelectChange() {
+            const classSelect = document.getElementById('modalAssignClassId');
+            const selectedOpt = classSelect.options[classSelect.selectedIndex];
+            const notice = document.getElementById('classShiftNotice');
+            if (selectedOpt && selectedOpt.value) {
+                const shift = selectedOpt.getAttribute('data-shift');
+                const isMorning = shift === 'MORNING';
+                notice.innerHTML = `<i class="bi bi-clock me-1"></i>Lớp thuộc <strong>${isMorning ? 'Khối Sáng (09:00 - 10:30)' : 'Khối Chiều (15:00 - 16:30)'}</strong>.`;
+            } else {
+                notice.innerHTML = '';
+            }
+        }
+
+        async function submitAssignRoom() {
+            const classId = document.getElementById('modalAssignClassId').value;
+            const locationId = document.getElementById('modalAssignLocationId').value;
+
+            if (!classId || !locationId) {
+                alert('Vui lòng chọn đầy đủ Lớp học và Phòng học!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('classId', classId);
+            formData.append('locationId', locationId);
+
+            try {
+                const res = await fetch('/Facilities/AssignRoomToClass', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        async function unassignRoom(classId) {
+            if (!confirm('Xác nhận hủy gán phòng cho lớp này?')) return;
+
+            const formData = new FormData();
+            formData.append('classId', classId);
+
+            try {
+                const res = await fetch('/Facilities/UnassignRoom', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+    </script>
+}
