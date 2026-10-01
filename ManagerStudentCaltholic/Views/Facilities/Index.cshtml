@@ -164,7 +164,7 @@
                     </div>
                     @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 1).OrderBy(r => r.RoomName))
                     {
-                        <div class="col-6 col-md-3">
+                        <div class="col-6 col-md-2">
                             <div class="room-box" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
                                 <div class="fw-bold text-dark">@r.RoomName</div>
                                 <div class="small text-muted"><i class="bi bi-people me-1"></i>@r.Capacity chỗ</div>
@@ -180,7 +180,7 @@
                     <div class="col-6 col-md-2">
                         <div class="room-box staircase text-center">Cầu Thang</div>
                     </div>
-                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 0).OrderBy(r => r.RoomName))
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 0).OrderByDescending(r => r.RoomName))
                     {
                         var isHall = r.RoomName.Contains("Sinh Hoạt");
                         <div class="@(isHall ? "col-12 col-md-6" : "col-6 col-md-3")">
