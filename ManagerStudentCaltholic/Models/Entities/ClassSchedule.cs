@@ -25,5 +25,8 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [MaxLength(255)]
         public string? Notes { get; set; }
+
+        [MaxLength(20)]
+        public string Shift { get; set; } = string.Empty; // Ca học: Sáng, Chiều, Tối
     }
 }
