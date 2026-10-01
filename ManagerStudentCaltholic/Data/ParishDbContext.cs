@@ -87,9 +87,11 @@ namespace ManagerStudentCaltholic.Data
                 entity.ToTable("ClassTeachers");
                 entity.HasKey(ct => ct.Id);
 
-                // Ràng buộc duy nhất: Một GLV chỉ nhận 1 vai trò phân công trong 1 lớp của 1 niên khóa
-                entity.HasIndex(ct => new { ct.ClassRoomId, ct.TeacherName, ct.AcademicYearId })
-                      .IsUnique();
+                // Chỉ định rõ ràng: ClassTeacher liên kết tới User qua khóa ngoại UserId
+                entity.HasOne(ct => ct.User)
+                      .WithMany()
+                      .HasForeignKey(ct => ct.UserId)
+                      .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasOne(ct => ct.ClassRoom)
                       .WithMany(c => c.ClassTeachers)

@@ -242,57 +242,51 @@
 <!-- ============================================================== -->
 <div class="modal fade" id="assignTeacherModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light">
-                <h5 class="modal-title fw-bold text-primary">
-                    <i class="bi bi-people-fill me-1"></i> Phân Công GLV - <span id="modalClassName" class="text-dark"></span>
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold">
+                    <i class="bi bi-person-plus me-2"></i>Phân Công GLV: <span id="modalClassName"></span>
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
-                <!-- Form thêm GLV -->
-                <form id="assignTeacherForm" class="mb-4 p-3 bg-light rounded-3 border">
-                    <input type="hidden" id="assignClassRoomId" />
-                    <div class="mb-2">
-                        <label class="form-label small fw-bold">Họ tên Giáo lý viên <span class="text-danger">*</span></label>
-                        <input type="text" id="teacherNameInput" class="form-control form-control-sm" placeholder="Ví dụ: Giuse Nguyễn Văn A" required />
-                    </div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-6">
-                            <label class="form-label small fw-bold">Số điện thoại</label>
-                            <input type="text" id="teacherPhoneInput" class="form-control form-control-sm" placeholder="090..." />
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label small fw-bold">Vai trò phụ trách</label>
-                            <select id="teacherRoleSelect" class="form-select form-select-sm">
-                                <option value="HEAD">Chủ nhiệm (HEAD)</option>
-                                <option value="MEMBER">Đồng hành (MEMBER)</option>
-                                <option value="DEPUTY">Dự bị / Trợ tá</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button type="button" class="btn btn-primary btn-sm w-100" onclick="submitAssignTeacher()">
-                        <i class="bi bi-plus-circle me-1"></i> Gán GLV Vào Lớp
-                    </button>
-                </form>
+                <input type="hidden" id="assignClassId" />
 
-                <!-- Bảng danh sách GLV hiện tại -->
-                <h6 class="fw-bold mb-2 text-secondary">Danh Sách GLV Phụ Trách:</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Họ Tên</th>
-                                <th>Vai Trò</th>
-                                <th>SĐT</th>
-                                <th class="text-center" style="width: 50px;">Xóa</th>
-                            </tr>
-                        </thead>
-                        <tbody id="teacherListBody">
-                            <!-- Render bằng JS -->
-                        </tbody>
-                    </table>
+                <!-- Danh sách GLV hiện tại của lớp -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-muted text-uppercase">Danh sách GLV đang phụ trách</label>
+                    <div id="currentTeachersList" class="list-group list-group-flush border rounded-3 mb-2" style="max-height: 180px; overflow-y: auto;">
+                        <!-- Render danh sách qua Ajax -->
+                    </div>
                 </div>
+
+                <hr class="my-3">
+
+                <!-- Form gán GLV mới -->
+                <div class="fw-bold small text-dark mb-2">Thêm GLV Phụ Trách Mới</div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Chọn tài khoản GLV <span class="text-danger">*</span></label>
+                    <!-- THAY INPUT BẰNG SELECT USER -->
+                    <select id="selectTeacherAccount" class="form-select">
+                        <option value="">-- Đang nạp danh sách tài khoản... --</option>
+                    </select>
+                    <div class="form-text small text-muted">
+                        <i class="bi bi-info-circle me-1 text-primary"></i>Quy định: Mỗi GLV chỉ được dạy <strong>tối đa 2 lớp</strong> (1 lớp Khối Sáng: Khai Tâm/Rước Lễ/Thêm Sức và 1 lớp Khối Chiều: Bao Đồng).
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Vai trò phụ trách</label>
+                    <select id="teacherRoleSelect" class="form-select">
+                        <option value="HEAD">Chủ Nhiệm Lớp</option>
+                        <option value="MEMBER">Giáo Lý Viên</option>
+                        <option value="DEPUTY">Dự Bị </option>
+                    </select>
+                </div>
+
+                <button type="button" class="btn btn-primary w-100 fw-bold rounded-pill py-2 shadow-sm" onclick="submitAssignTeacher()">
+                    <i class="bi bi-check2-circle me-1"></i> Xác Nhận Phân Công
+                </button>
             </div>
         </div>
     </div>
@@ -301,96 +295,150 @@
 @section Scripts {
     <script>
         let currentClassId = 0;
+        let cachedAvailableTeachers = null;
 
-        function openAssignModal(classId, className) {
-            currentClassId = classId;
+        // Hàm mở Modal phân công lớp
+        async function openAssignModal(classId, className) {
+            document.getElementById('assignClassId').value = classId;
             document.getElementById('modalClassName').innerText = className;
-            document.getElementById('assignClassRoomId').value = classId;
-            document.getElementById('teacherNameInput').value = '';
-            document.getElementById('teacherPhoneInput').value = '';
-            loadTeachers(classId);
-            new bootstrap.Modal(document.getElementById('assignTeacherModal')).show();
+
+            const modalEl = document.getElementById('assignTeacherModal');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+
+            // 1. Tải danh sách GLV đang có trong lớp
+            await loadClassTeachers(classId);
+
+            // 2. Điền danh sách tài khoản vào Dropdown
+            const selectEl = document.getElementById('selectTeacherAccount');
+            selectEl.innerHTML = '<option value="">-- Chọn tài khoản Giáo lý viên --</option>';
+
+            const teachers = await loadAvailableTeachers();
+            teachers.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                const phone = t.phoneNumber ? ` - SĐT: ${t.phoneNumber}` : '';
+                const role = t.role === 'BranchHead' ? ' [Trưởng khối]' : '';
+                opt.text = `${t.fullName} (${t.username})${role}${phone}`;
+                selectEl.appendChild(opt);
+            });
+        }
+        
+        // Nạp danh sách Users khả dụng từ Server
+        async function loadAvailableTeachers() {
+            if (cachedAvailableTeachers) return cachedAvailableTeachers;
+            try {
+                const res = await fetch('/Classes/GetAvailableTeachers');
+                const json = await res.json();
+                if (json.success) {
+                    cachedAvailableTeachers = json.data;
+                    return cachedAvailableTeachers;
+                }
+            } catch (e) {
+                console.error("Lỗi khi tải danh sách GLV:", e);
+            }
+            return [];
         }
 
-        async function loadTeachers(classId) {
-            const res = await fetch(`/Classes/GetTeachers?classId=${classId}`);
-            const result = await res.json();
-            const tbody = document.getElementById('teacherListBody');
-            tbody.innerHTML = '';
+        // Nạp danh sách GLV của lớp vào khung danh sách
+        async function loadClassTeachers(classId) {
+            const listContainer = document.getElementById('currentTeachersList');
+            listContainer.innerHTML = '<div class="p-3 text-center small text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</div>';
 
-            if (result.success && result.data.length > 0) {
-                result.data.forEach(t => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td class="fw-semibold">${t.teacherName}</td>
-                        <td><span class="badge ${t.roleInClass === 'HEAD' ? 'bg-primary' : 'bg-secondary'}">${t.roleName}</span></td>
-                        <td>${t.phoneNumber || ''}</td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeTeacher(${t.id})">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
+            try {
+                const res = await fetch(`/Classes/GetTeachers?classId=${classId}`);
+                const json = await res.json();
+                listContainer.innerHTML = '';
+
+                if (!json.success || json.data.length === 0) {
+                    listContainer.innerHTML = '<div class="p-3 text-center small text-muted fst-italic">Lớp này chưa có GLV nào phụ trách.</div>';
+                    return;
+                }
+
+                json.data.forEach(t => {
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item d-flex justify-content-between align-items-center py-2 px-3';
+                    item.innerHTML = `
+                        <div>
+                            <span class="badge ${t.roleInClass === 'HEAD' ? 'bg-primary' : 'bg-secondary'} me-1">${t.roleName}</span>
+                            <strong class="text-dark small">${t.teacherName}</strong>
+                            ${t.phoneNumber ? `<small class="text-muted ms-2"><i class="bi bi-telephone"></i> ${t.phoneNumber}</small>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-outline-danger btn-sm border-0 py-0 px-2" onclick="removeTeacher(${t.id}, ${classId})" title="Hủy phân công">
+                            <i class="bi bi-trash"></i>
+                        </button>
                     `;
-                    tbody.appendChild(tr);
+                    listContainer.appendChild(item);
                 });
-            } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted small py-2">Chưa có GLV nào được phân công.</td></tr>';
+            } catch (e) {
+                listContainer.innerHTML = '<div class="p-2 text-danger small">Lỗi tải danh sách GLV.</div>';
             }
         }
 
+        // Gửi API gán GLV
         async function submitAssignTeacher() {
-            const name = document.getElementById('teacherNameInput').value.trim();
-            const phone = document.getElementById('teacherPhoneInput').value.trim();
-            const role = document.getElementById('teacherRoleSelect').value;
+            const classId = document.getElementById('assignClassId').value;
+            const userId = document.getElementById('selectTeacherAccount').value;
+            const roleInClass = document.getElementById('teacherRoleSelect')?.value || "MEMBER";
 
-            if (!name) {
-                alert('Vui lòng nhập họ tên Giáo lý viên.');
+            if (!userId) {
+                alert("Vui lòng chọn một tài khoản Giáo lý viên!");
                 return;
             }
 
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            try {
+                const res = await fetch('/Classes/AssignTeacher', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        classRoomId: parseInt(classId),
+                        userId: parseInt(userId),
+                        roleInClass: roleInClass
+                    })
+                });
 
-            const res = await fetch('/Classes/AssignTeacher', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': token
-                },
-                body: JSON.stringify({
-                    classRoomId: currentClassId,
-                    teacherName: name,
-                    phoneNumber: phone,
-                    roleInClass: role
-                })
-            });
+                const rawText = await res.text();
+                let json;
+                try {
+                    json = JSON.parse(rawText);
+                } catch (e) {
+                    console.error("Server HTML response:", rawText);
+                    alert(`Lỗi máy chủ (HTTP ${res.status}): Không thể xử lý phản hồi. Xem chi tiết tại tab Console F12.`);
+                    return;
+                }
 
-            const result = await res.json();
-            if (result.success) {
-                document.getElementById('teacherNameInput').value = '';
-                document.getElementById('teacherPhoneInput').value = '';
-                loadTeachers(currentClassId);
-            } else {
-                alert(result.message);
+                if (json.success) {
+                    alert(json.message);
+                    await loadClassTeachers(classId); // Cập nhật lại danh sách trong modal
+                    location.reload(); // Làm mới trang để cập nhật tên lên thẻ card
+                } else {
+                    alert("Lỗi: " + json.message);
+                }
+            } catch (e) {
+                alert("Lỗi kết nối khi phân công: " + e.message);
             }
         }
 
-        async function removeTeacher(id) {
-            if (!confirm('Bạn có chắc muốn hủy phân công GLV này?')) return;
+        // Hủy phân công GLV
+        async function removeTeacher(teacherAssignmentId, classId) {
+            if (!confirm("Bạn có chắc chắn muốn hủy phân công GLV này khỏi lớp?")) return;
 
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-
-            const res = await fetch(`/Classes/RemoveTeacher/${id}`, {
-                method: 'POST',
-                headers: {
-                    'RequestVerificationToken': token
+            try {
+                const res = await fetch(`/Classes/RemoveTeacher?id=${teacherAssignmentId}`, {
+                    method: 'POST'
+                });
+                const json = await res.json();
+                if (json.success) {
+                    await loadClassTeachers(classId);
+                    location.reload();
+                } else {
+                    alert("Không thể xóa: " + json.message);
                 }
-            });
-
-            const result = await res.json();
-            if (result.success) {
-                loadTeachers(currentClassId);
-            } else {
-                alert(result.message);
+            } catch (e) {
+                alert("Lỗi kết nối máy chủ: " + e.message);
             }
         }
     </script>
