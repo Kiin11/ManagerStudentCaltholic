@@ -376,8 +376,8 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpPost]
-        [Authorize(Policy = "RequireExecutiveBoard")]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> RemoveTeacher(long id)
         {
             var item = await _context.ClassTeachers.FindAsync(id);
