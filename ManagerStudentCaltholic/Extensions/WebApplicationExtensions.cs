@@ -2,6 +2,8 @@
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Extensions
@@ -70,5 +72,6 @@ namespace ManagerStudentCaltholic.Extensions
 
             return app;
         }
+
     }
 }
