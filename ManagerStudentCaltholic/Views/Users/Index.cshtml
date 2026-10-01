@@ -31,8 +31,11 @@
                         <button type="submit" class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
                     </form>
                 </div>
-                <div class="col-md-3 text-md-end">
-                    <button type="button" class="btn btn-primary px-3 shadow-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#createUserModal">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#batchCreateModal">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Tạo Hàng Loạt GLV Mới
+                    </button>
+                    <button type="button" class="btn btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
                         <i class="bi bi-person-plus-fill me-1"></i> Tạo Tài Khoản Mới
                     </button>
                 </div>
@@ -215,6 +218,89 @@
     </div>
 </div>
 
+<!-- MODAL TẠO HÀNG LOẠT GLV (TASK-814) -->
+<div class="modal fade" id="batchCreateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold fs-6">
+                    <i class="bi bi-person-plus-fill me-2"></i>Tạo Hàng Loạt GLV Mới (Sau Lễ Tuyên Hứa)
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active fw-bold small" id="pills-excel-tab" data-bs-toggle="pill" data-bs-target="#tabExcel">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Nạp Từ File Excel
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link fw-bold small" id="pills-text-tab" data-bs-toggle="pill" data-bs-target="#tabManual">
+                            <i class="bi bi-card-text me-1"></i> Nhập Nhanh Danh Sách (Text)
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Mật khẩu khởi tạo chung cho đợt này</label>
+                    <input type="text" id="batchDefaultPassword" class="form-control" value="GLV@2026!" />
+                    <div class="form-text small text-muted">GLV sẽ dùng mật khẩu này để đăng nhập lần đầu và tự đổi trong Hồ sơ cá nhân.</div>
+                </div>
+
+                <div class="tab-content border rounded-3 p-3 bg-light-subtle">
+                    <!-- TAB 1: NẠP TỪ FILE EXCEL -->
+                    <div class="tab-pane fade show active" id="tabExcel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="small text-muted">Tải file mẫu để điền danh sách GLV tuyên hứa:</span>
+                            <a href="/Users/DownloadTeacherTemplate" class="btn btn-outline-primary btn-sm rounded-pill">
+                                <i class="bi bi-download me-1"></i> Tải File Mẫu (.xlsx)
+                            </a>
+                        </div>
+                        <div class="mb-3">
+                            <input type="file" id="batchTeacherExcelFile" class="form-control" accept=".xlsx, .xls" />
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: NHẬP NHANH BẰNG TEXT -->
+                    <div class="tab-pane fade" id="tabManual">
+                        <div class="small text-muted mb-2">
+                            Nhập mỗi GLV một dòng theo định dạng: <code>Tên Thánh | Họ và Tên đệm | Tên | SĐT | Khối</code>
+                        </div>
+                        <textarea id="batchTeacherRawText" class="form-control font-monospace small" rows="6"
+                                  placeholder="Phaolô | Nguyễn Văn | An | 0901234567 | Khai Tâm&#10;Maria | Trần Thị | Bình | 0987654321 | Rước Lễ"></textarea>
+                    </div>
+                </div>
+
+                <!-- Bảng kết quả hiển thị danh sách Username tự sinh -->
+                <div id="batchResultArea" class="d-none mt-3">
+                    <div class="alert alert-success border-0 small mb-2 fw-semibold" id="batchResultMsg"></div>
+                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered table-striped small mb-0 font-monospace">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Họ và Tên</th>
+                                    <th>SĐT</th>
+                                    <th>Mật Khẩu</th>
+                                    <th>Khối</th>
+                                </tr>
+                            </thead>
+                            <tbody id="batchResultTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-success px-4 fw-bold" onclick="submitBatchCreateTeachers()">
+                    <i class="bi bi-check2-circle me-1"></i> Bắt Đầu Khởi Tạo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         async function submitCreateUser() {
@@ -334,6 +420,112 @@
                 divGrade.classList.remove("d-none");
             } else {
                 divGrade.classList.add("d-none");
+            }
+        }
+
+                async function submitBatchCreateTeachers() {
+            const isExcelTab = document.getElementById('pills-excel-tab').classList.contains('active');
+            const defaultPassword = document.getElementById('batchDefaultPassword').value.trim() || 'GLV@2026!';
+            const resultArea = document.getElementById('batchResultArea');
+            const resultMsg = document.getElementById('batchResultMsg');
+            const tbody = document.getElementById('batchResultTableBody');
+
+            resultArea.classList.add('d-none');
+            tbody.innerHTML = '';
+
+            if (isExcelTab) {
+                // Nạp qua File Excel
+                const fileInput = document.getElementById('batchTeacherExcelFile');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    alert("Vui lòng chọn file Excel để nạp!");
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append("file", fileInput.files[0]);
+                formData.append("defaultPassword", defaultPassword);
+
+                try {
+                    const res = await fetch('/Users/ImportTeachersFromExcel', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    handleBatchResponse(data);
+                } catch (err) {
+                    alert("Lỗi khi tải file lên: " + err.message);
+                }
+            } else {
+                // Nạp qua Textarea
+                const rawText = document.getElementById('batchTeacherRawText').value.trim();
+                if (!rawText) {
+                    alert("Vui lòng nhập ít nhất một dòng thông tin GLV!");
+                    return;
+                }
+
+                const lines = rawText.split('\n');
+                const teachers = [];
+
+                lines.forEach(l => {
+                    const parts = l.split('|').map(p => p.trim());
+                    if (parts.length >= 3) {
+                        teachers.push({
+                            christianName: parts[0] || '',
+                            firstName: parts[1] || '',
+                            lastName: parts[2] || '',
+                            phoneNumber: parts[3] || '',
+                            managedGradeLevel: parts[4] || null
+                        });
+                    }
+                });
+
+                if (teachers.length === 0) {
+                    alert("Định dạng dữ liệu không đúng. Mỗi dòng cần có ít nhất: Tên Thánh | Họ và Đệm | Tên");
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/Users/BatchCreateTeachers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            defaultPassword: defaultPassword,
+                            teachers: teachers
+                        })
+                    });
+                    const data = await res.json();
+                    handleBatchResponse(data);
+                } catch (err) {
+                    alert("Lỗi kết nối khi nạp danh sách: " + err.message);
+                }
+            }
+
+            function handleBatchResponse(data) {
+                if (data.success) {
+                    resultMsg.className = "alert alert-success border-0 small mb-2 fw-semibold";
+                    resultMsg.innerText = data.message;
+                    tbody.innerHTML = '';
+
+                    data.createdTeachers.forEach(t => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="fw-bold text-primary">${t.username}</td>
+                            <td>${t.christianName} ${t.fullName}</td>
+                            <td>${t.phoneNumber || '--'}</td>
+                            <td><code>${t.initialPassword}</code></td>
+                            <td><span class="badge bg-light text-dark border">${t.managedGradeLevel || 'Chưa gán'}</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+
+                    resultArea.classList.remove('d-none');
+                    setTimeout(() => {
+                        // Tự động tải lại trang sau 3 giây để đồng bộ danh sách bên ngoài
+                        location.reload();
+                    }, 3500);
+                } else {
+                    alert("Lỗi: " + data.message);
+                }
             }
         }
     </script>
