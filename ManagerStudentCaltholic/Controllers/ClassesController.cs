@@ -422,30 +422,127 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         /// <returns></returns>
         [HttpGet]
-        public async Task<IActionResult> GetAvailableTeachers()
+        // GET: /Classes/GetAvailableTeachers?classRoomId=...
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableTeachers(int? classRoomId)
         {
-            var teachers = await _context.Users
-                .Where(u => u.IsActive &&
-                            u.Role != UserRole.Admin &&
-                            u.Role != UserRole.SpiritualDirector)
-                .OrderBy(u => u.FirstName)
-                .Select(u => new {
-                    u.Id,
-                    u.Username,
-                    FullName = $"{u.ChristianName} {u.FirstName} {u.LastName}".Trim(),
-                    u.PhoneNumber,
-                    u.Role
-                })
-                .ToListAsync();
+            try
+            {
+                // 1. Xác định niên khóa hiện tại
+                var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+                var yearId = currentYear?.Id ?? 0;
 
-            return Json(new { success = true, data = teachers });
+                // 2. Xác định ca của lớp đang được chọn phân công (nếu có truyền classRoomId)
+                bool isTargetMorning = false;
+                bool isTargetAfternoon = false;
+
+                if (classRoomId.HasValue && classRoomId.Value > 0)
+                {
+                    var targetClass = await _context.Classes.FindAsync(classRoomId.Value);
+                    if (targetClass != null)
+                    {
+                        yearId = targetClass.AcademicYearId;
+                        // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
+                        // Khối Chiều: Bao Đồng
+                        isTargetMorning = targetClass.GradeLevel != "Bao Đồng";
+                        isTargetAfternoon = targetClass.GradeLevel == "Bao Đồng";
+                    }
+                }
+
+                // 3. Lấy toàn bộ tài khoản Users hợp lệ (loại trừ Admin & Cha Tuyên Úy)
+                var users = await _context.Users
+                    .Where(u => u.IsActive &&
+                                u.Role != UserRole.Admin &&
+                                u.Role != UserRole.SpiritualDirector)
+                    .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
+                    .Select(u => new
+                    {
+                        u.Id,
+                        u.Username,
+                        FullName = $"{u.ChristianName} {u.FirstName} {u.LastName}".Trim(),
+                        u.PhoneNumber,
+                        u.Role,
+                        u.ManagedGradeLevel
+                    })
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                // 4. Lấy tất cả phân công của các GLV trong niên khóa này để kiểm tra định mức
+                var currentAssignments = await _context.ClassTeachers
+                    .Include(ct => ct.ClassRoom)
+                    .Where(ct => ct.AcademicYearId == yearId && ct.UserId.HasValue)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                // Nhóm phân công theo UserId
+                var assignmentsByUser = currentAssignments
+                    .GroupBy(ct => ct.UserId!.Value)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                var availableTeachers = new List<object>();
+
+                foreach (var u in users)
+                {
+                    assignmentsByUser.TryGetValue(u.Id, out var userClasses);
+                    userClasses ??= new List<ClassTeacher>();
+
+                    // Nếu đã đủ 2 lớp -> Ẩn hoàn toàn khỏi danh sách
+                    if (userClasses.Count >= 2)
+                    {
+                        continue;
+                    }
+
+                    // Nếu đang mở lớp KHỐI SÁNG: Ẩn những GLV đã dạy 1 lớp Khối Sáng (Khai Tâm, Rước Lễ, Thêm Sức)
+                    if (isTargetMorning)
+                    {
+                        bool hasMorning = userClasses.Any(c => c.ClassRoom.GradeLevel != "Bao Đồng");
+                        if (hasMorning)
+                        {
+                            continue; // Ẩn đi
+                        }
+                    }
+
+                    // Nếu đang mở lớp KHỐI CHIỀU: Ẩn những GLV đã dạy 1 lớp Khối Chiều (Bao Đồng)
+                    if (isTargetAfternoon)
+                    {
+                        bool hasAfternoon = userClasses.Any(c => c.ClassRoom.GradeLevel == "Bao Đồng");
+                        if (hasAfternoon)
+                        {
+                            continue; // Ẩn đi
+                        }
+                    }
+
+                    // Ghi chú trạng thái hiện tại để hiển thị trên UI
+                    string statusNote = "";
+                    if (userClasses.Count == 1)
+                    {
+                        var existingClass = userClasses.First();
+                        statusNote = existingClass.ClassRoom.GradeLevel == "Bao Đồng"
+                            ? " (Đã dạy Chiều: " + existingClass.ClassRoom.Name + ")"
+                            : " (Đã dạy Sáng: " + existingClass.ClassRoom.Name + ")";
+                    }
+
+                    availableTeachers.Add(new
+                    {
+                        u.Id,
+                        u.Username,
+                        u.FullName,
+                        u.PhoneNumber,
+                        u.Role,
+                        u.ManagedGradeLevel,
+                        AssignedCount = userClasses.Count,
+                        StatusNote = statusNote
+                    });
+                }
+
+                return Json(new { success = true, data = availableTeachers });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Lỗi khi lấy danh sách GLV: " + ex.Message });
+            }
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
     }
 
     public class AssignTeacherRequestDto

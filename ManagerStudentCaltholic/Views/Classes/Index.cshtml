@@ -297,7 +297,21 @@
         let currentClassId = 0;
         let cachedAvailableTeachers = null;
 
-        // Hàm mở Modal phân công lớp
+        // Gọi API lấy danh sách GLV khả dụng theo từng lớp cụ thể
+        async function loadAvailableTeachersForClass(classId) {
+            try {
+                const res = await fetch(`/Classes/GetAvailableTeachers?classRoomId=${classId}`);
+                const json = await res.json();
+                if (json.success) {
+                    return json.data;
+                }
+            } catch (e) {
+                console.error("Lỗi khi tải danh sách GLV theo ca:", e);
+            }
+            return [];
+        }
+
+                // Hàm mở Modal phân công lớp
         async function openAssignModal(classId, className) {
             document.getElementById('assignClassId').value = classId;
             document.getElementById('modalClassName').innerText = className;
@@ -306,38 +320,33 @@
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
 
-            // 1. Tải danh sách GLV đang có trong lớp
+            // 1. Nạp danh sách GLV hiện có của lớp
             await loadClassTeachers(classId);
 
-            // 2. Điền danh sách tài khoản vào Dropdown
+            // 2. Nạp danh sách tài khoản đã lọc tự động theo ca của lớp này
             const selectEl = document.getElementById('selectTeacherAccount');
+            selectEl.innerHTML = '<option value="">-- Đang lọc danh sách GLV phù hợp... --</option>';
+
+            const teachers = await loadAvailableTeachersForClass(classId);
             selectEl.innerHTML = '<option value="">-- Chọn tài khoản Giáo lý viên --</option>';
 
-            const teachers = await loadAvailableTeachers();
+            if (teachers.length === 0) {
+                const emptyOpt = document.createElement('option');
+                emptyOpt.value = "";
+                emptyOpt.text = "Không có GLV nào khả dụng cho ca học này (tất cả đã nhận ca hoặc đủ định mức)";
+                selectEl.appendChild(emptyOpt);
+                return;
+            }
+
             teachers.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.id;
                 const phone = t.phoneNumber ? ` - SĐT: ${t.phoneNumber}` : '';
                 const role = t.role === 'BranchHead' ? ' [Trưởng khối]' : '';
-                opt.text = `${t.fullName} (${t.username})${role}${phone}`;
+                const note = t.statusNote || '';
+                opt.text = `${t.fullName} (${t.username})${role}${note}${phone}`;
                 selectEl.appendChild(opt);
             });
-        }
-        
-        // Nạp danh sách Users khả dụng từ Server
-        async function loadAvailableTeachers() {
-            if (cachedAvailableTeachers) return cachedAvailableTeachers;
-            try {
-                const res = await fetch('/Classes/GetAvailableTeachers');
-                const json = await res.json();
-                if (json.success) {
-                    cachedAvailableTeachers = json.data;
-                    return cachedAvailableTeachers;
-                }
-            } catch (e) {
-                console.error("Lỗi khi tải danh sách GLV:", e);
-            }
-            return [];
         }
 
         // Nạp danh sách GLV của lớp vào khung danh sách
