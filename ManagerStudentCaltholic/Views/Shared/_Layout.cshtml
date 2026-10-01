@@ -16,6 +16,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- PWA & Mobile Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="QL Giáo Lý">
+
     <style>
         :root {
             --sidebar-width: 260px;
@@ -313,6 +320,10 @@
                     @ViewData["Title"]
                 </span>
             </div>
+            <!-- BANNER BÁO MẤT SÓNG / OFFLINE -->
+            <div id="offlineNotice" class="alert alert-warning border-0 rounded-0 py-1 px-3 mb-0 text-center small fw-semibold shadow-sm d-none">
+                <i class="bi bi-wifi-off me-1"></i> Thiết bị đang mất kết nối mạng. Ứng dụng đang hoạt động ở chế độ Offline (Dữ liệu lấy từ bộ nhớ đệm).
+            </div>
 
             <!-- Nút Tra cứu nhanh trên Topbar + Profile -->
             <div class="d-flex align-items-center gap-2">
@@ -506,3 +517,30 @@
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
+
+<script>
+    // Đăng ký Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => console.log('[PWA] Service Worker đã kích hoạt với phạm vi:', reg.scope))
+                .catch((err) => console.warn('[PWA] Đăng ký Service Worker thất bại:', err));
+        });
+    }
+
+    // Bắt sự kiện Online / Offline
+    function updateNetworkStatus() {
+        const notice = document.getElementById('offlineNotice');
+        if (notice) {
+            if (navigator.onLine) {
+                notice.classList.add('d-none');
+            } else {
+                notice.classList.remove('d-none');
+            }
+        }
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    updateNetworkStatus();
+</script>

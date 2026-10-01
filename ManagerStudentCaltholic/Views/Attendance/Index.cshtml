@@ -505,6 +505,21 @@
                     list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
                 });
         }
+
+        // Tự động lưu cache danh sách học sinh của lớp đang mở vào LocalStorage
+        function cacheCurrentClassAttendance(classId, className, studentsData) {
+            try {
+                const cachePayload = {
+                    classId: classId,
+                    className: className,
+                    cachedAt: new Date().toISOString(),
+                    students: studentsData
+                };
+                localStorage.setItem(`offline_class_${classId}`, JSON.stringify(cachePayload));
+            } catch (e) {
+                console.warn("Không thể lưu LocalStorage:", e);
+            }
+        }
     </script>
 }
 
