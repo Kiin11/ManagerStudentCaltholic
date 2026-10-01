@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ManagerStudentCaltholic.Models.Entities
 {
@@ -14,6 +15,11 @@ namespace ManagerStudentCaltholic.Models.Entities
         [Required(ErrorMessage = "Tên Giáo lý viên không được để trống")]
         [MaxLength(100)]
         public string TeacherName { get; set; } = string.Empty;
+
+        // TASK-812: Khóa ngoại liên kết trực tiếp tới tài khoản User
+        public long? UserId { get; set; }
+        [ForeignKey(nameof(UserId))]
+        public User? User { get; set; }
 
         [MaxLength(15)]
         public string? PhoneNumber { get; set; }

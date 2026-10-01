@@ -17,6 +17,7 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<ClassTeacher> ClassTeachers => Set<ClassTeacher>();
         public DbSet<User> Users => Set<User>();
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+        public DbSet<Announcement> Announcements => Set<Announcement>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -86,9 +87,11 @@ namespace ManagerStudentCaltholic.Data
                 entity.ToTable("ClassTeachers");
                 entity.HasKey(ct => ct.Id);
 
-                // Ràng buộc duy nhất: Một GLV chỉ nhận 1 vai trò phân công trong 1 lớp của 1 niên khóa
-                entity.HasIndex(ct => new { ct.ClassRoomId, ct.TeacherName, ct.AcademicYearId })
-                      .IsUnique();
+                // Chỉ định rõ ràng: ClassTeacher liên kết tới User qua khóa ngoại UserId
+                entity.HasOne(ct => ct.User)
+                      .WithMany()
+                      .HasForeignKey(ct => ct.UserId)
+                      .OnDelete(DeleteBehavior.SetNull);
 
                 entity.HasOne(ct => ct.ClassRoom)
                       .WithMany(c => c.ClassTeachers)
@@ -129,6 +132,20 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(u => u.IsActive).HasDefaultValue(true);
                 entity.Property(u => u.AccessFailedCount).HasDefaultValue(0);
                 entity.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
+                entity.Property(u => u.ManagedGradeLevel).HasMaxLength(50).IsRequired(false);
+
+                // Liên kết 1 - 1 / 1 - N tùy chọn với ClassTeacher và Student
+                entity.HasOne(u => u.ClassTeacher)
+                      .WithMany()
+                      .HasForeignKey(u => u.ClassTeacherId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(u => u.Student)
+                      .WithMany()
+                      .HasForeignKey(u => u.StudentId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.ManagedGradeLevel);
             });
 
             modelBuilder.Entity<RefreshToken>(entity =>
@@ -146,6 +163,30 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.Property(rt => rt.Token).HasMaxLength(255).IsRequired();
                 entity.Property(rt => rt.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+            modelBuilder.Entity<Announcement>(entity =>
+            {
+                entity.ToTable("Announcements");
+                entity.HasKey(a => a.Id);
+
+                entity.Property(a => a.Title).HasMaxLength(200).IsRequired();
+                entity.Property(a => a.Scope).HasMaxLength(20).HasDefaultValue("ALL");
+                entity.Property(a => a.Priority).HasMaxLength(20).HasDefaultValue("NORMAL");
+                entity.Property(a => a.IsPinned).HasDefaultValue(false);
+                entity.Property(a => a.IsActive).HasDefaultValue(true);
+                entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
+
+                // Quan hệ tùy chọn với lớp học khi Scope = CLASS
+                entity.HasOne(a => a.TargetClassRoom)
+                      .WithMany()
+                      .HasForeignKey(a => a.TargetClassRoomId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // B-Tree Indexes phục vụ lọc tin tức theo phạm vi, thời gian và ghim bài
+                entity.HasIndex(a => a.CreatedAt);
+                entity.HasIndex(a => a.Scope);
+                entity.HasIndex(a => a.TargetGradeLevel);
+                entity.HasIndex(a => a.IsPinned);
             });
         }
 

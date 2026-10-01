@@ -49,5 +49,22 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [MaxLength(255)]
         public string? AvatarUrl { get; set; } // Đường dẫn ảnh đại diện
+        /// <summary>
+        /// TASK-807: Khối phụ trách nếu là BranchHead (Khai Tâm, Rước Lễ, Thêm Sức, Bao Đồng)
+        /// </summary>
+        [MaxLength(50)]
+        public string? ManagedGradeLevel { get; set; }
+
+        /// <summary>
+        /// TASK-806: Khóa ngoại liên kết nếu tài khoản này là Giáo lý viên
+        /// </summary>
+        public long? ClassTeacherId { get; set; }
+        public ClassTeacher? ClassTeacher { get; set; }
+
+        /// <summary>
+        /// TASK-806: Khóa ngoại liên kết nếu tài khoản này đại diện cho Thiếu nhi / Phụ huynh
+        /// </summary>
+        public long? StudentId { get; set; }
+        public Student? Student { get; set; }
     }
 }

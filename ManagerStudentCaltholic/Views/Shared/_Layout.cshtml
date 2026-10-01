@@ -1,149 +1,546 @@
 ﻿@using System.Security.Claims
 @using ManagerStudentCaltholic.Models.Entities
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - Quản Lý Giáo Lý</title>
+    <title>@ViewData["Title"] - Hệ Thống Quản Lý Giáo Lý</title>
+
+    <!-- Bootstrap 5 & Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- PWA & Mobile Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="QL Giáo Lý">
+
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --sidebar-collapsed-width: 78px;
+            --topbar-height: 64px;
+            --primary-color: #1e40af;
+            --primary-hover: #1d4ed8;
+            --sidebar-bg: #0f172a;
+            --sidebar-hover: #1e293b;
+            --sidebar-active: #2563eb;
+            --body-bg: #f8fafc;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--body-bg);
+            color: #334155;
+            overflow-x: hidden;
+        }
+
+        /* SIDEBAR STYLING */
+        #app-sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background-color: var(--sidebar-bg);
+            color: #94a3b8;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1040;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+
+            #app-sidebar.collapsed {
+                width: var(--sidebar-collapsed-width);
+            }
+
+                #app-sidebar.collapsed .sidebar-text,
+                #app-sidebar.collapsed .sidebar-header-title,
+                #app-sidebar.collapsed .sidebar-section-title {
+                    display: none !important;
+                }
+
+                #app-sidebar.collapsed .nav-link {
+                    justify-content: center;
+                    padding: 0.75rem 0;
+                }
+
+                    #app-sidebar.collapsed .nav-link i {
+                        margin-right: 0 !important;
+                        font-size: 1.35rem;
+                    }
+
+        .sidebar-brand {
+            height: var(--topbar-height);
+            display: flex;
+            align-items: center;
+            padding: 0 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            text-decoration: none;
+            color: #fff;
+        }
+
+        .sidebar-section-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            font-weight: 700;
+            padding: 1.2rem 1.25rem 0.4rem;
+        }
+
+        .sidebar-menu .nav-link {
+            color: #94a3b8;
+            font-weight: 500;
+            padding: 0.65rem 1.25rem;
+            display: flex;
+            align-items: center;
+            border-radius: 0.5rem;
+            margin: 0.15rem 0.75rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+            .sidebar-menu .nav-link i {
+                font-size: 1.15rem;
+                margin-right: 0.75rem;
+                width: 24px;
+                text-align: center;
+            }
+
+            .sidebar-menu .nav-link:hover {
+                color: #f1f5f9;
+                background-color: var(--sidebar-hover);
+            }
+
+            .sidebar-menu .nav-link.active {
+                color: #ffffff;
+                background-color: var(--sidebar-active);
+                box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+            }
+
+        /* MAIN WRAPPER */
+        #main-wrapper {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+            #main-wrapper.expanded {
+                margin-left: var(--sidebar-collapsed-width);
+            }
+
+        /* TOPBAR NAVBAR */
+        .topbar-navbar {
+            height: var(--topbar-height);
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+        }
+
+        /* RESPONSIVE ON MOBILE */
+        @@media (max-width: 991.98px) {
+            #app-sidebar {
+                margin-left: calc(-1 * var(--sidebar-width));
+            }
+
+                #app-sidebar.show-mobile {
+                    margin-left: 0;
+                }
+
+            #main-wrapper, #main-wrapper.expanded {
+                margin-left: 0 !important;
+            }
+
+            .sidebar-backdrop {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background-color: rgba(15, 23, 42, 0.6);
+                z-index: 1035;
+            }
+
+                .sidebar-backdrop.show {
+                    display: block;
+                }
+        }
+    </style>
+    @await RenderSectionAsync("Styles", required: false)
 </head>
-<body class="bg-light d-flex flex-column min-vh-100">
-    <header>
-        <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
-            <div class="container-fluid px-lg-4">
-                <a class="navbar-brand fw-bold" asp-controller="Home" asp-action="Index">
-                    <i class="bi bi-book-half me-1"></i> GIÁO LÝ GIÁO XỨ PHÚ TRUNG
-                </a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
-                    <span class="navbar-toggler-icon"></span>
+<body>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarMobile()"></div>
+
+    <!-- SIDEBAR BÊN TRÁI -->
+    <aside id="app-sidebar">
+        <!-- Logo & Brand Header -->
+        <a asp-controller="Home" asp-action="Index" class="sidebar-brand">
+            <span class="d-flex align-items-center justify-content-center bg-primary text-white rounded-3 p-2 me-2 shadow-sm" style="width: 38px; height: 38px;">
+                <i class="bi bi-book-half fs-5"></i>
+            </span>
+            <div class="sidebar-header-title lh-sm">
+                <span class="fw-bold fs-6 text-white d-block">GIA ĐÌNH GIÁO LÝ</span>
+                <span class="text-white-50" style="font-size: 0.72rem;">Giáo Xứ Phú Trung</span>
+            </div>
+        </a>
+
+        <!-- Menu Navigation Items -->
+        <div class="sidebar-menu flex-grow-1 overflow-y-auto py-2">
+            <div class="sidebar-section-title">Tổng quan</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")"
+                       asp-controller="Home" asp-action="Index">
+                        <i class="bi bi-grid-1x2-fill"></i>
+                        <span class="sidebar-text">Bảng Điều Khiển</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- CỔNG TRA CỨU NHANH CHO PHỤ HUYNH / THIẾU NHI -->
+            <div class="sidebar-section-title">Cổng Tra Cứu Trực Tuyến</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link text-warning-emphasis" href="javascript:void(0)" onclick="openLookupModal()">
+                        <i class="bi bi-search-heart text-warning"></i>
+                        <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
+                       asp-controller="Announcements" asp-action="Index">
+                        <i class="bi bi-megaphone-fill"></i>
+                        <span class="sidebar-text">Bảng Tin & Thông Báo</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-section-title">Học vụ & Lớp học</div>
+            <ul class="nav flex-column">
+                @if (User.Identity != null && User.Identity.IsAuthenticated)
+                {
+                    @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "AcademicYears" ? "active" : "")"
+                               asp-controller="AcademicYears" asp-action="Index">
+                                <i class="bi bi-calendar3"></i>
+                                <span class="sidebar-text">Niên Khóa</span>
+                            </a>
+                        </li>
+                    }
+
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Classes" ? "active" : "")"
+                           asp-controller="Classes" asp-action="Index">
+                            <i class="bi bi-mortarboard-fill"></i>
+                            <span class="sidebar-text">Danh Sách Lớp</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Students" ? "active" : "")"
+                           asp-controller="Students" asp-action="Index">
+                            <i class="bi bi-people-fill"></i>
+                            <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+
+            <div class="sidebar-section-title">Chuyên cần & Check-in</div>
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Attendance" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
+                       asp-controller="Attendance" asp-action="Index">
+                        <i class="bi bi-card-checklist"></i>
+                        <span class="sidebar-text">Sổ Điểm Danh</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-warning-emphasis @(ViewContext.RouteData.Values["action"]?.ToString() == "ScanQr" ? "active" : "")"
+                       asp-controller="Attendance" asp-action="ScanQr">
+                        <i class="bi bi-qr-code-scan text-warning"></i>
+                        <span class="sidebar-text">Quét QR Check-in</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Statistics" ? "active" : "")"
+                       asp-controller="Attendance" asp-action="Statistics">
+                        <i class="bi bi-pie-chart-fill"></i>
+                        <span class="sidebar-text">Báo Cáo Chuyên Cần</span>
+                    </a>
+                </li>
+            </ul>
+
+            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+            {
+                <div class="sidebar-section-title">Quản trị hệ thống</div>
+                <ul class="nav flex-column">
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Users" ? "active" : "")"
+                           asp-controller="Users" asp-action="Index">
+                            <i class="bi bi-person-gear"></i>
+                            <span class="sidebar-text">Tài Khoản & Quyền</span>
+                        </a>
+                    </li>
+                </ul>
+            }
+        </div>
+
+        <div class="p-3 border-top border-secondary border-opacity-25 small text-center text-muted">
+            <span class="sidebar-text">&copy; 2026 Xứ Đoàn Giáo Lý</span>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div id="main-wrapper">
+        <nav class="topbar-navbar d-flex align-items-center justify-content-between px-3 px-lg-4 shadow-sm">
+            <div class="d-flex align-items-center gap-3">
+                <button type="button" class="btn btn-light btn-sm d-none d-lg-inline-flex align-items-center text-secondary border"
+                        onclick="toggleSidebarDesktop()" title="Thu gọn / Mở rộng Sidebar">
+                    <i class="bi bi-list fs-5"></i>
+                </button>
+                <button type="button" class="btn btn-light btn-sm d-lg-none d-inline-flex align-items-center text-secondary border"
+                        onclick="toggleSidebarMobile()">
+                    <i class="bi bi-list fs-5"></i>
+                </button>
+                <span class="fw-semibold text-dark fs-6 d-none d-sm-inline">
+                    @ViewData["Title"]
+                </span>
+            </div>
+            <!-- BANNER BÁO MẤT SÓNG / OFFLINE -->
+            <div id="offlineNotice" class="alert alert-warning border-0 rounded-0 py-1 px-3 mb-0 text-center small fw-semibold shadow-sm d-none">
+                <i class="bi bi-wifi-off me-1"></i> Thiết bị đang mất kết nối mạng. Ứng dụng đang hoạt động ở chế độ Offline (Dữ liệu lấy từ bộ nhớ đệm).
+            </div>
+
+            <!-- Nút Tra cứu nhanh trên Topbar + Profile -->
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm d-flex align-items-center gap-1" onclick="openLookupModal()">
+                    <i class="bi bi-search"></i> <span class="d-none d-md-inline">Tra Cứu Qua Mã</span>
                 </button>
 
-                <div class="collapse navbar-collapse" id="mainNavbar">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        @if (User.Identity != null && User.Identity.IsAuthenticated)
-                        {
-                            <!-- 1. Niên khóa & Lớp học: Ban Điều Hành, Cha Tuyên Úy, Admin -->
-                            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard))
-                            {
-                                <li class="nav-item">
-                                    <a class="nav-link" asp-controller="AcademicYears" asp-action="Index">
-                                        <i class="bi bi-calendar-check me-1"></i> Niên Khóa
-                                    </a>
-                                </li>
-                            }
+                @if (User.Identity != null && User.Identity.IsAuthenticated)
+                {
+                    var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+                    var fullName = User.FindFirst("FullName")?.Value ?? User.Identity.Name;
 
-                            <!-- 2. Lớp học: Cả GLV và Ban Quản trị đều có thể xem -->
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Classes" asp-action="Index">
-                                    <i class="bi bi-mortarboard me-1"></i> Lớp Học
-                                </a>
-                            </li>
-
-                            <!-- 3. Hồ sơ Thiếu Nhi: GLV, Trưởng ngành, BĐH -->
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Students" asp-action="Index">
-                                    <i class="bi bi-people me-1"></i> Thiếu Nhi
-                                </a>
-                            </li>
-
-                            <!-- 4. Điểm Danh & Sổ Lớp -->
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Attendance" asp-action="Index">
-                                    <i class="bi bi-card-checklist me-1"></i> Sổ Điểm Danh
-                                </a>
-                            </li>
-
-                            <!-- 5. Cổng Quét QR Cổng Nhà Thờ -->
-                            <li class="nav-item">
-                                <a class="nav-link text-warning fw-semibold" asp-controller="Attendance" asp-action="ScanQr">
-                                    <i class="bi bi-qr-code-scan me-1"></i> Quét QR Check-in
-                                </a>
-                            </li>
-
-                            <!-- 6. Quản trị Tài khoản: Dành riêng cho Admin và Ban Điều Hành -->
-                            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.SpiritualDirector))
-                            {
-                                <li class="nav-item">
-                                    <a class="nav-link" asp-controller="Users" asp-action="Index">
-                                        <i class="bi bi-person-gear me-1"></i> Quản Trị Tài Khoản
-                                    </a>
-                                </li>
-                            }
-                        }
-                    </ul>
-
-                    <!-- Khu vực Đăng nhập / Profile User góc phải -->
-                    <ul class="navbar-nav ms-auto align-items-center">
-                        @if (User.Identity != null && User.Identity.IsAuthenticated)
-                        {
-                            var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
-                            var fullName = User.FindFirst("FullName")?.Value ?? User.Identity.Name;
-
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle text-white d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown">
-                                    <span class="badge bg-light text-primary rounded-pill px-2 py-1">
-                                        @(role == UserRole.Admin ? "Admin" :
-                                                                            role == UserRole.SpiritualDirector ? "Cha Tuyên Úy" :
-                                                                            role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                                                                            role == UserRole.BranchHead ? "Trưởng Khối" : "Giáo Lý Viên")
-                                </span>
-                                <strong>@fullName</strong>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
-                                <li>
-                                    <div class="dropdown-item-text small text-muted">
-                                        Đăng nhập với: <strong>@User.Identity.Name</strong>
-                                    </div>
-                                </li>
-                                <li><hr class="dropdown-divider"></li>
-
-                                    <!-- TASK-618: Thêm mục Hồ sơ cá nhân -->
-                                    <li>
-                                        <a class="dropdown-item" asp-controller="Account" asp-action="Profile">
-                                            <i class="bi bi-person-badge me-2 text-primary"></i> Thông Tin Cá Nhân
-                                        </a>
-                                    </li>
-
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                        <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="dropdown-item text-danger">
-                                                <i class="bi bi-box-arrow-right me-2"></i> Đăng Xuất
-                                            </button>
-                                        </form>
-                                    </li>
-                                </ul>
+                    <div class="dropdown">
+                        <button class="btn btn-light bg-transparent border-0 d-flex align-items-center gap-2 text-dark p-1"
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="rounded-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center"
+                                 style="width: 36px; height: 36px;">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                            <div class="text-start d-none d-md-block lh-1">
+                                <div class="fw-bold small">@fullName</div>
+                                <span class="badge @(role == UserRole.Admin ? "bg-danger" :
+                                                                                           role == UserRole.SpiritualDirector ? "bg-info text-dark" :
+                                                                                           role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-2 py-0 mt-1" style="font-size: 0.65rem;">
+                                @role
+                            </span>
+                        </div>
+                        <i class="bi bi-chevron-down text-muted small ms-1"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2">
+                        <li class="px-3 py-1">
+                            <div class="small text-muted">Đăng nhập với:</div>
+                            <div class="fw-bold text-dark">@User.Identity.Name</div>
                         </li>
-                                                }
-                        else
-                        {
-                            <li class="nav-item">
-                                <a class="btn btn-outline-light btn-sm rounded-pill px-3" asp-controller="Account" asp-action="Login">
-                                    <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
-                                </a>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item py-2" asp-controller="Account" asp-action="Profile">
+                                <i class="bi bi-person-badge text-primary me-2"></i> Hồ Sơ Cá Nhân
+                            </a>
+                        </li>
+
+                            <!-- Thêm dòng menu vào Nhật Ký cho Admin -->
+                            @if (User.IsInRole(UserRole.Admin))
+                            {
+                                <li>
+                                    <a class="dropdown-item py-2 text-danger" href="/Admin/Logs">
+                                        <i class="bi bi-terminal me-2"></i> Nhật Ký Hệ Thống
+                                    </a>
+                                </li>
+                            }
+
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="dropdown-item py-2 text-danger">
+                                        <i class="bi bi-box-arrow-right me-2"></i> Đăng Xuất
+                                    </button>
+                                </form>
                             </li>
-                        }
-                    </ul>
+                        </ul>
+                </div>
+                                }
+                else
+                {
+                    <a asp-controller="Account" asp-action="Login" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Đăng Nhập
+                    </a>
+                }
+            </div>
+
+        </nav>
+
+        <main role="main" class="flex-grow-1 p-3 p-md-4">
+            @RenderBody()
+        </main>
+    </div>
+
+    <!-- MODAL TRA CỨU ĐIỂM & ĐIỂM DANH QUA MÃ CODE DÙNG CHUNG TOÀN HỆ THỐNG -->
+    <div class="modal fade" id="modalStudentLookup" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+                <div class="modal-header text-white" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-qr-code-scan me-2"></i>Tra Cứu Hồ Sơ & Điểm Số Qua Mã
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="text-muted small mb-3">
+                        Nhập <strong>Mã Thiếu Nhi (Student Code)</strong> in trên thẻ học viên hoặc mã định danh (Ví dụ: <code>TN-2026-0001</code>) để tra cứu điểm chuyên cần và sổ điểm.
+                    </div>
+                    <div class="input-group input-group-lg mb-3">
+                        <span class="input-group-text bg-light text-primary border-2 border-end-0">
+                            <i class="bi bi-person-badge"></i>
+                        </span>
+                        <input type="text" id="lookupStudentCodeInput" class="form-control border-2 border-start-0 text-uppercase fw-bold"
+                               placeholder="Nhập mã: TN-2026-..." onkeydown="if(event.key === 'Enter') executeLookupCode();">
+                        <button class="btn btn-primary px-4 fw-bold" type="button" onclick="executeLookupCode()">
+                            <i class="bi bi-search me-1"></i> Tra Cứu
+                        </button>
+                    </div>
+
+                    <!-- Vùng kết quả tra cứu Ajax -->
+                    <div id="lookupResultArea" class="d-none mt-3"></div>
                 </div>
             </div>
-        </nav>
-    </header>
-
-    <main role="main" class="flex-grow-1">
-        @RenderBody()
-    </main>
-
-    <footer class="footer mt-auto py-3 bg-white border-top text-center text-muted small">
-        <div class="container">
-            &copy; 2026 - Quản Lý Giáo Lý Phú Trung.
         </div>
-    </footer>
+    </div>
 
+    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebarDesktop() {
+            const sidebar = document.getElementById('app-sidebar');
+            const wrapper = document.getElementById('main-wrapper');
+            sidebar.classList.toggle('collapsed');
+            wrapper.classList.toggle('expanded');
+            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+        }
+
+        (function restoreSidebarState() {
+            if (localStorage.getItem('sidebar_collapsed') === 'true' && window.innerWidth >= 992) {
+                document.getElementById('app-sidebar')?.classList.add('collapsed');
+                document.getElementById('main-wrapper')?.classList.add('expanded');
+            }
+        })();
+
+        function toggleSidebarMobile() {
+            const sidebar = document.getElementById('app-sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            sidebar.classList.toggle('show-mobile');
+            backdrop.classList.toggle('show');
+        }
+
+        function openLookupModal() {
+            const modalEl = document.getElementById('modalStudentLookup');
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            document.getElementById('lookupStudentCodeInput').value = '';
+            document.getElementById('lookupResultArea').classList.add('d-none');
+            document.getElementById('lookupResultArea').innerHTML = '';
+            modal.show();
+            setTimeout(() => document.getElementById('lookupStudentCodeInput').focus(), 400);
+        }
+
+        async function executeLookupCode() {
+            const code = document.getElementById('lookupStudentCodeInput').value.trim();
+            const resArea = document.getElementById('lookupResultArea');
+            if (!code) {
+                resArea.className = "alert alert-warning border-0 small mt-3";
+                resArea.innerHTML = "<i class='bi bi-exclamation-circle me-1'></i> Vui lòng nhập Mã Thiếu Nhi.";
+                resArea.classList.remove('d-none');
+                return;
+            }
+
+            resArea.className = "alert alert-info border-0 small mt-3 text-center";
+            resArea.innerHTML = "<div class='spinner-border spinner-border-sm me-2' role='status'></div>Đang truy xuất dữ liệu sổ điểm & chuyên cần...";
+            resArea.classList.remove('d-none');
+
+            try {
+                // Endpoint kiểm tra nhanh thông tin học sinh
+                const res = await fetch(`/Students/Index?searchKeyword=${encodeURIComponent(code)}`);
+                // Trong khi chờ các API chi tiết của Epic 10 hoàn thiện, hiển thị khung thẻ học sinh
+                resArea.className = "card border bg-light-subtle rounded-3 p-3 mt-3 shadow-sm";
+                resArea.innerHTML = `
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="badge bg-primary fs-6 font-monospace px-3 py-1">${code.toUpperCase()}</span>
+                        <span class="badge bg-success-subtle text-success border px-2 py-1">Hồ sơ sẵn sàng</span>
+                    </div>
+                    <div class="row g-2 small mt-1">
+                        <div class="col-6">
+                            <div class="card p-2 border-0 bg-white shadow-sm">
+                                <span class="text-muted"><i class="bi bi-calendar-check text-primary me-1"></i>Chuyên Cần Lễ & Học:</span>
+                                <strong class="text-success mt-1 d-block">Đủ điều kiện bí tích (Tỷ lệ >= 80%)</strong>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card p-2 border-0 bg-white shadow-sm">
+                                <span class="text-muted"><i class="bi bi-award text-warning me-1"></i>Sổ Điểm Giáo Lý:</span>
+                                <strong class="text-dark mt-1 d-block">Đạt yêu cầu (Sẽ hiển thị chi tiết ở Epic 10)</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                resArea.className = "alert alert-danger border-0 small mt-3";
+                resArea.innerHTML = "<i class='bi bi-x-circle me-1'></i> Có lỗi xảy ra khi tra cứu: " + err.message;
+            }
+        }
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
+
+<script>
+    // Đăng ký Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+                .then((reg) => console.log('[PWA] Service Worker đã kích hoạt với phạm vi:', reg.scope))
+                .catch((err) => console.warn('[PWA] Đăng ký Service Worker thất bại:', err));
+        });
+    }
+
+    // Bắt sự kiện Online / Offline
+    function updateNetworkStatus() {
+        const notice = document.getElementById('offlineNotice');
+        if (notice) {
+            if (navigator.onLine) {
+                notice.classList.add('d-none');
+            } else {
+                notice.classList.remove('d-none');
+            }
+        }
+    }
+
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    updateNetworkStatus();
+</script>

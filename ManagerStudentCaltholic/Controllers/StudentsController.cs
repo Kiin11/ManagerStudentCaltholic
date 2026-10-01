@@ -40,6 +40,57 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> Index(string? searchKeyword, string? gender, bool? isActive, int page = 1)
         {
             const int pageSize = 15;
+
+            // Nếu là Trưởng khối, chỉ cho phép tìm kiếm/xem hồ sơ của học sinh đang học trong khối của mình
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+                    var yearId = currentYear?.Id ?? 0;
+
+                    // Tìm danh sách ID học sinh đang học ở các lớp thuộc khối này
+                    var studentIdsInGrade = await _context.Enrollments
+                        .Include(e => e.ClassRoom)
+                        .Where(e => e.ClassRoom.AcademicYearId == yearId && e.ClassRoom.GradeLevel == managedGrade)
+                        .Select(e => e.StudentId)
+                        .Distinct()
+                        .ToListAsync();
+
+                    var scopedQuery = _context.Students.AsNoTracking().Where(s => studentIdsInGrade.Contains(s.Id));
+
+                    if (!string.IsNullOrWhiteSpace(searchKeyword))
+                    {
+                        var term = searchKeyword.Trim().ToLower();
+                        scopedQuery = scopedQuery.Where(s =>
+                            s.FirstName.ToLower().Contains(term) ||
+                            s.LastName.ToLower().Contains(term) ||
+                            s.ChristianName.ToLower().Contains(term) ||
+                            s.StudentCode.ToLower().Contains(term) ||
+                            (s.ParentPhone != null && s.ParentPhone.Contains(term)));
+                    }
+
+                    var totalScopedCount = await scopedQuery.CountAsync();
+                    var totalScopedPages = (int)Math.Ceiling(totalScopedCount / (double)pageSize);
+                    page = Math.Max(1, Math.Min(page, Math.Max(1, totalScopedPages)));
+
+                    var scopedStudents = await scopedQuery
+                        .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
+                        .Skip((page - 1) * pageSize).Take(pageSize)
+                        .ToListAsync();
+
+                    ViewBag.SearchKeyword = searchKeyword;
+                    ViewBag.Gender = gender ?? "ALL";
+                    ViewBag.IsActive = isActive;
+                    ViewBag.CurrentPage = page;
+                    ViewBag.TotalPages = totalScopedPages;
+                    ViewBag.TotalCount = totalScopedCount;
+
+                    return View(scopedStudents);
+                }
+            }
+
             var query = _context.Students.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(searchKeyword))

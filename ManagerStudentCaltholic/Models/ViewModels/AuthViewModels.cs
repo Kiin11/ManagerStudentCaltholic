@@ -44,13 +44,13 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string Password { get; set; } = string.Empty;
 
         [StringLength(50)]
-        public string ChristianName { get; set; } = string.Empty;
+        public string? ChristianName { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Họ tên không được rỗng")]
+        [Required(ErrorMessage = "Họ và tên đệm không được trống")]
         [StringLength(100)]
         public string FirstName { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Họ tên không được rỗng")]
+        [Required(ErrorMessage = "Tên không được trống")]
         [StringLength(10)]
         public string LastName { get; set; } = string.Empty;
 
@@ -61,6 +61,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         [Required(ErrorMessage = "Vui lòng chọn vai trò")]
         public string Role { get; set; } = "Teacher";
+
+        public string? ManagedGradeLevel { get; set; }
     }
 
     // DTO Đặt lại mật khẩu

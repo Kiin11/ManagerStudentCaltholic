@@ -42,8 +42,13 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? AvatarUrl { get; set; }
         public DateTime? LastLoginAt { get; set; }
 
-        // Danh sách các lớp được phân công giảng dạy (ClassTeachers)
-        public List<AssignedClassItemDto> AssignedClasses { get; set; } = new();
+        // TASK-813: Các lớp đang dạy trong niên khóa hiện tại
+        public List<AssignedClassItemDto> CurrentClasses { get; set; } = new();
+
+        // TASK-813: Lịch sử giảng dạy gom theo các niên khóa trước
+        public List<TeachingHistoryByYearDto> TeachingHistory { get; set; } = new();
+
+        public string? ManagedGradeLevel { get; set; }
     }
 
     public class AssignedClassItemDto
@@ -51,10 +56,22 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ClassId { get; set; }
         public string ClassName { get; set; } = string.Empty;
         public string GradeLevel { get; set; } = string.Empty;
+        public int AcademicYearId { get; set; }
         public string AcademicYearName { get; set; } = string.Empty;
-        public string RoleInClass { get; set; } = string.Empty; // HEAD (Chủ nhiệm), MEMBER (Đồng hành)
+        public bool IsCurrentYear { get; set; }
+        public string RoleInClass { get; set; } = "HEAD";
+        public string RoleName { get; set; } = "Chủ nhiệm";
         public string? RoomNumber { get; set; }
         public int TotalStudents { get; set; }
+        public DateTime AssignedAt { get; set; }
+    }
+
+    public class TeachingHistoryByYearDto
+    {
+        public int AcademicYearId { get; set; }
+        public string AcademicYearName { get; set; } = string.Empty;
+        public DateTime StartDate { get; set; }
+        public List<AssignedClassItemDto> Classes { get; set; } = new();
     }
 
     // DTO Đổi mật khẩu

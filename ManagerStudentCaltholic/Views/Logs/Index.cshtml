@@ -1,0 +1,142 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.SystemLogsViewModel
+@{
+    ViewData["Title"] = "Nhật Ký Hệ Thống (Server Logs)";
+}
+
+<div class="container-fluid px-0">
+    <!-- Tiêu đề trang & Tải file raw -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">
+                <i class="bi bi-terminal-split text-primary me-2"></i>Nhật Ký Máy Chủ (Serilog)
+            </h4>
+            <p class="text-muted small mb-0">Theo dõi hoạt động, cảnh báo hiệu năng và bắt vết ngoại lệ của hệ thống.</p>
+        </div>
+        @if (!string.IsNullOrEmpty(Model.SelectedFile))
+        {
+            <a asp-action="Download" asp-route-fileName="@Model.SelectedFile" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-download me-1"></i> Tải File Gốc (@Model.SelectedFile)
+            </a>
+        }
+    </div>
+
+    <!-- Thanh công cụ lọc file, cấp độ và tìm kiếm -->
+    <div class="card border-0 rounded-4 shadow-sm mb-4">
+        <div class="card-body p-3 p-md-4">
+            <form method="get" asp-action="Index" class="row g-2 align-items-center">
+                <!-- Chọn File Log -->
+                <div class="col-12 col-md-4">
+                    <label class="form-label small fw-bold text-secondary mb-1">Chọn File Log Ngày</label>
+                    <select name="fileName" class="form-select select2-single" onchange="this.form.submit()">
+                        @if (!Model.AvailableLogFiles.Any())
+                        {
+                            <option value="">Không có file log nào</option>
+                        }
+                        @foreach (var file in Model.AvailableLogFiles)
+                        {
+                            <option value="@file" selected="@(file == Model.SelectedFile)">
+                                📄 @file
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Chọn Mức độ log (Level) -->
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-bold text-secondary mb-1">Mức Độ (Level)</label>
+                    <select name="level" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- Tất cả mức độ --</option>
+                        <option value="ERR" selected="@(Model.LevelFilter == "ERR")">🔴 Lỗi (ERR / Error)</option>
+                        <option value="WRN" selected="@(Model.LevelFilter == "WRN")">🟡 Cảnh báo (WRN / Warning)</option>
+                        <option value="INF" selected="@(Model.LevelFilter == "INF")">🔵 Thông tin (INF / Info)</option>
+                    </select>
+                </div>
+
+                <!-- Tìm kiếm từ khóa -->
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-bold text-secondary mb-1">Từ Khóa</label>
+                    <input type="text" name="search" class="form-control" placeholder="Tìm theo IP, đường dẫn, lỗi..." value="@Model.SearchKeyword" />
+                </div>
+
+                <!-- Nút Lọc & Xóa bộ lọc -->
+                <div class="col-12 col-md-2 d-flex align-items-end gap-1 mt-3 mt-md-0">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">
+                        <i class="bi bi-funnel-fill me-1"></i> Lọc
+                    </button>
+                    <a asp-action="Index" class="btn btn-light border text-secondary" title="Đặt lại bộ lọc">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Khung Danh Sách Dòng Log -->
+    <div class="card border-0 rounded-4 shadow-sm overflow-hidden">
+        <div class="card-header bg-white border-bottom py-3 px-4 d-flex justify-content-between align-items-center">
+            <span class="small text-muted">
+                Hiển thị <strong>@Model.Entries.Count</strong> / @Model.TotalLines dòng log gần nhất
+            </span>
+            <span class="badge bg-light text-dark border">
+                Tự động lưu giữ: 90 ngày
+            </span>
+        </div>
+        <div class="card-body p-0">
+            @if (!Model.Entries.Any())
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-file-earmark-check display-4 text-muted opacity-50"></i>
+                    <p class="text-muted mt-2 mb-0">Không tìm thấy bản ghi log nào phù hợp với điều kiện tìm kiếm.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
+                    <table class="table table-hover table-striped align-middle mb-0 font-monospace small">
+                        <thead class="table-dark sticky-top">
+                            <tr>
+                                <th style="width: 140px;">Thời Gian</th>
+                                <th style="width: 80px;" class="text-center">Mức</th>
+                                <th>Nội Dung Chi Tiết</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in Model.Entries)
+                            {
+                                var badgeClass = entry.Level switch
+                                {
+                                    "ERR" => "bg-danger text-white",
+                                    "FTL" => "bg-danger text-white",
+                                    "WRN" => "bg-warning text-dark",
+                                    "INF" => "bg-info-subtle text-info-emphasis border",
+                                    _ => "bg-secondary-subtle text-secondary"
+                                };
+
+                                <tr>
+                                    <td class="text-secondary text-nowrap">
+                                        @(entry.Timestamp.HasValue? entry.Timestamp.Value.ToString("HH:mm:ss dd/MM") : "--:--")
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge @badgeClass px-2 py-1">@entry.Level</span>
+                                    </td>
+                                    <td class="text-break">
+                                        <div class="fw-semibold text-dark">@entry.Message</div>
+                                        @if (!string.IsNullOrEmpty(entry.Exception))
+                                        {
+                                            <details class="mt-1">
+                                                <summary class="text-danger small cursor-pointer">
+                                                    <i class="bi bi-bug me-1"></i>Chi tiết StackTrace ngoại lệ
+                                                </summary>
+                                                <pre class="bg-dark text-danger-emphasis p-3 rounded-3 mt-2 mb-0 small" style="white-space: pre-wrap; font-size: 0.78rem;">@entry.Exception</pre>
+                                            </details>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
