@@ -56,10 +56,22 @@ namespace ManagerStudentCaltholic.Controllers
                 .Include(c=> c.ClassTeachers)
                 .Where(c => c.AcademicYearId == selectedYearId);
 
-            // Lọc theo Khối / Ngành nếu có chọn
-            if (!string.IsNullOrWhiteSpace(gradeLevel) && gradeLevel != "ALL")
+            // BỘ LỌC PHẠM VI (SCOPE FILTER CHO TRƯỞNG KHỐI)
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    // Ép buộc chỉ lấy các lớp thuộc đúng khối phụ trách
+                    query = query.Where(c => c.GradeLevel == managedGrade);
+                    ViewBag.SelectedGrade = managedGrade;
+                    ViewBag.IsGradeLocked = true; // Cờ báo cho Razor View khóa dropdown chọn khối
+                }
+            }
+            else if (!string.IsNullOrEmpty(gradeLevel))
             {
                 query = query.Where(c => c.GradeLevel == gradeLevel);
+                ViewBag.SelectedGrade = gradeLevel;
             }
 
             var classes = await query
@@ -81,10 +93,21 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="classRoom"></param>
         /// <returns></returns>
         [HttpPost]
-        [Authorize(Policy = "RequireExecutiveBoard")]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Name,GradeLevel,RoomName,AcademicYearId")] ClassRoom classRoom)
         {
+            // Nếu là Trưởng khối thì bắt buộc lớp tạo ra phải thuộc khối phụ trách
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.Equals(classRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["ErrorMessage"] = $"Bạn chỉ có quyền tạo lớp học thuộc khối {managedGrade}!";
+                    return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
+                }
+            }
+
             // Kiểm tra trùng tên lớp trong cùng một niên khóa
             var isDuplicate = await _context.Classes.AnyAsync(c =>
                 c.AcademicYearId == classRoom.AcademicYearId &&

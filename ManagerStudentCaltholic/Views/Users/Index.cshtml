@@ -15,7 +15,7 @@
                     <h4 class="fw-bold text-dark mb-0">
                         <i class="bi bi-people-gear me-2 text-primary"></i>Danh Sách Tài Khoản Hệ Thống
                     </h4>
-                    <small class="text-muted">Quản trị danh tính và vai trò thành viên xứ đoàn</small>
+                    <small class="text-muted">Quản trị danh tính và vai trò thành viên gia đình giáo lý</small>
                 </div>
                 <div class="col-md-5">
                     <form method="get" class="d-flex gap-2">
@@ -76,6 +76,12 @@
                                                                                                    u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
                                 @u.Role
                             </span>
+                            @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
+                            {
+                                <span class="badge bg-primary-subtle text-primary border ms-1">
+                                    Khối: @u.ManagedGradeLevel
+                                </span>
+                            }
                         </td>
                         <td>@(string.IsNullOrEmpty(u.PhoneNumber) ? "-" : u.PhoneNumber)</td>
                         <td>
@@ -149,15 +155,24 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label small fw-bold">Vai trò</label>
-                            <select id="newRole" class="form-select">
-                                <option value="@UserRole.Teacher">Giáo Lý Viên (Teacher)</option>
-                                <option value="@UserRole.BranchHead">Trưởng Khối (BranchHead)</option>
-                                <option value="@UserRole.ExecutiveBoard">Ban Điều Hành (ExecutiveBoard)</option>
+                            <select id="newRole" class="form-select" onchange="toggleManagedGradeField()">
+                                <option value="@UserRole.Teacher">Giáo Lý Viên</option>
+                                <option value="@UserRole.BranchHead">Trưởng Khối</option>
+                                <option value="@UserRole.ExecutiveBoard">Ban Điều Hành</option>
                                 @if (User.IsInRole(UserRole.Admin))
                                 {
                                     <option value="@UserRole.SpiritualDirector">Cha Tuyên Úy</option>
                                     <option value="@UserRole.Admin">Admin Kỹ Thuật</option>
                                 }
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-none" id="divManagedGrade">
+                            <label class="form-label small fw-bold text-primary">Khối phụ trách <span class="text-danger">*</span></label>
+                            <select id="newManagedGradeLevel" class="form-select border-primary">
+                                <option value="Khai Tâm">Khối Khai Tâm</option>
+                                <option value="Rước Lễ">Khối Rước Lễ</option>
+                                <option value="Thêm Sức">Khối Thêm Sức</option>
+                                <option value="Bao Đồng">Khối Bao Đồng</option>
                             </select>
                         </div>
                         <div class="col-6">
@@ -212,29 +227,51 @@
             const phone = document.getElementById("newPhone").value.trim();
             const email = document.getElementById("newEmail").value.trim();
 
-            if (!username || !password || !christianName || !firstName || !lastName) {
+            // Lấy giá trị khối nếu chọn BranchHead
+            let managedGradeLevel = null;
+            if (role === "@UserRole.BranchHead" || role === "BranchHead") {
+                const gradeSelect = document.getElementById("newManagedGradeLevel");
+                managedGradeLevel = gradeSelect ? gradeSelect.value : null;
+            }
+
+            if (!username || !password || !firstName || !lastName) {
                 alert("Vui lòng điền đầy đủ các thông tin bắt buộc!");
                 return;
             }
 
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const payload = {
+                username: username,
+                password: password,
+                christianName: christianName,
+                firstName: firstName,
+                lastName: lastName,
+                role: role,
+                phoneNumber: phone,
+                email: email,
+                managedGradeLevel: managedGradeLevel
+            };
+            try{
+                const res = await fetch('/Users/Create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
 
-            const res = await fetch('/Users/Create', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'RequestVerificationToken': token
-                },
-                body: JSON.stringify({ username, password, christianName, firstName, lastName, role, phoneNumber: phone, email })
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                alert(data.message);
-                location.reload();
-            } else {
-                alert(data.message);
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert("Không thể tạo tài khoản: " + data.message);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Có lỗi kết nối: " + err.message);
             }
+
         }
 
         function openResetPasswordModal(userId, username) {
@@ -287,6 +324,16 @@
             alert(data.message);
             if (data.success) {
                 location.reload();
+            }
+        }
+
+        function toggleManagedGradeField() {
+            const role = document.getElementById("newRole").value;
+            const divGrade = document.getElementById("divManagedGrade");
+            if (role === "BranchHead") {
+                divGrade.classList.remove("d-none");
+            } else {
+                divGrade.classList.add("d-none");
             }
         }
     </script>

@@ -1,9 +1,11 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Security;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +71,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IPasswordHasherService, PasswordHasherService>();
             services.AddScoped<ITokenService, TokenService>();
             services.AddHostedService<LogRetentionBackgroundService>();
+            services.AddSingleton<IAuthorizationHandler, GradeScopeHandler>();
 
             return services;
         }

@@ -122,6 +122,10 @@ namespace ManagerStudentCaltholic.Controllers
                 new Claim("FullName", user.FirstName + " " + user.LastName),
                 new Claim(ClaimTypes.Role, user.Role)
             };
+            if (!string.IsNullOrEmpty(user.ManagedGradeLevel))
+            {
+                claims.Add(new Claim("ManagedGradeLevel", user.ManagedGradeLevel));
+            }
 
             if (!string.IsNullOrEmpty(user.Email))
             {

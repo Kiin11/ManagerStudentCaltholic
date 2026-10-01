@@ -68,11 +68,19 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="model"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> Create([FromBody] CreateUserRequestDto model)
         {
             if (!ModelState.IsValid)
             {
+                // Thu thập toàn bộ thông báo lỗi validation nếu có
+                var errors = ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToList();
+                var str = "Dữ liệu nhập không hợp lệ: " + string.Join("; ", errors);
+               
                 return Json(new { success = false, message = "Dữ liệu nhập không hợp lệ." });
             }
 
@@ -100,7 +108,9 @@ namespace ManagerStudentCaltholic.Controllers
                 PhoneNumber = model.PhoneNumber?.Trim(),
                 Role = model.Role,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                // Gán khối phụ trách nếu là BranchHead
+                ManagedGradeLevel = model.Role == UserRole.BranchHead ? model.ManagedGradeLevel : null
             };
 
             _context.Users.Add(newUser);

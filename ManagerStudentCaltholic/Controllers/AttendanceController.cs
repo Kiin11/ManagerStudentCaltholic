@@ -38,8 +38,23 @@ namespace ManagerStudentCaltholic.Controllers
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             var yearId = currentYear?.Id ?? 0;
 
-            var classes = await _context.Classes
-                .Where(c => c.AcademicYearId == yearId)
+            // 1. Khởi tạo truy vấn danh sách lớp của niên khóa
+            var classesQuery = _context.Classes
+                .Where(c => c.AcademicYearId == yearId);
+
+            // BƯỚC 4: BỘ LỌC PHẠM VI DÀNH CHO TRƯỞNG KHỐI (BRANCH HEAD)
+            string? managedGrade = null;
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    // Chỉ lấy các lớp thuộc khối được phân công
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                }
+            }
+
+            var classes = await classesQuery
                 .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
@@ -49,8 +64,20 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!classes.Any())
             {
-                TempData["ErrorMessage"] = "Chưa có lớp học nào được tạo trong niên khóa hiện tại.";
+                TempData["ErrorMessage"] = User.IsInRole(UserRole.BranchHead)
+                    ? $"Không tìm thấy lớp học nào thuộc khối {managedGrade} trong niên khóa hiện tại."
+                    : "Chưa có lớp học nào được tạo trong niên khóa hiện tại.";
                 return View(new ClassAttendanceSheetViewModel { AttendanceDate = targetDate });
+            }
+
+            // 2. Chặn truy cập chéo khối nếu người dùng tự ý truyền classId qua Query String
+            if (classId.HasValue && User.IsInRole(UserRole.BranchHead) && !string.IsNullOrEmpty(managedGrade))
+            {
+                var requestedClass = await _context.Classes.FindAsync(classId.Value);
+                if (requestedClass != null && !string.Equals(requestedClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid(); // Trả về 403 Forbidden nếu cố tình xem sổ lớp khối khác
+                }
             }
 
             var selectedClassId = classId ?? classes.First().Id;
@@ -498,17 +525,34 @@ namespace ManagerStudentCaltholic.Controllers
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             var yearId = currentYear?.Id ?? 0;
 
-            var classes = await _context.Classes
-                .Where(c => c.AcademicYearId == yearId)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
-                .AsNoTracking()
-                .ToListAsync();
+            var classesQuery = _context.Classes.Where(c => c.AcademicYearId == yearId);
 
+            // Lọc theo khối nếu là BranchHead
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                }
+            }
+            var classes = await classesQuery.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
             ViewBag.Classes = classes;
 
             if (!classes.Any())
             {
                 return View(new AttendanceStatisticsViewModel());
+            }
+
+            // Chặn xem chéo
+            if (classId.HasValue && User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                var requestedClass = await _context.Classes.FindAsync(classId.Value);
+                if (requestedClass != null && requestedClass.GradeLevel != managedGrade)
+                {
+                    return Forbid();
+                }
             }
 
             var targetClassId = classId ?? classes.First().Id;

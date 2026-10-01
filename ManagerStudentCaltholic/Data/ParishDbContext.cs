@@ -130,6 +130,20 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(u => u.IsActive).HasDefaultValue(true);
                 entity.Property(u => u.AccessFailedCount).HasDefaultValue(0);
                 entity.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
+                entity.Property(u => u.ManagedGradeLevel).HasMaxLength(50).IsRequired(false);
+
+                // Liên kết 1 - 1 / 1 - N tùy chọn với ClassTeacher và Student
+                entity.HasOne(u => u.ClassTeacher)
+                      .WithMany()
+                      .HasForeignKey(u => u.ClassTeacherId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(u => u.Student)
+                      .WithMany()
+                      .HasForeignKey(u => u.StudentId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.ManagedGradeLevel);
             });
 
             modelBuilder.Entity<RefreshToken>(entity =>
