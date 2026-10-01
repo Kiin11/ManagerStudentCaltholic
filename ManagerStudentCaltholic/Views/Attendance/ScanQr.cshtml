@@ -223,38 +223,36 @@
         }
 
         // Xử lý gửi mã lên Backend
-        async function handleScannedCode(code) {
-            if (!code || isProcessing) return;
-
-            const now = Date.now();
-            // Debounce: Chống quét liên tục cùng 1 mã trong vòng 3 giây
-            if (code === lastScannedCode && (now - lastScannedTime) < 3000) {
-                return;
-            }
-
-            isProcessing = true;
-            lastScannedCode = code;
-            lastScannedTime = now;
-
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        async function handleScannedCode(decodedText) {
+            if (!decodedText) return;
 
             try {
                 const response = await fetch('/Attendance/ScanCheckIn', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ studentCode: code })
+                    body: JSON.stringify({ studentCode: decodedText.trim() })
                 });
 
-                const data = await response.json();
-                renderScanResult(data);
+                // Đọc text trước khi parse để tránh lỗi "Unexpected end of JSON"
+                const responseText = await response.text();
+                if (!responseText) {
+                    throw new Error(`Máy chủ phản hồi rỗng (Mã lỗi HTTP: ${response.status})`);
+                }
+
+                const result = JSON.parse(responseText);
+
+                if (result.success) {
+                    // Hiển thị kết quả điểm danh thành công
+                    renderScanResult(result);
+                } else {
+                    showError(result.message || "Điểm danh không thành công!");
+                }
             } catch (err) {
-                playBeep(false);
-                renderErrorResult("Lỗi kết nối máy chủ: " + err);
-            } finally {
-                setTimeout(() => { isProcessing = false; }, 800);
+                console.error("Lỗi gửi điểm danh:", err);
+                showError("Lỗi kết nối máy chủ: " + err.message);
             }
         }
 
