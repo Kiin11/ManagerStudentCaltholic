@@ -1,44 +1,105 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.BuildingZone>
 @{
-    ViewData["Title"] = "Quản Lý Cơ Sở Vật Chất & Sơ Đồ Phòng Học";
-    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, dynamic>;
-    var pendingIncidents = ViewBag.PendingIncidents as List<ManagerStudentCaltholic.Models.Entities.RoomIncidentReport>;
+    ViewData["Title"] = "Sơ Đồ Mặt Bằng Cơ Sở Vật Chất";
+    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, dynamic> ?? new();
+    var pendingIncidents = ViewBag.PendingIncidents as List<ManagerStudentCaltholic.Models.Entities.RoomIncidentReport> ?? new();
 }
 
+<style>
+    /* Blueprint Layout Styling */
+    .blueprint-card {
+        background: #f8fafc;
+        border: 2px dashed #cbd5e1;
+        border-radius: 12px;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .room-box {
+        background: #ffffff;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 100px;
+        position: relative;
+        cursor: pointer;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+        .room-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        .room-box.staircase {
+            background: #e2e8f0;
+            border-style: dashed;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .room-box.hall {
+            background: #eff6ff;
+            border-color: #2563eb;
+        }
+
+        .room-box.incident {
+            border-color: #ef4444 !important;
+            background: #fef2f2 !important;
+        }
+
+    .floor-row {
+        border-bottom: 2px solid #64748b;
+        padding: 10px 0;
+    }
+</style>
+
 <div class="container-fluid py-4">
+    <!-- Header -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
         <div>
             <h3 class="fw-bold text-primary mb-1">
-                <i class="bi bi-building-gear me-2"></i>Sơ Đồ Phòng Học & Cơ Sở Vật Chất
+                <i class="bi bi-grid-1x2-fill me-2"></i>Mặt Bằng Bố Trí Phòng Học Giáo Lý
             </h3>
-            <p class="text-muted mb-0">Theo dõi trực quan phòng học theo khu/tầng, kiểm soát quá tải sĩ số và báo hỏng thiết bị</p>
+            <p class="text-muted mb-0">Mô phỏng trực quan kiến trúc các khu vực, sức chứa phòng và quản lý sự cố</p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="/Facilities/LessonPlans" class="btn btn-outline-primary">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/Facilities/LessonPlans" class="btn btn-outline-primary shadow-sm">
                 <i class="bi bi-calendar3 me-1"></i> Xem Kế Hoạch Năm Học
             </a>
+            @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
+            {
+                <button type="button" class="btn btn-outline-success shadow-sm" data-bs-toggle="modal" data-bs-target="#createZoneModal">
+                    <i class="bi bi-folder-plus me-1"></i> Thêm Khu Vực
+                </button>
+                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+                    <i class="bi bi-plus-circle me-1"></i> Thêm Phòng Học
+                </button>
+            }
             <button type="button" class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#reportIncidentModal">
-                <i class="bi bi-exclamation-triangle me-1"></i> Báo Sự Cố Phòng Học
+                <i class="bi bi-exclamation-triangle me-1"></i> Báo Sự Cố Thiết Bị
             </button>
         </div>
     </div>
 
-    <!-- Alert cảnh báo sự cố đang chờ xử lý -->
-    @if (pendingIncidents != null && pendingIncidents.Any())
+    <!-- Alert Sự Cố Cần Bảo Trì -->
+    @if (pendingIncidents.Any())
     {
         <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-4">
             <div class="fw-bold mb-2">
-                <i class="bi bi-wrench me-1"></i> Có @pendingIncidents.Count sự cố thiết bị đang chờ bảo trì:
+                <i class="bi bi-tools me-1 text-danger"></i> Có @pendingIncidents.Count sự cố thiết bị đang chờ khắc phục:
             </div>
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var inc in pendingIncidents)
                 {
-                    <span class="badge bg-white text-dark border p-2 rounded-3">
-                        <strong class="text-danger">[@inc.ClassRoomLocation.RoomName]</strong> @inc.DeviceType: @inc.Description
+                    <span class="badge bg-white text-dark border p-2 rounded-3 shadow-xs">
+                        <strong class="text-danger">[@inc.ClassRoomLocation?.RoomName]</strong> @inc.DeviceType: @inc.Description
                         @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
                         {
-                            <button type="button" class="btn btn-sm btn-link text-success p-0 ms-2 fw-bold" onclick="resolveIncident(@inc.Id)">
-                                [Đã sửa]
+                            <button type="button" class="btn btn-sm btn-link text-success p-0 ms-2 fw-bold text-decoration-none" onclick="resolveIncident(@inc.Id)">
+                                [Đã sửa xong]
                             </button>
                         }
                     </span>
@@ -47,61 +108,86 @@
         </div>
     }
 
-    <!-- Ma trận Grid/Card Sơ đồ phòng học theo từng khu -->
-    @foreach (var zone in Model)
+    <!-- 1. KHU VỰC: NHÀ SINH HOẠT GIÁO XỨ (TẦNG 3 -> TRỆT) -->
+    @{
+        var nshZone = Model.FirstOrDefault(z => z.ZoneCode == "NSHGX") ?? Model.FirstOrDefault();
+    }
+    @if (nshZone != null)
     {
         <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
-            <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold text-dark mb-0">
-                    <i class="bi bi-geo-alt-fill text-danger me-2"></i>@zone.ZoneName (@zone.ZoneCode)
-                </h5>
-                <span class="badge bg-secondary rounded-pill px-3">@zone.Rooms.Count Phòng học</span>
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="bi bi-building me-2 text-warning"></i>@nshZone.ZoneName</h5>
+                <span class="badge bg-secondary">Mặt cắt 4 tầng</span>
             </div>
-            <div class="card-body p-4">
-                <div class="row g-3">
-                    @foreach (var room in zone.Rooms.OrderBy(r => r.FloorNumber).ThenBy(r => r.RoomName))
+            <div class="card-body p-4 bg-light">
+                <!-- TẦNG 3 -->
+                <div class="row g-2 align-items-center floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center">TẦNG 3</div>
+                    <div class="col-6 col-md-2">
+                        <div class="room-box staircase text-center">Cầu Thang</div>
+                    </div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 3).OrderBy(r => r.RoomName))
                     {
-                        var hasOccupancy = roomOccupancy != null && roomOccupancy.ContainsKey(room.Id);
-                        var occInfo = hasOccupancy ? roomOccupancy[room.Id] : null;
-                        int currentEnrolled = occInfo != null ? occInfo.MaxEnrolled : 0;
-                        var isOverflow = currentEnrolled > room.Capacity;
+                        <div class="col-6 col-md-2">
+                            <div class="room-box" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                <div class="fw-bold text-dark">@r.RoomName</div>
+                                <div class="small text-muted"><i class="bi bi-people me-1"></i>@r.Capacity chỗ</div>
+                                <span class="badge bg-success-subtle text-success mt-1">Sẵn sàng</span>
+                            </div>
+                        </div>
+                    }
+                </div>
 
-                        <div class="col-12 col-md-6 col-lg-4 col-xl-3">
-                            <div class="card h-100 border @(isOverflow ? "border-danger border-2" : "border-0 shadow-sm") rounded-3">
-                                <div class="card-body p-3">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <h5 class="fw-bold mb-0">@room.RoomName</h5>
-                                        <span class="badge @(room.IsAvailable ? "bg-success" : "bg-danger")">
-                                            @(room.IsAvailable ? "Sẵn sàng" : "Đang sửa")
-                                        </span>
-                                    </div>
-                                    <p class="text-muted small mb-2">
-                                        <i class="bi bi-layers me-1"></i>Tầng: <strong>@room.FloorNumber</strong> | Sức chứa: <strong>@room.Capacity</strong> chỗ
-                                    </p>
+                <!-- TẦNG 2 -->
+                <div class="row g-2 align-items-center floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center">TẦNG 2</div>
+                    <div class="col-6 col-md-2">
+                        <div class="room-box staircase text-center">Cầu Thang</div>
+                    </div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 2).OrderBy(r => r.RoomName))
+                    {
+                        <div class="col-6 col-md-2">
+                            <div class="room-box" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                <div class="fw-bold text-dark">@r.RoomName</div>
+                                <div class="small text-muted"><i class="bi bi-people me-1"></i>@r.Capacity chỗ</div>
+                                <span class="badge bg-success-subtle text-success mt-1">Sẵn sàng</span>
+                            </div>
+                        </div>
+                    }
+                </div>
 
-                                    <!-- Cảnh báo quá tải sĩ số (TASK-905) -->
-                                    @if (isOverflow)
-                                    {
-                                        <div class="alert alert-danger py-1 px-2 small mb-2 fw-bold">
-                                            <i class="bi bi-exclamation-octagon-fill me-1"></i> Quá tải: @currentEnrolled / @room.Capacity em!
-                                        </div>
-                                    }
-                                    else if (hasOccupancy)
-                                    {
-                                        <div class="text-secondary small mb-2">
-                                            <i class="bi bi-people me-1"></i> Sĩ số hiện tại: <strong>@currentEnrolled</strong> em
-                                        </div>
-                                    }
+                <!-- TẦNG 1 -->
+                <div class="row g-2 align-items-center floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center">TẦNG 1</div>
+                    <div class="col-6 col-md-2">
+                        <div class="room-box staircase text-center">Cầu Thang</div>
+                    </div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 1).OrderBy(r => r.RoomName))
+                    {
+                        <div class="col-6 col-md-3">
+                            <div class="room-box" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                <div class="fw-bold text-dark">@r.RoomName</div>
+                                <div class="small text-muted"><i class="bi bi-people me-1"></i>@r.Capacity chỗ</div>
+                                <span class="badge bg-success-subtle text-success mt-1">Sẵn sàng</span>
+                            </div>
+                        </div>
+                    }
+                </div>
 
-                                    <div class="bg-light p-2 rounded-2 small text-secondary">
-                                        <i class="bi bi-tools me-1"></i>@(string.IsNullOrEmpty(room.EquipmentNotes) ? "Thiết bị tiêu chuẩn" : room.EquipmentNotes)
-                                    </div>
-                                </div>
-                                <div class="card-footer bg-white border-0 pt-0 pb-3">
-                                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="openReportModalForRoom(@room.Id, '@room.RoomName')">
-                                        <i class="bi bi-flag me-1"></i> Báo hỏng tại phòng này
-                                    </button>
-                                </div>
+                <!-- TẦNG TRỆT -->
+                <div class="row g-2 align-items-center pt-2">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center">TRỆT</div>
+                    <div class="col-6 col-md-2">
+                        <div class="room-box staircase text-center">Cầu Thang</div>
+                    </div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 0).OrderBy(r => r.RoomName))
+                    {
+                        var isHall = r.RoomName.Contains("Sinh Hoạt");
+                        <div class="@(isHall ? "col-12 col-md-6" : "col-6 col-md-3")">
+                            <div class="room-box @(isHall ? "hall" : "")" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                <div class="fw-bold @(isHall ? "text-primary fs-5" : "text-dark")">@r.RoomName</div>
+                                <div class="small text-muted"><i class="bi bi-people me-1"></i>Sức chứa: <strong>@r.Capacity</strong> chỗ</div>
+                                <div class="small text-secondary mt-1">@r.EquipmentNotes</div>
                             </div>
                         </div>
                     }
@@ -109,9 +195,96 @@
             </div>
         </div>
     }
+
+    <!-- 2. KHU VỰC: NHÀ HÀI CỐT & 3. KHU HOA VIÊN / HTB -->
+    <div class="row g-4">
+        <!-- NHÀ HÀI CỐT -->
+        @{
+            var nhcZone = Model.FirstOrDefault(z => z.ZoneCode == "NHC");
+        }
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-secondary text-white py-3 fw-bold">
+                    <i class="bi bi-geo-alt-fill me-2"></i>@(nhcZone?.ZoneName ?? "Khu Nhà Hài Cốt")
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <!-- Khối Nhà Hài Cốt lớn ở trên -->
+                    <div class="p-4 mb-4 text-center rounded-3 bg-white border border-secondary border-2 fw-bold text-secondary shadow-xs">
+                        <i class="bi bi-building me-2"></i>KHU VỰC NHÀ HÀI CỐT
+                    </div>
+                    <!-- 2 phòng học cánh trước -->
+                    <div class="row g-3">
+                        @if (nhcZone != null)
+                        {
+                            @foreach (var r in nhcZone.Rooms.OrderBy(r => r.RoomName))
+                            {
+                                <div class="col-6">
+                                    <div class="room-box" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                        <div class="fw-bold text-dark">@r.RoomName</div>
+                                        <div class="small text-muted"><i class="bi bi-people me-1"></i>@r.Capacity chỗ</div>
+                                        <span class="badge bg-success-subtle text-success mt-1">Sẵn sàng</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHU HOA VIÊN / HTB -->
+        @{
+            var htbZone = Model.FirstOrDefault(z => z.ZoneCode == "HTB");
+        }
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-primary text-white py-3 fw-bold">
+                    <i class="bi bi-tree-fill me-2"></i>@(htbZone?.ZoneName ?? "Khu Hoa Viên & Hội Trường B")
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <!-- Dãy 3 phòng học ở trên -->
+                    <div class="row g-2 mb-3">
+                        @if (htbZone != null)
+                        {
+                            @foreach (var r in htbZone.Rooms.Where(r => !r.RoomName.Contains("Hội Trường")).OrderBy(r => r.RoomName))
+                            {
+                                <div class="col-4">
+                                    <div class="room-box text-center" onclick="openReportModalForRoom(@r.Id, '@r.RoomName')">
+                                        <div class="fw-bold text-dark">@r.RoomName</div>
+                                        <div class="small text-muted">@r.Capacity chỗ</div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <!-- Dải Đường Đi ở giữa -->
+                    <div class="py-2 mb-3 text-center rounded-2 bg-secondary-subtle text-secondary fw-semibold small border border-dashed">
+                        <i class="bi bi-arrow-left-right me-1"></i> ĐƯỜNG ĐI HOA VIÊN
+                    </div>
+
+                    <!-- Hội trường B ở dưới -->
+                    @if (htbZone != null)
+                    {
+                        var htb = htbZone.Rooms.FirstOrDefault(r => r.RoomName.Contains("Hội Trường"));
+                        if (htb != null)
+                        {
+                            <div class="room-box hall p-3 text-center" onclick="openReportModalForRoom(@htb.Id, '@htb.RoomName')">
+                                <div class="fw-bold text-primary fs-5">@htb.RoomName</div>
+                                <div class="small text-muted"><i class="bi bi-people me-1"></i>Sức chứa: <strong>@htb.Capacity</strong> chỗ ngồi</div>
+                                <div class="small text-secondary">@htb.EquipmentNotes</div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- MODAL BÁO CÁO SỰ CỐ / HƯ HỎNG THIẾT BỊ (TASK-905) -->
+<!-- ========================================== -->
+<!-- MODAL 1: BÁO CÁO SỰ CỐ THIẾT BỊ (TASK-905) -->
+<!-- ========================================== -->
 <div class="modal fade" id="reportIncidentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -130,7 +303,7 @@
                             <optgroup label="@z.ZoneName">
                                 @foreach (var r in z.Rooms)
                                 {
-                                    <option value="@r.Id">@r.RoomName (Tầng @r.FloorNumber)</option>
+                                    <option value="@r.Id">@r.RoomName (@z.ZoneCode)</option>
                                 }
                             </optgroup>
                         }
@@ -140,11 +313,11 @@
                     <div class="col-6">
                         <label class="form-label small fw-bold">Loại thiết bị <span class="text-danger">*</span></label>
                         <select id="modalDeviceType" class="form-select">
-                            <option value="Đèn">Bóng Đèn / Chiếu sáng</option>
-                            <option value="Quạt">Quạt trần / Quạt tường</option>
-                            <option value="Máy chiếu">Máy chiếu / Màn chiếu</option>
-                            <option value="Micro/Loa">Âm thanh / Micro / Loa</option>
-                            <option value="Bàn ghế">Bàn ghế học sinh</option>
+                            <option value="Bóng Đèn / Chiếu sáng">Bóng Đèn / Chiếu sáng</option>
+                            <option value="Quạt trần / Quạt tường">Quạt trần / Quạt tường</option>
+                            <option value="Máy chiếu / Màn chiếu">Máy chiếu / Màn chiếu</option>
+                            <option value="Âm thanh / Micro / Loa">Âm thanh / Micro / Loa</option>
+                            <option value="Bàn ghế học sinh">Bàn ghế học sinh</option>
                             <option value="Khác">Khác</option>
                         </select>
                     </div>
@@ -153,16 +326,101 @@
                         <select id="modalSeverity" class="form-select">
                             <option value="NORMAL">Bình thường</option>
                             <option value="HIGH">Cần gấp (ảnh hưởng tiết học)</option>
-                            <option value="CRITICAL">Khẩn cấp (nguy hiểm điện)</option>
+                            <option value="CRITICAL">Khẩn cấp</option>
                         </select>
                     </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Mô tả sự cố <span class="text-danger">*</span></label>
-                    <textarea id="modalIncidentDesc" class="form-control" rows="3" placeholder="Ví dụ: Đèn số 2 chớp tắt, 3 quạt trần không quay..."></textarea>
+                    <textarea id="modalIncidentDesc" class="form-control" rows="3" placeholder="Ví dụ: Đèn số 2 chớp tắt, quạt trần quay chậm..."></textarea>
                 </div>
                 <button type="button" class="btn btn-danger w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitIncidentReport()">
                     <i class="bi bi-send me-1"></i> Gửi Báo Cáo Sự Cố
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL 2: THÊM KHU VỰC / DÃY NHÀ MỚI        -->
+<!-- ========================================== -->
+<div class="modal fade" id="createZoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-folder-plus me-2"></i>Thêm Khu Vực / Dãy Nhà Mới</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Tên khu vực <span class="text-danger">*</span></label>
+                    <input type="text" id="inputZoneName" class="form-control" placeholder="Ví dụ: Nhà Mục Vụ Mới, Khu Sinh Hoạt..." />
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Mã khu (viết tắt)</label>
+                        <input type="text" id="inputZoneCode" class="form-control" placeholder="VD: NMV, KHV..." />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Thứ tự hiển thị</label>
+                        <input type="number" id="inputZoneOrder" class="form-control" value="1" />
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Mô tả khu vực</label>
+                    <input type="text" id="inputZoneDesc" class="form-control" placeholder="Mô tả đặc điểm..." />
+                </div>
+                <button type="button" class="btn btn-success w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitCreateZone()">
+                    Lưu Khu Vực
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================== -->
+<!-- MODAL 3: THÊM PHÒNG HỌC MỚI                -->
+<!-- ========================================== -->
+<div class="modal fade" id="createRoomModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-plus-circle me-2"></i>Thêm Phòng Học Mới</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Khu vực / Dãy nhà <span class="text-danger">*</span></label>
+                    <select id="inputRoomZoneId" class="form-select">
+                        @foreach (var z in Model)
+                        {
+                            <option value="@z.Id">@z.ZoneName (@z.ZoneCode)</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-8">
+                        <label class="form-label small fw-bold">Tên phòng học <span class="text-danger">*</span></label>
+                        <input type="text" id="inputRoomName" class="form-control" placeholder="VD: Phòng 103, Hội trường..." />
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small fw-bold">Tầng số</label>
+                        <input type="number" id="inputRoomFloor" class="form-control" value="1" />
+                    </div>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Sức chứa (học sinh)</label>
+                        <input type="number" id="inputRoomCapacity" class="form-control" value="40" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-bold">Ghi chú thiết bị</label>
+                        <input type="text" id="inputRoomEquipment" class="form-control" placeholder="VD: Quạt trần, máy chiếu..." />
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitCreateRoom()">
+                    Lưu Phòng Học
                 </button>
             </div>
         </div>
@@ -174,10 +432,10 @@
         function openReportModalForRoom(roomId, roomName) {
             const select = document.getElementById('modalRoomLocationId');
             if (select) select.value = roomId;
-            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('reportIncidentModal'));
-            modal.show();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('reportIncidentModal')).show();
         }
 
+        // 1. Gửi Báo Cáo Sự Cố (Đã fix lỗi 400 Bad Request)
         async function submitIncidentReport() {
             const locationId = document.getElementById('modalRoomLocationId').value;
             const deviceType = document.getElementById('modalDeviceType').value;
@@ -185,23 +443,75 @@
             const description = document.getElementById('modalIncidentDesc').value.trim();
 
             if (!description) {
-                alert('Vui lòng mô tả chi tiết sự cố!');
+                alert('Vui lòng nhập mô tả sự cố hư hỏng!');
                 return;
             }
 
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
             const formData = new FormData();
             formData.append('locationId', locationId);
             formData.append('deviceType', deviceType);
             formData.append('severity', severity);
             formData.append('description', description);
 
-            const res = await fetch('/Facilities/ReportIncident', {
+            try {
+                const res = await fetch('/Facilities/ReportIncident', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        // 2. Xác nhận khắc phục sự cố
+        async function resolveIncident(reportId) {
+            if (!confirm('Xác nhận sự cố tại phòng này đã được sửa chữa khắc phục?')) return;
+            const notes = prompt('Ghi chú sửa chữa (tùy chọn):', 'Đã thay mới linh kiện');
+
+            const formData = new FormData();
+            formData.append('reportId', reportId);
+            formData.append('notes', notes || 'Đã khắc phục hoàn tất');
+
+            const res = await fetch('/Facilities/ResolveIncident', {
                 method: 'POST',
-                headers: { 'RequestVerificationToken': token },
                 body: formData
             });
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            }
+        }
 
+        // 3. Thêm Khu Vực Mới
+        async function submitCreateZone() {
+            const zoneName = document.getElementById('inputZoneName').value.trim();
+            const zoneCode = document.getElementById('inputZoneCode').value.trim();
+            const displayOrder = document.getElementById('inputZoneOrder').value;
+            const description = document.getElementById('inputZoneDesc').value.trim();
+
+            if (!zoneName) {
+                alert('Vui lòng nhập tên khu vực!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('zoneName', zoneName);
+            formData.append('zoneCode', zoneCode);
+            formData.append('displayOrder', displayOrder);
+            formData.append('description', description);
+
+            const res = await fetch('/Facilities/CreateZone', {
+                method: 'POST',
+                body: formData
+            });
             const data = await res.json();
             if (data.success) {
                 alert(data.message);
@@ -211,23 +521,36 @@
             }
         }
 
-        async function resolveIncident(reportId) {
-            if (!confirm('Xác nhận sự cố này đã được sửa chữa khắc phục?')) return;
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-            const formData = new FormData();
-            formData.append('reportId', reportId);
-            formData.append('notes', 'Đã khắc phục hoàn tất');
+        // 4. Thêm Phòng Học Mới
+        async function submitCreateRoom() {
+            const buildingZoneId = document.getElementById('inputRoomZoneId').value;
+            const roomName = document.getElementById('inputRoomName').value.trim();
+            const floorNumber = document.getElementById('inputRoomFloor').value;
+            const capacity = document.getElementById('inputRoomCapacity').value;
+            const equipmentNotes = document.getElementById('inputRoomEquipment').value.trim();
 
-            const res = await fetch('/Facilities/ResolveIncident', {
+            if (!roomName) {
+                alert('Vui lòng nhập tên phòng học!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('buildingZoneId', buildingZoneId);
+            formData.append('roomName', roomName);
+            formData.append('floorNumber', floorNumber);
+            formData.append('capacity', capacity);
+            formData.append('equipmentNotes', equipmentNotes);
+
+            const res = await fetch('/Facilities/CreateRoom', {
                 method: 'POST',
-                headers: { 'RequestVerificationToken': token },
                 body: formData
             });
-
             const data = await res.json();
             if (data.success) {
                 alert(data.message);
                 location.reload();
+            } else {
+                alert('Lỗi: ' + data.message);
             }
         }
     </script>
