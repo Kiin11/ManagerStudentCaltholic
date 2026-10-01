@@ -96,13 +96,25 @@
 
 <!-- Âm thanh phản hồi (Audio Synthesizer bằng Web Audio API) -->
 @section Scripts {
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- 1. Nạp thư viện html5-qrcode trước -->
+    <script src="~/lib/html5-qrcode/html5-qrcode.min.js"></script>
     <script>
         let html5QrCode = null;
         let isCameraRunning = false;
         let isProcessing = false;
         let lastScannedCode = "";
         let lastScannedTime = 0;
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // Kiểm tra chắc chắn thư viện đã sẵn sàng trước khi gọi
+            if (typeof Html5Qrcode === "undefined") {
+                console.error("Thư viện Html5Qrcode chưa được nạp thành công! Hãy kiểm tra lại đường dẫn file hoặc quyền CSP.");
+                return;
+            }
+
+            // Tự động khởi động camera
+            startCamera();
+        });
 
         // Phát âm thanh Beep qua Web Audio API (không phụ thuộc file mp3 ngoài)
         function playBeep(isSuccess = true, isWarning = false) {
@@ -136,29 +148,61 @@
 
         // Khởi động Camera quét QR
         function startCamera() {
-            html5QrCode = new Html5Qrcode("reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            if (typeof Html5Qrcode === "undefined") {
+                showCameraError("Thư viện quét mã chưa sẵn sàng.");
+                return;
+            }
 
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText, decodedResult) => {
-                    handleScannedCode(decodedText);
-                },
-                (errorMessage) => {
-                    // Quét từng frame không có mã -> bỏ qua
+            html5QrCode = new Html5Qrcode("reader");
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
+
+            Html5Qrcode.getCameras().then(cameras => {
+                if (cameras && cameras.length > 0) {
+                    const backCamera = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear'));
+                    const cameraId = backCamera ? backCamera.id : cameras[0].id;
+
+                    html5QrCode.start(
+                        cameraId,
+                        config,
+                        (decodedText) => handleScannedCode(decodedText),
+                        (err) => { /* bỏ qua các frame trống */ }
+                    ).then(() => {
+                        isCameraRunning = true;
+                        const btn = document.getElementById("btnToggleCam");
+                        if (btn) btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i> Tắt Camera';
+                    }).catch(err => showCameraError(err));
+                } else {
+                    showCameraError("Không tìm thấy thiết bị camera trên máy!");
                 }
-            ).then(() => {
-                isCameraRunning = true;
-                document.getElementById("btnToggleCam").innerHTML = '<i class="bi bi-stop-circle me-1"></i> Tắt Camera';
             }).catch(err => {
-                console.error("Không thể mở Camera:", err);
-                document.getElementById("reader").innerHTML = `
-                    <div class="p-4 text-white text-center">
-                        <i class="bi bi-camera-video-off fs-2 d-block mb-2 text-warning"></i>
-                        Không thể kết nối Camera. Vui lòng cấp quyền truy cập thiết bị hoặc sử dụng ô quét bằng cổng USB/nhập tay.
-                    </div>`;
+                // Thử fallback sang camera mặc định
+                html5QrCode.start(
+                    { facingMode: "user" },
+                    config,
+                    (decodedText) => handleScannedCode(decodedText),
+                    (err) => {}
+                ).then(() => {
+                    isCameraRunning = true;
+                    const btn = document.getElementById("btnToggleCam");
+                    if (btn) btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i> Tắt Camera';
+                }).catch(fallbackErr => showCameraError(fallbackErr));
             });
+        }
+
+        function showCameraError(err) {
+            console.error("Lỗi Camera:", err);
+            isCameraRunning = false;
+            document.getElementById("btnToggleCam").innerHTML = '<i class="bi bi-play-circle me-1"></i> Bật Camera';
+            document.getElementById("reader").innerHTML = `
+                <div class="p-4 text-white text-center">
+                    <i class="bi bi-camera-video-off fs-2 d-block mb-2 text-warning"></i>
+                    Không thể kích hoạt Camera (${err?.message || err}).<br/>
+                    Vui lòng kiểm tra quyền truy cập thiết bị hoặc sử dụng ô quét mã thủ công bên dưới.
+                </div>`;
         }
 
         function stopCamera() {
