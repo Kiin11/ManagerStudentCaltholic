@@ -41,9 +41,25 @@ self.addEventListener('activate', (event) => {
 
 // 3. Xử lý bắt Fetch: Network First, fallback sang Cache khi mất sóng
 self.addEventListener('fetch', (event) => {
-    // Chỉ xử lý các yêu cầu GET, không can thiệp POST (như SaveBatch, ScanCheckIn)
+    // 1. Chỉ xử lý các yêu cầu GET, không can thiệp POST (như SaveBatch, ScanCheckIn)
     if (event.request.method !== 'GET') return;
 
+    const url = event.request.url;
+
+    // 2. KHÔNG CAN THIỆP vào các file thư viện JS/CSS, API, Chrome Extension, hoặc camera script
+    // Khi gặp các đường dẫn này, return ngay để trình duyệt fetch trực tiếp từ Server/CDN
+    if (
+        url.includes('/lib/') ||
+        url.includes('html5-qrcode') ||
+        url.includes('/api/') ||
+        url.includes('chrome-extension:') ||
+        url.includes('/browserLink') ||
+        url.includes('aspnetcore-browser-refresh')
+    ) {
+        return; // Bỏ qua, để Network tự tải
+    }
+
+    // 3. Các tài nguyên tĩnh và trang HTML thông thường xử lý qua Cache
     event.respondWith(
         fetch(event.request)
             .then((networkResponse) => {
@@ -62,7 +78,7 @@ self.addEventListener('fetch', (event) => {
                 if (cachedResponse) {
                     return cachedResponse;
                 }
-                // Nếu trang con chưa cache, đưa về trang chủ offline
+                // Nếu là chuyển trang HTML (navigate) mà chưa cache, đưa về trang chủ offline
                 if (event.request.mode === 'navigate') {
                     return caches.match('/');
                 }

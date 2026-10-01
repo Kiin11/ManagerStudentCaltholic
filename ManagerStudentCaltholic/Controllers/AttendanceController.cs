@@ -236,7 +236,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ScanCheckIn([FromBody] QrScanRequestDto request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.StudentCode))
