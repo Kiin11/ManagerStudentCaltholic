@@ -281,27 +281,50 @@ namespace ManagerStudentCaltholic.Controllers
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username.ToLower());
             if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
 
-            // Lấy danh sách lớp được phân công (tương ứng với TeacherName hoặc FullName)
-            var assignedClasses = await _context.ClassTeachers
+            // Lấy tất cả phân công giảng dạy của tài khoản này
+            var allAssignments = await _context.ClassTeachers
                 .Include(ct => ct.ClassRoom)
                     .ThenInclude(c => c.AcademicYear)
                 .Include(ct => ct.ClassRoom)
                     .ThenInclude(c => c.Enrollments)
-                .Where(ct => ct.TeacherName.ToLower() == user.Username.ToLower() ||
-                             ct.TeacherName.ToLower() == user.FirstName.ToLower() + " " + user.LastName.ToLower() ||
+                .Where(ct => ct.UserId == user.Id ||
+                             ct.TeacherName.ToLower() == user.Username.ToLower() ||
+                             ct.TeacherName.ToLower() == $"{user.FirstName} {user.LastName}".ToLower() ||
                              (!string.IsNullOrEmpty(user.PhoneNumber) && ct.PhoneNumber == user.PhoneNumber))
                 .OrderByDescending(ct => ct.ClassRoom.AcademicYear.StartDate)
+                .ThenBy(ct => ct.ClassRoom.Name)
                 .Select(ct => new AssignedClassItemDto
                 {
                     ClassId = ct.ClassRoomId,
                     ClassName = ct.ClassRoom.Name,
                     GradeLevel = ct.ClassRoom.GradeLevel,
+                    AcademicYearId = ct.ClassRoom.AcademicYearId,
                     AcademicYearName = ct.ClassRoom.AcademicYear.Name,
-                    RoleInClass = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" : (ct.RoleInClass == "MEMBER" ? "Đồng hành" : "Dự bị"),
+                    IsCurrentYear = ct.ClassRoom.AcademicYear.IsCurrent,
+                    RoleInClass = ct.RoleInClass,
+                    RoleName = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" :
+                               ct.RoleInClass == "MEMBER" ? "Đồng hành" : "Dự bị / Trợ tá",
                     RoomNumber = ct.ClassRoom.RoomName,
-                    TotalStudents = ct.ClassRoom.Enrollments.Count
+                    TotalStudents = ct.ClassRoom.Enrollments.Count,
+                    AssignedAt = ct.AssignedAt
                 })
+                .AsNoTracking()
                 .ToListAsync();
+
+            // 1. Phân tách lớp đang dạy trong niên khóa hiện tại
+            var currentClasses = allAssignments.Where(c => c.IsCurrentYear).ToList();
+
+            // 2. Gom nhóm lịch sử các niên khóa cũ
+            var pastHistory = allAssignments
+                .Where(c => !c.IsCurrentYear)
+                .GroupBy(c => new { c.AcademicYearId, c.AcademicYearName })
+                .Select(g => new TeachingHistoryByYearDto
+                {
+                    AcademicYearId = g.Key.AcademicYearId,
+                    AcademicYearName = g.Key.AcademicYearName,
+                    Classes = g.ToList()
+                })
+                .ToList();
 
             var viewModel = new UserProfileViewModel
             {
@@ -316,8 +339,10 @@ namespace ManagerStudentCaltholic.Controllers
                 Address = user.Address,
                 AvatarUrl = user.AvatarUrl,
                 Role = user.Role,
+                ManagedGradeLevel = user.ManagedGradeLevel,
                 LastLoginAt = user.LastLoginAt,
-                AssignedClasses = assignedClasses
+                CurrentClasses = currentClasses,
+                TeachingHistory = pastHistory
             };
 
             return View(viewModel);
