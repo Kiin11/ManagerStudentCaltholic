@@ -301,59 +301,44 @@ namespace ManagerStudentCaltholic.Controllers
                 if (location == null)
                     return Json(new { success = false, message = "Không tìm thấy thông tin phòng học." });
 
-                // 1. Xác định Ca học của lớp mục tiêu:
-                // Khối Sáng: Khai Tâm, Rước Lễ
-                // Khối Chiều: Thêm Sức, Bao Đồng
+                // 1. Phân định ca học:
+                // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
+                // Khối Chiều: Bao Đồng, Dự Bị
                 bool isMorning = targetClass.GradeLevel == "Khai Tâm" || targetClass.GradeLevel == "Rước Lễ" || targetClass.GradeLevel == "Thêm Sức";
                 string targetShift = isMorning ? "MORNING" : "AFTERNOON";
                 string targetShiftName = isMorning ? "Ca Sáng (09:00)" : "Ca Chiều (15:00)";
 
-                // 2. Tìm các lớp khác đang dùng phòng này trong cùng Niên khóa
-                var existingClassesInRoom = await _context.Classes
-                    .Where(c => c.AcademicYearId == targetClass.AcademicYearId &&
-                                c.ClassRoomLocationId == locationId &&
-                                c.Id != targetClass.Id)
-                    .ToListAsync();
+                // 2. Kiểm tra xem phòng này đã có lớp nào CÙNG CA học chưa
+                var conflictingClass = await _context.Classes
+                    .FirstOrDefaultAsync(c => c.AcademicYearId == targetClass.AcademicYearId &&
+                                              c.ClassRoomLocationId == locationId &&
+                                              c.Id != targetClass.Id &&
+                                              (isMorning
+                                                  ? (c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức")
+                                                  : (c.GradeLevel == "Bao Đồng" || c.GradeLevel == "Dự Bị")));
 
-                // 3. Kiểm tra xung đột ca:
-                foreach (var c in existingClassesInRoom)
+                if (conflictingClass != null)
                 {
-                    bool otherIsMorning = c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức";
-                    string otherShift = otherIsMorning ? "MORNING" : "AFTERNOON";
-
-                    if (otherShift == targetShift)
+                    return Json(new
                     {
-                        return Json(new
-                        {
-                            success = false,
-                            message = $"Phòng '{location.RoomName}' đã được xếp cho lớp '{c.Name}' ({c.GradeLevel}) vào {targetShiftName}. Một phòng chỉ được xếp tối đa 1 lớp Ca Sáng và 1 lớp Ca Chiều!"
-                        });
-                    }
+                        success = false,
+                        message = $"Phòng '{location.RoomName}' đã được gán cho lớp '{conflictingClass.Name}' ({conflictingClass.GradeLevel}) trong {targetShiftName}. Mỗi phòng chỉ nhận tối đa 1 lớp Sáng và 1 lớp Chiều!"
+                    });
                 }
 
-                // 4. Kiểm tra cảnh báo quá tải (Capacity Check)
-                int enrolledCount = targetClass.Enrollments.Count;
-                string warningMessage = "";
-                if (enrolledCount > location.Capacity)
-                {
-                    warningMessage = $" (Lưu ý: Sĩ số lớp {enrolledCount} em vượt sức chứa thiết kế {location.Capacity} chỗ của phòng!)";
-                }
-
-                // 5. Cập nhật phòng cho lớp
+                // 3. Gán phòng và cập nhật Shift cho lớp
                 targetClass.ClassRoomLocationId = locationId;
-                targetClass.RoomName = location.RoomName; // Đồng bộ trường hiển thị cũ
+                targetClass.RoomName = location.RoomName;
+                targetClass.Shift = targetShift;
 
-                // Đồng bộ bản ghi ClassSchedules
-                var schedule = await _context.ClassSchedules
-                    .FirstOrDefaultAsync(s => s.ClassRoomId == targetClass.Id);
-
+                // 4. Đồng bộ vào ClassSchedules
+                var schedule = await _context.ClassSchedules.FirstOrDefaultAsync(s => s.ClassRoomId == targetClass.Id);
                 var startTime = isMorning ? new TimeSpan(9, 0, 0) : new TimeSpan(15, 0, 0);
                 var endTime = isMorning ? new TimeSpan(10, 30, 0) : new TimeSpan(16, 30, 0);
 
                 if (schedule != null)
                 {
                     schedule.ClassRoomLocationId = locationId;
-                    schedule.DayOfWeek = DayOfWeek.Sunday;
                     schedule.StartTime = startTime;
                     schedule.EndTime = endTime;
                     schedule.Shift = targetShift;
@@ -373,6 +358,11 @@ namespace ManagerStudentCaltholic.Controllers
 
                 await _context.SaveChangesAsync();
 
+                int enrolledCount = targetClass.Enrollments.Count;
+                string warningMessage = enrolledCount > location.Capacity
+                    ? $" (Lưu ý: Sĩ số {enrolledCount} em vượt sức chứa {location.Capacity} chỗ của phòng!)"
+                    : "";
+
                 return Json(new
                 {
                     success = true,
@@ -381,7 +371,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi xử lý: " + (ex.InnerException?.Message ?? ex.Message) });
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                return Json(new { success = false, message = "Lỗi xử lý: " + inner });
             }
         }
 
