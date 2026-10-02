@@ -259,8 +259,18 @@
                         </a>
                     </li>
                 }
+                <li class="nav-item">
+                    <a class="nav-link" asp-controller="Facilities" asp-action="Index">
+                        <i class="bi bi-building-gear me-2"></i> Cơ Sở Vật Chất
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "LessonPlans" ? "active" : "")"
+                       asp-controller="LessonPlans" asp-action="Index">
+                        <i class="bi bi-calendar3-week-fill me-2 text-info"></i> Kế Hoạch Bài Giảng
+                    </a>
+                </li>
             </ul>
-
             <div class="sidebar-section-title">Chuyên cần & Check-in</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
@@ -286,15 +296,23 @@
                 </li>
             </ul>
 
-            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.SpiritualDirector))
             {
                 <div class="sidebar-section-title">Quản trị hệ thống</div>
                 <ul class="nav flex-column">
+                    @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Users" ? "active" : "")"
+                                asp-controller="Users" asp-action="Index">
+                                <i class="bi bi-person-gear"></i>
+                                <span class="sidebar-text">Tài Khoản & Quyền</span>
+                            </a>
+                        </li>
+                    }
                     <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Users" ? "active" : "")"
-                           asp-controller="Users" asp-action="Index">
-                            <i class="bi bi-person-gear"></i>
-                            <span class="sidebar-text">Tài Khoản & Quyền</span>
+                        <a class="nav-link text-warning" asp-controller="Governance" asp-action="Index">
+                            <i class="bi bi-person-badge-fill me-2"></i> Bàn Giao & Nhiệm Kỳ
                         </a>
                     </li>
                 </ul>
@@ -302,7 +320,7 @@
         </div>
 
         <div class="p-3 border-top border-secondary border-opacity-25 small text-center text-muted">
-            <span class="sidebar-text">&copy; 2026 Xứ Đoàn Giáo Lý</span>
+            <span class="sidebar-text">&copy; 2026 Gia Đình Giáo Lý Giáo Xứ Phú Trung</span>
         </div>
     </aside>
 
@@ -350,7 +368,9 @@
                                 <span class="badge @(role == UserRole.Admin ? "bg-danger" :
                                                                                            role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                                            role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-2 py-0 mt-1" style="font-size: 0.65rem;">
-                                @role
+                                    @(role == UserRole.Admin ? "Quản trị viên" : role == UserRole.SpiritualDirector ? "Cha" :
+                                                                    role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
+                                                                    role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
                             </span>
                         </div>
                         <i class="bi bi-chevron-down text-muted small ms-1"></i>

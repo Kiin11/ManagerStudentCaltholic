@@ -26,5 +26,7 @@ namespace ManagerStudentCaltholic.Models.Entities
         public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>(); 
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
+        public int? ClassRoomLocationId { get; set; }
+        public string Shift { get; set; } = string.Empty; // Buổi học: Sáng, Chiều
     }
 }

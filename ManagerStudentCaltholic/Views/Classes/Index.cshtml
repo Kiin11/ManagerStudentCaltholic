@@ -198,7 +198,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <form asp-controller="Classes" asp-action="Create" method="post" class="modal-content border-0 shadow">
             @Html.AntiForgeryToken()
-            <input type="hidden" name="AcademicYearId" value="@selectedYearId" />
+            <input type="hidden" id="modalAcademicYearId" name="AcademicYearId" value="@selectedYearId" />
 
             <div class="modal-header bg-light">
                 <h5 class="modal-title fw-bold text-primary" id="createClassModalLabel">
@@ -214,7 +214,7 @@
 
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Khối / Ngành <span class="text-danger">*</span></label>
-                    <select name="GradeLevel" class="form-select" required>
+                    <select id="modalGradeLevelSelect" name="GradeLevel" class="form-select" required onchange="loadAvailableRoomsForModal()">
                         <option value="Khai Tâm">Khối Khai Tâm (Học sáng 9h00)</option>
                         <option value="Rước Lễ">Khối Rước Lễ (Học sáng 9h00)</option>
                         <option value="Thêm Sức">Khối Thêm Sức (Học sáng 9h00)</option>
@@ -222,9 +222,18 @@
                     </select>
                 </div>
 
+                <!-- THAY INPUT BẰNG DROPDOWNLIST PHÒNG CÒN TRỐNG THEO CA -->
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Phòng Học / Địa Điểm</label>
-                    <input type="text" name="RoomName" class="form-control" placeholder="Ví dụ: Phòng 101, Hội trường B..." maxlength="20" />
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label fw-semibold mb-0">Phòng Học</label>
+                        <span id="shiftBadge" class="badge bg-warning-subtle text-dark border">Ca Sáng</span>
+                    </div>
+                    <select id="modalRoomSelect" name="RoomName" class="form-select">
+                        <option value="">-- Đang nạp danh sách phòng trống... --</option>
+                    </select>
+                    <div class="form-text small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>Chỉ hiển thị các phòng <strong>chưa có lớp nào dùng trong ca này</strong>.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer bg-light">
@@ -450,5 +459,72 @@
                 alert("Lỗi kết nối máy chủ: " + e.message);
             }
         }
+                // Gọi API lấy danh sách phòng còn trống khi thay đổi Khối/Ngành hoặc mở modal
+        async function loadAvailableRoomsForModal() {
+            const yearId = document.getElementById('modalAcademicYearId')?.value || @selectedYearId;
+            const gradeLevel = document.getElementById('modalGradeLevelSelect')?.value || 'Khai Tâm';
+            const roomSelect = document.getElementById('modalRoomSelect');
+            const shiftBadge = document.getElementById('shiftBadge');
+
+            if (!roomSelect) return;
+
+            roomSelect.innerHTML = '<option value="">-- Đang nạp phòng trống... --</option>';
+
+            try {
+                const res = await fetch(`/Classes/GetAvailableRooms?academicYearId=${yearId}&gradeLevel=${encodeURIComponent(gradeLevel)}`);
+                const json = await res.json();
+
+                if (json.success) {
+                    if (shiftBadge) shiftBadge.innerText = json.shiftName;
+
+                    roomSelect.innerHTML = '<option value="">-- Chưa xếp phòng (Để trống) --</option>';
+
+                    if (!json.data || json.data.length === 0) {
+                        const opt = document.createElement('option');
+                        opt.value = "";
+                        opt.text = `(Hết phòng trống cho ${json.shiftName})`;
+                        opt.disabled = true;
+                        roomSelect.appendChild(opt);
+                        return;
+                    }
+
+                    // Gom nhóm theo Khu vực (ZoneName)
+                    const grouped = {};
+                    json.data.forEach(r => {
+                        if (!grouped[r.zoneName]) grouped[r.zoneName] = [];
+                        grouped[r.zoneName].push(r);
+                    });
+
+                    for (const zone in grouped) {
+                        const optgroup = document.createElement('optgroup');
+                        optgroup.label = zone;
+
+                        grouped[zone].forEach(r => {
+                            const opt = document.createElement('option');
+                            opt.value = r.roomName; // Lưu tên phòng vào RoomNumber
+                            opt.setAttribute('data-id', r.id);
+                            opt.text = `${r.roomName} (Tầng ${r.floorNumber} - Sức chứa: ${r.capacity} chỗ)`;
+                            optgroup.appendChild(opt);
+                        });
+
+                        roomSelect.appendChild(optgroup);
+                    }
+                } else {
+                    roomSelect.innerHTML = `<option value="">Lỗi: ${json.message}</option>`;
+                }
+            } catch (err) {
+                roomSelect.innerHTML = '<option value="">Không thể tải danh sách phòng</option>';
+            }
+        }
+
+        // Tự động nạp danh sách phòng trống ngay khi modal mở ra
+        document.addEventListener('DOMContentLoaded', function () {
+            const createClassModal = document.getElementById('createClassModal');
+            if (createClassModal) {
+                createClassModal.addEventListener('show.bs.modal', function () {
+                    loadAvailableRoomsForModal();
+                });
+            }
+        });
     </script>
 }

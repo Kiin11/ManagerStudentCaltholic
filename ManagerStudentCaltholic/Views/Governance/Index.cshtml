@@ -1,0 +1,356 @@
+﻿@using ManagerStudentCaltholic.Models.Entities
+@{
+    ViewData["Title"] = "Điều Hành Nhân Sự & Luân Chuyển Chức Vụ";
+    var years = ViewBag.AcademicYears as List<AcademicYear> ?? new List<AcademicYear>();
+    var selectedYearId = (int)(ViewBag.SelectedYearId ?? 0);
+    var branchAssignments = ViewBag.BranchHeadAssignments as List<BranchHeadAssignment> ?? new List<BranchHeadAssignment>();
+    var executiveMembers = ViewBag.ExecutiveMembers as List<User> ?? new List<User>();
+    var roleHistories = ViewBag.RoleHistories as List<UserRoleHistory> ?? new List<UserRoleHistory>();
+    var candidates = ViewBag.CandidateTeachers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+<!-- Token chống giả mạo request -->
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-person-badge-fill me-2"></i>Bàn Giao Nhiệm Kỳ & Luân Chuyển Chức Vụ
+            </h3>
+            <p class="text-muted mb-0">Dành riêng cho <strong>Admin, Cha Tuyên Úy và Ban Điều Hành</strong> luân chuyển Trưởng khối và bàn giao cán sự qua các niên khóa.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label class="small fw-bold text-secondary">Niên khóa:</label>
+            <select id="selectAcademicYear" class="form-select form-select-sm fw-semibold" onchange="window.location.href='/Governance?academicYearId=' + this.value">
+                @foreach (var y in years)
+                {
+                    <!option value="@y.Id" @(y.Id == selectedYearId ? "selected" : "")>@y.Name @(y.IsCurrent ? "(Hiện hành)" : "")</!option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <!-- 1. BẢNG PHÂN CÔNG TRƯỞNG KHỐI THEO NIÊN KHÓA (TASK-906) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-diagram-3-fill text-warning me-2"></i>Phân Công Trưởng Khối (Niên Khóa Được Chọn)
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th class="ps-4">Khối / Phân Đoàn</th>
+                            <th>Trưởng Khối Đương Nhiệm</th>
+                            <th>Người Bổ Nhiệm</th>
+                            <th>Ngày Gán</th>
+                            <th class="text-end pe-4">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var grade in new[] { "Khai Tâm", "Rước Lễ", "Thêm Sức", "Bao Đồng" })
+                        {
+                            var currentAssign = branchAssignments.FirstOrDefault(b => b.ManagedGradeLevel == grade);
+                            <tr>
+                                <td class="ps-4 fw-bold text-primary">@grade</td>
+                                <td>
+                                    @if (currentAssign != null && currentAssign.User != null)
+                                    {
+                                        <div class="fw-semibold">@currentAssign.User.ChristianName @currentAssign.User.FirstName @currentAssign.User.LastName</div>
+                                        <small class="text-muted">(@currentAssign.User.Username - @currentAssign.User.PhoneNumber)</small>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary">Chưa phân công</span>
+                                    }
+                                </td>
+                                <td>@(currentAssign?.AssignedByUser?.FirstName ?? "Hệ thống") @(currentAssign?.AssignedByUser?.LastName ?? "")</td>
+                                <td>@(currentAssign != null ? currentAssign.AssignedAt.ToString("dd/MM/yyyy HH:mm") : "-")</td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="openAssignGradeModal('@grade', @(currentAssign?.UserId ?? 0))">
+                                        <i class="bi bi-arrow-repeat me-1"></i> Luân chuyển / Gán mới
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. BẢNG NHIỆM KỲ BAN ĐIỀU HÀNH & AUDIT TRAIL (TASK-907) -->
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold mb-0 text-dark">
+                        <i class="bi bi-people-fill text-primary me-2"></i>Thành Viên Ban Điều Hành
+                    </h5>
+                    <!-- Đã sửa gọi hàm openPromoteModal() -->
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="openPromoteModal()">
+                        <i class="bi bi-person-plus me-1"></i> Bổ nhiệm BĐH mới
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        @if (executiveMembers.Any())
+                        {
+                            @foreach (var mem in executiveMembers)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center p-3">
+                                    <div>
+                                        <div class="fw-bold">@mem.ChristianName @mem.FirstName @mem.LastName</div>
+                                        <small class="text-muted">@mem.Username | @mem.PhoneNumber</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="demoteExecutiveMember(@mem.Id, '@mem.FirstName @mem.LastName')">
+                                        <i class="bi bi-box-arrow-right me-1"></i> Mãn nhiệm về GLV
+                                    </button>
+                                </li>
+                            }
+                        }
+                        else
+                        {
+                            <li class="list-group-item p-3 text-muted text-center">Chưa có thành viên Ban Điều Hành nào.</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-light py-3">
+                    <h5 class="fw-bold mb-0 text-dark">
+                        <i class="bi bi-clock-history text-secondary me-2"></i>Lịch Sử Thay Đổi Nhân Sự (Audit Log)
+                    </h5>
+                </div>
+                <div class="card-body p-0" style="max-height: 380px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush small">
+                        @if (roleHistories.Any())
+                        {
+                            @foreach (var h in roleHistories)
+                            {
+                                <li class="list-group-item p-3">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>@h.User?.FirstName @h.User?.LastName</strong>
+                                        <span class="text-muted">@h.ChangedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                                    </div>
+                                    <div>Chuyển từ <span class="badge bg-secondary">@h.OldRole</span> sang <span class="badge bg-success">@h.NewRole</span></div>
+                                    <div class="text-muted fst-italic">Lý do: @(h.Reason ?? "Bàn giao nhiệm kỳ") (bởi @(h.ChangedByUser?.FirstName ?? "Admin") @(h.ChangedByUser?.LastName ?? ""))</div>
+                                </li>
+                            }
+                        }
+                        else
+                        {
+                            <li class="list-group-item p-3 text-muted text-center">Chưa có nhật ký thay đổi vai trò.</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 1: GÁN / LUÂN CHUYỂN TRƯỞNG KHỐI -->
+<div class="modal fade" id="assignGradeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title fs-6 fw-bold">Luân Chuyển Trưởng Khối: <span id="modalGradeName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modalTargetGrade" />
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn Giáo Lý Viên đảm nhận vai trò Trưởng Khối <span class="text-danger">*</span></label>
+                    <select id="modalSelectTeacher" class="form-select">
+                        @foreach (var c in candidates)
+                        {
+                            <option value="@c.Id">@c.FullName (@c.Username) - Hiện là: @c.Role</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Ghi chú phân công / Quyết định bàn giao</label>
+                    <input type="text" id="modalAssignNotes" class="form-control" placeholder="Ví dụ: Bổ nhiệm theo quyết định Cha Xứ đầu năm..." />
+                </div>
+                <button type="button" class="btn btn-warning w-100 fw-bold py-2 rounded-pill" onclick="submitAssignBranchHead()">
+                    Xác Nhận Bổ Nhiệm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 2: BỔ NHIỆM THÀNH VIÊN BAN ĐIỀU HÀNH MỚI -->
+<div class="modal fade" id="promoteExecutiveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-person-check-fill me-2"></i>Bổ Nhiệm Vào Ban Điều Hành (ExecutiveBoard)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn Giáo Lý Viên muốn nâng quyền lên BĐH <span class="text-danger">*</span></label>
+                    <select id="modalSelectExecutiveUser" class="form-select">
+                        @foreach (var c in candidates)
+                        {
+                            <option value="@c.Id">@c.FullName (@c.Username)</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Lý do / Quyết định bổ nhiệm</label>
+                    <input type="text" id="modalExecutiveReason" class="form-control" value="Bổ nhiệm nhân sự Ban Điều Hành niên khóa mới" />
+                </div>
+                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitPromoteExecutive()">
+                    Xác Nhận Bổ Nhiệm BĐH
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Mở Modal Trưởng khối
+        function openAssignGradeModal(grade, currentUserId) {
+            document.getElementById('modalTargetGrade').value = grade;
+            document.getElementById('modalGradeName').innerText = grade;
+            const select = document.getElementById('modalSelectTeacher');
+            if (currentUserId && currentUserId > 0) select.value = currentUserId;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('assignGradeModal')).show();
+        }
+
+        // Mở Modal Bổ nhiệm BĐH mới (sửa lỗi openPromoteModal is not defined)
+        function openPromoteModal() {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('promoteExecutiveModal')).show();
+        }
+
+        // Gửi bổ nhiệm Trưởng khối (Sửa lỗi HTTP 400 Bad Request)
+        async function submitAssignBranchHead() {
+            const grade = document.getElementById('modalTargetGrade').value;
+            const newUserId = document.getElementById('modalSelectTeacher').value;
+            const notes = document.getElementById('modalAssignNotes').value.trim();
+            const yearId = document.getElementById('selectAcademicYear').value;
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            if (!newUserId) {
+                alert('Vui lòng chọn tài khoản Giáo lý viên!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('academicYearId', parseInt(yearId));
+            formData.append('gradeLevel', grade);
+            formData.append('newUserId', parseInt(newUserId));
+            formData.append('notes', notes);
+            formData.append('__RequestVerificationToken', token);
+
+            try {
+                const res = await fetch('/Governance/AssignBranchHead', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                });
+
+                const rawText = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(rawText);
+                } catch(e) {
+                    console.error("Server Response:", rawText);
+                    alert(`Lỗi máy chủ (HTTP ${res.status}): Không thể xử lý phản hồi.`);
+                    return;
+                }
+
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        // Gửi bổ nhiệm BĐH mới
+        async function submitPromoteExecutive() {
+            const userId = document.getElementById('modalSelectExecutiveUser').value;
+            const reason = document.getElementById('modalExecutiveReason').value.trim();
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            if (!userId) {
+                alert('Vui lòng chọn nhân sự!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('userId', parseInt(userId));
+            formData.append('targetRole', 'ExecutiveBoard');
+            formData.append('reason', reason);
+            formData.append('__RequestVerificationToken', token);
+
+            try {
+                const res = await fetch('/Governance/ChangeExecutiveRole', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        // Mãn nhiệm BĐH về GLV
+        async function demoteExecutiveMember(userId, name) {
+            if (!confirm(`Xác nhận cho thành viên ${name} mãn nhiệm BĐH và chuyển về vai trò Giáo Lý Viên (Teacher)? Toàn bộ phiên đăng nhập cũ sẽ bị thu hồi!`)) return;
+            const reason = prompt('Nhập lý do mãn nhiệm / bàn giao:', 'Hết nhiệm kỳ năm học');
+            if (!reason) return;
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('userId', parseInt(userId));
+            formData.append('targetRole', 'Teacher');
+            formData.append('reason', reason);
+            formData.append('__RequestVerificationToken', token);
+
+            const res = await fetch('/Governance/ChangeExecutiveRole', {
+                method: 'POST',
+                headers: {
+                    'RequestVerificationToken': token,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Lỗi: ' + data.message);
+            }
+        }
+    </script>
+}

@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Security;
@@ -72,6 +73,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<ITokenService, TokenService>();
             services.AddHostedService<LogRetentionBackgroundService>();
             services.AddSingleton<IAuthorizationHandler, GradeScopeHandler>();
+            services.AddScoped<ILessonPlanImportService, LessonPlanImportService>();
 
             return services;
         }

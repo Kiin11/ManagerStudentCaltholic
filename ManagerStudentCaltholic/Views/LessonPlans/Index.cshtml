@@ -1,0 +1,286 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.ClassLessonDocument>
+@{
+    ViewData["Title"] = "Kế Hoạch Năm Học & Tài Liệu Bài Giảng";
+    var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+    var selectedClassId = (int)ViewBag.SelectedClassId;
+    var currentYear = ViewBag.CurrentYear as ManagerStudentCaltholic.Models.Entities.AcademicYear;
+    var selectedClassName = (string)ViewBag.SelectedClassName;
+    var selectedGrade = (string)ViewBag.SelectedGrade;
+}
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-calendar3-week-fill me-2"></i>Kế Hoạch Năm Học & Tài Liệu Bài Giảng
+            </h3>
+            <p class="text-muted mb-0">
+                Niên khóa: <strong class="text-dark">@(currentYear?.Name ?? "2026-2027")</strong> |
+                Lớp: <strong class="text-primary">@selectedClassName</strong> (@selectedGrade)
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/Classes" class="btn btn-outline-secondary">
+                <i class="bi bi-mortarboard me-1"></i> Danh Sách Lớp
+            </a>
+            <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#uploadDocumentModal">
+                <i class="bi bi-cloud-arrow-up-fill me-1"></i> Tải Lên Kế Hoạch Mới
+            </button>
+        </div>
+    </div>
+
+    <!-- Thanh chọn Lớp -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold text-secondary mb-1">Chọn Lớp Cần Xem Kế Hoạch:</label>
+                    <select class="form-select fw-semibold" onchange="window.location.href='/LessonPlans?classRoomId=' + this.value">
+                        @foreach (var c in classes)
+                        {
+                            <!option value="@c.Id" @(c.Id == selectedClassId ? "selected" : "")>
+                            @c.Name (@c.GradeLevel) - Phòng: @(string.IsNullOrEmpty(c.RoomName) ? "Chưa xếp" : c.RoomName)
+                            </!option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-7 d-flex justify-content-md-end align-items-center pt-md-3">
+                    <span class="text-muted small">
+                        Tổng số tài liệu đã lưu: <strong class="text-dark fs-6">@(Model?.Count() ?? 0)</strong> file
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bảng danh sách tài liệu kế hoạch -->
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small text-uppercase">
+                    <tr>
+                        <th class="ps-3" style="width: 50px;">Định Dạng</th>
+                        <th>Tên File & Mô Tả Kế Hoạch</th>
+                        <th style="width: 140px;">Dung Lượng</th>
+                        <th style="width: 160px;">Người Tải Lên</th>
+                        <th style="width: 160px;">Ngày Đăng</th>
+                        <th class="text-end pe-3" style="width: 200px;">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var doc in Model)
+                        {
+                            var ext = System.IO.Path.GetExtension(doc.FileName).ToLowerInvariant();
+                            var iconClass = ext switch
+                            {
+                                ".pdf" => "bi-file-earmark-pdf-fill text-danger",
+                                ".xlsx" or ".xls" => "bi-file-earmark-excel-fill text-success",
+                                ".docx" or ".doc" => "bi-file-earmark-word-fill text-primary",
+                                _ => "bi-file-earmark-text-fill text-secondary"
+                            };
+
+                            var fileSizeKb = (doc.FileSize / 1024.0).ToString("0.##") + " KB";
+                            if (doc.FileSize >= 1024 * 1024)
+                            {
+                                fileSizeKb = (doc.FileSize / (1024.0 * 1024.0)).ToString("0.##") + " MB";
+                            }
+
+                            <tr>
+                                <td class="ps-3 text-center">
+                                    <i class="bi @iconClass fs-3"></i>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">@doc.FileName</div>
+                                    <small class="text-muted">@(string.IsNullOrEmpty(doc.Description) ? "Không có mô tả" : doc.Description)</small>
+                                </td>
+                                <td><span class="badge bg-light text-secondary border">@fileSizeKb</span></td>
+                                <td><i class="bi bi-person me-1"></i>@doc.UploadedBy</td>
+                                <td>@doc.UploadedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td class="text-end pe-3">
+                                    <div class="btn-group">
+                                        <!-- Xem Trực Tiếp -->
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                onclick="viewDocumentOnline('@doc.FilePath', '@doc.FileName', '@ext')">
+                                            <i class="bi bi-eye-fill me-1"></i> Xem
+                                        </button>
+                                        <!-- Tải Về -->
+                                        <a href="@doc.FilePath" download="@doc.FileName" class="btn btn-sm btn-outline-success">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                        <!-- Xóa -->
+                                        @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard") || User.IsInRole("BranchHead"))
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteDocument(@doc.Id, '@doc.FileName')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-folder-x fs-1 d-block mb-2 text-secondary"></i>
+                                Chưa có file kế hoạch năm học nào được tải lên cho lớp này.<br />
+                                Hãy bấm nút <strong>"Tải Lên Kế Hoạch Mới"</strong> để lưu trữ file PDF, Word hoặc Excel của lớp.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 1: TẢI LÊN FILE KẾ HOẠCH MỚI -->
+<div class="modal fade" id="uploadDocumentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold">
+                    <i class="bi bi-cloud-arrow-up-fill me-2"></i>Tải Lên File Kế Hoạch / Giáo Án
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Lớp học áp dụng:</label>
+                    <input type="text" class="form-control bg-light" value="@selectedClassName (@selectedGrade)" readonly />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn file (.pdf, .docx, .xlsx) <span class="text-danger">*</span></label>
+                    <input type="file" id="inputDocumentFile" class="form-control" accept=".pdf,.docx,.doc,.xlsx,.xls" required />
+                    <div class="form-text small text-muted">File sẽ được lưu trữ nguyên vẹn để bật lên xem trực tiếp bất cứ lúc nào.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Mô tả tóm tắt (Tùy chọn)</label>
+                    <input type="text" id="inputDocumentDesc" class="form-control" placeholder="Ví dụ: Kế hoạch năm học 2026-2027 bản duyệt của Cha Xứ..." />
+                </div>
+                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitUploadDocument()">
+                    <i class="bi bi-upload me-1"></i> Tải Lên & Lưu Trữ
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL 2: XEM TÀI LIỆU TRỰC TIẾP -->
+<div class="modal fade" id="viewerModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="height: 90vh;">
+        <div class="modal-content h-100 border-0 shadow">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold" id="viewerModalTitle">
+                    <i class="bi bi-file-earmark-text me-2"></i>Xem Tài Liệu
+                </h6>
+                <div class="d-flex gap-2">
+                    <a id="viewerDownloadBtn" href="#" download class="btn btn-sm btn-outline-light">
+                        <i class="bi bi-download me-1"></i> Tải Về
+                    </a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 bg-secondary-subtle d-flex justify-content-center align-items-center" style="height: calc(100% - 50px);">
+                <iframe id="pdfViewerFrame" class="w-100 h-100 d-none border-0" src=""></iframe>
+                <div id="officeNotice" class="text-center p-4 d-none bg-white rounded-3 shadow-sm" style="max-width: 500px;">
+                    <i class="bi bi-file-earmark-spreadsheet display-3 text-success d-block mb-3"></i>
+                    <h5 class="fw-bold mb-2" id="officeFileName">Tài Liệu Văn Bản</h5>
+                    <p class="text-muted small mb-4">File này là định dạng Word/Excel. Bạn có thể tải về máy để xem với đầy đủ định dạng gốc.</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a id="officeDownloadLink" href="#" download class="btn btn-success rounded-pill px-4">
+                            <i class="bi bi-download me-1"></i> Tải Về Máy
+                        </a>
+                        <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Đóng</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        async function submitUploadDocument() {
+            const fileInput = document.getElementById('inputDocumentFile');
+            const desc = document.getElementById('inputDocumentDesc').value.trim();
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Vui lòng chọn 1 file để tải lên!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('classRoomId', @selectedClassId);
+            formData.append('description', desc);
+
+            try {
+                const res = await fetch('/LessonPlans/UploadDocument', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        function viewDocumentOnline(filePath, fileName, ext) {
+            document.getElementById('viewerModalTitle').innerText = fileName;
+            document.getElementById('viewerDownloadBtn').href = filePath;
+            document.getElementById('viewerDownloadBtn').download = fileName;
+
+            const pdfFrame = document.getElementById('pdfViewerFrame');
+            const officeNotice = document.getElementById('officeNotice');
+
+            if (ext === '.pdf') {
+                officeNotice.classList.add('d-none');
+                pdfFrame.classList.remove('d-none');
+                pdfFrame.src = filePath + "#toolbar=1&navpanes=0";
+            } else {
+                pdfFrame.classList.add('d-none');
+                pdfFrame.src = "";
+                officeNotice.classList.remove('d-none');
+                document.getElementById('officeFileName').innerText = fileName;
+                document.getElementById('officeDownloadLink').href = filePath;
+                document.getElementById('officeDownloadLink').download = fileName;
+            }
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('viewerModal')).show();
+        }
+
+        async function deleteDocument(docId, fileName) {
+            if (!confirm(`Bạn có chắc chắn muốn xóa file "${fileName}"?`)) return;
+
+            const formData = new FormData();
+            formData.append('documentId', docId);
+
+            try {
+                const res = await fetch('/LessonPlans/DeleteDocument', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+    </script>
+}

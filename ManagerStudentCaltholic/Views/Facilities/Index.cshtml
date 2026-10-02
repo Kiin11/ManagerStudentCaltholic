@@ -1,0 +1,506 @@
+﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.BuildingZone>
+@{
+    ViewData["Title"] = "Sơ Đồ Phòng Học & Sĩ Số Điểm Danh Thực Tế";
+    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, (ManagerStudentCaltholic.Models.Entities.ClassRoom? Morning, int MorningPresent, ManagerStudentCaltholic.Models.Entities.ClassRoom? Afternoon, int AfternoonPresent)> ?? new();
+    var pendingIncidents = ViewBag.PendingIncidents as List<ManagerStudentCaltholic.Models.Entities.RoomIncidentReport> ?? new();
+    var allClasses = ViewBag.AllClasses as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+    var viewDate = (string)ViewBag.ViewDate;
+}
+
+<style>
+    .room-box {
+        background: #ffffff;
+        border: 2px solid #334155;
+        border-radius: 8px;
+        padding: 10px;
+        min-height: 145px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+        .room-box:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .room-box.staircase {
+            background: #e2e8f0;
+            border-style: dashed;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .room-box.hall {
+            background: #f8fafc;
+            border-color: #2563eb;
+        }
+
+    .shift-slot {
+        padding: 5px 8px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        margin-top: 4px;
+    }
+
+    .slot-morning {
+        background: #fef9c3;
+        border: 1px solid #fde047;
+    }
+
+    .slot-afternoon {
+        background: #e0f2fe;
+        border: 1px solid #bae6fd;
+    }
+
+    .slot-empty {
+        background: #f1f5f9;
+        border: 1px dashed #cbd5e1;
+        color: #64748b;
+        cursor: pointer;
+    }
+
+    .floor-row {
+        border-bottom: 2px solid #64748b;
+        padding: 10px 0;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Header & Bộ Chọn Ngày Điểm Danh -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-grid-1x2-fill me-2"></i>Sơ Đồ Phòng Học & Sĩ Số Thực Tế (Điểm Danh)
+            </h3>
+            <p class="text-muted mb-0">Theo dõi số lượng học sinh <strong>đang có mặt tại phòng</strong> (chỉ tính đi học giáo lý) theo từng ngày</p>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <!-- Ô CHỌN NGÀY XEM ĐIỂM DANH -->
+            <div class="d-flex align-items-center bg-white border rounded-pill px-3 py-1 shadow-sm">
+                <i class="bi bi-calendar-check text-primary me-2"></i>
+                <label class="small fw-bold text-secondary me-2 mb-0">Ngày:</label>
+                <input type="date" class="form-control form-control-sm border-0 fw-bold text-dark p-0"
+                       value="@viewDate" style="width: 125px;"
+                       onchange="window.location.href='/Facilities?viewDate=' + this.value" />
+            </div>
+
+            @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
+            {
+                <button type="button" class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#assignRoomModal">
+                    <i class="bi bi-door-open-fill me-1"></i> Phân Phòng Cho Lớp
+                </button>
+            }
+            <a href="/LessonPlans" class="btn btn-outline-primary shadow-sm">
+                <i class="bi bi-calendar3 me-1"></i> Xem Kế Hoạch Năm Học
+            </a>
+            <button type="button" class="btn btn-danger shadow-sm" data-bs-toggle="modal" data-bs-target="#reportIncidentModal">
+                <i class="bi bi-exclamation-triangle me-1"></i> Báo Sự Cố Thiết Bị
+            </button>
+        </div>
+    </div>
+
+    <!-- Helper render ô phòng học hiển thị số học sinh đang có mặt -->
+    @functions {
+        public static Microsoft.AspNetCore.Html.IHtmlContent RenderRoomSlotsWithAttendance(
+        ManagerStudentCaltholic.Models.Entities.ClassRoomLocation r,
+        Dictionary<int, (ManagerStudentCaltholic.Models.Entities.ClassRoom? Morning, int MorningPresent, ManagerStudentCaltholic.Models.Entities.ClassRoom? Afternoon, int AfternoonPresent)> occ)
+        {
+            var sb = new System.Text.StringBuilder();
+
+            // 1. KIỂM TRA PHÒNG CHỨC NĂNG (KHÔNG PHẢI PHÒNG HỌC GIÁO LÝ THƯỜNG XUYÊN)
+            bool isNonClassroom = r.RoomName.Contains("HĐGX") || r.RoomName.Contains("Sinh Hoạt Chung");
+
+            if (isNonClassroom)
+            {
+                var isHdgx = r.RoomName.Contains("HĐGX");
+                var icon = isHdgx ? "bi-briefcase-fill" : "bi-people-fill";
+                var badgeText = isHdgx ? "Phòng Họp Ban Hành Giáo" : "Sảnh Sinh Hoạt Chung / Hội Trường";
+                var desc = isHdgx
+                ? $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})"
+                : $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})";
+
+                sb.Append($@"
+        <div class='d-flex justify-content-between align-items-center mb-2'>
+        <strong class='text-dark fs-6'><i class='bi {icon} text-primary me-1'></i>{r.RoomName}</strong>
+        <span class='badge bg-light text-secondary border'>{r.Capacity} chỗ</span>
+        </div>
+        <div class='p-3 rounded-3 bg-light border border-dashed text-center flex-grow-1 d-flex flex-column justify-content-center align-items-center my-1'>
+        <span class='badge bg-secondary-subtle text-secondary mb-1 px-2 py-1'>{badgeText}</span>
+        <small class='text-muted' style='font-size: 0.75rem;'>{desc}</small>
+        </div>
+        ");
+
+                return new Microsoft.AspNetCore.Html.HtmlString(sb.ToString());
+            }
+
+            // 2. PHÒNG HỌC THÔNG THƯỜNG: HIỂN THỊ PHÂN CA SÁNG / CHIỀU
+            var pair = occ.ContainsKey(r.Id) ? occ[r.Id] : (null, 0, null, 0);
+            var m = pair.Morning;
+            var mCount = pair.MorningPresent;
+            var a = pair.Afternoon;
+            var aCount = pair.AfternoonPresent;
+
+            // Header phòng: Tên phòng & Sức chứa
+            sb.Append($@"<div class='d-flex justify-content-between align-items-center mb-1'>
+        <strong class='text-dark'>{r.RoomName}</strong>
+        <small class='badge bg-light text-secondary border' title='Sức chứa thiết kế'>{r.Capacity} chỗ</small>
+        </div>");
+
+            // CA SÁNG
+            if (m != null)
+            {
+                var isOverflow = mCount > r.Capacity;
+                var badgeClass = mCount > 0 ? (isOverflow ? "bg-danger text-white" : "bg-success text-white") : "bg-secondary-subtle text-secondary";
+
+                sb.Append($@"<div class='shift-slot slot-morning d-flex justify-content-between align-items-center'>
+        <div>
+        <div class='fw-bold text-dark'><i class='bi bi-sun-fill text-warning me-1'></i>{m.Name}</div>
+        <div class='small text-muted'>Có mặt: <span class='badge {badgeClass} px-2 py-0'>{mCount}</span> / {m.Enrollments.Count} em</div>
+        </div>
+        <button type='button' class='btn-close btn-sm' style='font-size: 0.6rem;' title='Hủy xếp phòng' onclick='event.stopPropagation(); unassignRoom({m.Id});'></button>
+        </div>");
+            }
+            else
+            {
+                sb.Append($@"<div class='shift-slot slot-empty' onclick='openAssignModalForRoom({r.Id}, ""MORNING"")'>
+        <i class='bi bi-plus-circle me-1'></i>Sáng: Trống
+        </div>");
+            }
+
+            // CA CHIỀU
+            if (a != null)
+            {
+                var isOverflow = aCount > r.Capacity;
+                var badgeClass = aCount > 0 ? (isOverflow ? "bg-danger text-white" : "bg-primary text-white") : "bg-secondary-subtle text-secondary";
+
+                sb.Append($@"<div class='shift-slot slot-afternoon d-flex justify-content-between align-items-center mt-1'>
+        <div>
+        <div class='fw-bold text-dark'><i class='bi bi-moon-stars-fill text-primary me-1'></i>{a.Name}</div>
+        <div class='small text-muted'>Có mặt: <span class='badge {badgeClass} px-2 py-0'>{aCount}</span> / {a.Enrollments.Count} em</div>
+        </div>
+        <button type='button' class='btn-close btn-sm' style='font-size: 0.6rem;' title='Hủy xếp phòng' onclick='event.stopPropagation(); unassignRoom({a.Id});'></button>
+        </div>");
+            }
+            else
+            {
+                sb.Append($@"<div class='shift-slot slot-empty mt-1' onclick='openAssignModalForRoom({r.Id}, ""AFTERNOON"")'>
+        <i class='bi bi-plus-circle me-1'></i>Chiều: Trống
+        </div>");
+            }
+
+            return new Microsoft.AspNetCore.Html.HtmlString(sb.ToString());
+        }
+    }
+
+    <!-- 1. KHU VỰC: NHÀ SINH HOẠT GIÁO XỨ (TẦNG 3 -> TRỆT) -->
+    @{
+        var nshZone = Model.FirstOrDefault(z => z.ZoneCode == "NSHGX") ?? Model.FirstOrDefault();
+    }
+    @if (nshZone != null)
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
+            <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="bi bi-building me-2 text-warning"></i>@nshZone.ZoneName</h5>
+                <span class="badge bg-secondary">Mặt cắt 4 tầng</span>
+            </div>
+            <div class="card-body p-4 bg-light">
+                <!-- TẦNG 3 -->
+                <div class="row g-2 align-items-stretch floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center d-flex align-items-center justify-content-center">TẦNG 3</div>
+                    <div class="col-6 col-md-2"><div class="room-box staircase text-center h-100">Cầu Thang</div></div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 3).OrderBy(r => r.RoomName))
+                    {
+                        <div class="col-6 col-md-2">
+                            <div class="room-box h-100">
+                                @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- TẦNG 2 -->
+                <div class="row g-2 align-items-stretch floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center d-flex align-items-center justify-content-center">TẦNG 2</div>
+                    <div class="col-6 col-md-2"><div class="room-box staircase text-center h-100">Cầu Thang</div></div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 2).OrderBy(r => r.RoomName))
+                    {
+                        <div class="col-6 col-md-2">
+                            <div class="room-box h-100">
+                                @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- TẦNG 1 -->
+                <div class="row g-2 align-items-stretch floor-row">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center d-flex align-items-center justify-content-center">TẦNG 1</div>
+                    <div class="col-6 col-md-2"><div class="room-box staircase text-center h-100">Cầu Thang</div></div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 1).OrderBy(r => r.RoomName))
+                    {
+                        <div class="col-6 col-md-2">
+                            <div class="room-box h-100">
+                                @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- TẦNG TRỆT -->
+                <div class="row g-2 align-items-stretch pt-2">
+                    <div class="col-12 col-md-1 fw-bold text-secondary text-center d-flex align-items-center justify-content-center">TRỆT</div>
+                    <div class="col-6 col-md-2"><div class="room-box staircase text-center h-100">Cầu Thang</div></div>
+                    @foreach (var r in nshZone.Rooms.Where(r => r.FloorNumber == 0).OrderByDescending(r => r.RoomName))
+                    {
+                        var isHall = r.RoomName.Contains("Sinh Hoạt");
+                        <div class="@(isHall ? "col-12 col-md-6" : "col-6 col-md-2")">
+                            <div class="room-box @(isHall ? "hall" : "") h-100">
+                                @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- 2. KHU VỰC: NHÀ HÀI CỐT & 3. KHU HOA VIÊN / HTB -->
+    <div class="row g-4">
+        <!-- NHÀ HÀI CỐT -->
+        @{
+            var nhcZone = Model.FirstOrDefault(z => z.ZoneCode == "NHC");
+        }
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-secondary text-white py-3 fw-bold">
+                    <i class="bi bi-geo-alt-fill me-2"></i>@(nhcZone?.ZoneName ?? "Khu Nhà Hài Cốt")
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <div class="p-3 mb-4 text-center rounded-3 bg-white border border-secondary border-2 fw-bold text-secondary shadow-xs">
+                        <i class="bi bi-building me-2"></i>KHU VỰC NHÀ CHỜ PHỤC SINH
+                    </div>
+                    <div class="row g-3">
+                        @if (nhcZone != null)
+                        {
+                            @foreach (var r in nhcZone.Rooms.OrderBy(r => r.RoomName))
+                            {
+                                <div class="col-6">
+                                    <div class="room-box h-100">
+                                        @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KHU HOA VIÊN / HTB -->
+        @{
+            var htbZone = Model.FirstOrDefault(z => z.ZoneCode == "HTB");
+        }
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100">
+                <div class="card-header bg-primary text-white py-3 fw-bold">
+                    <i class="bi bi-tree-fill me-2"></i>@(htbZone?.ZoneName ?? "Khu Hoa Viên & Hội Trường B")
+                </div>
+                <div class="card-body p-4 bg-light">
+                    <div class="row g-2 mb-3">
+                        @if (htbZone != null)
+                        {
+                            @foreach (var r in htbZone.Rooms.Where(r => !r.RoomName.Contains("Hội Trường")).OrderBy(r => r.RoomName))
+                            {
+                                <div class="col-4">
+                                    <div class="room-box h-100">
+                                        @RenderRoomSlotsWithAttendance(r, roomOccupancy)
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <div class="py-2 mb-3 text-center rounded-2 bg-secondary-subtle text-secondary fw-semibold small border border-dashed">
+                        <i class="bi bi-arrow-left-right me-1"></i> ĐƯỜNG ĐI
+                    </div>
+
+                    @if (htbZone != null)
+                    {
+                        var htb = htbZone.Rooms.FirstOrDefault(r => r.RoomName.Contains("Hội Trường"));
+                        if (htb != null)
+                        {
+                            <div class="room-box hall p-3">
+                                @RenderRoomSlotsWithAttendance(htb, roomOccupancy)
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div><!-- MODAL PHÂN PHÒNG HỌC CHO LỚP -->
+<div class="modal fade" id="assignRoomModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fs-6 fw-bold">
+                    <i class="bi bi-door-open-fill me-2"></i>Phân Phòng Học Cho Lớp
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Phòng Học Được Chọn <span class="text-danger">*</span></label>
+                    <select id="modalAssignLocationId" class="form-select">
+                        <option value="">-- Chọn phòng học --</option>
+                        @foreach (var z in Model)
+                        {
+                            <optgroup label="@z.ZoneName (@z.ZoneCode)">
+                                @foreach (var r in z.Rooms.Where(r => !r.RoomName.Contains("HĐGX") && !r.RoomName.Contains("Sinh Hoạt Chung")))
+                                {
+                                    <option value="@r.Id" data-capacity="@r.Capacity">
+                                        @r.RoomName (Tầng @r.FloorNumber) - Sức chứa: @r.Capacity chỗ
+                                    </option>
+                                }
+                            </optgroup>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn Lớp Học <span class="text-danger">*</span></label>
+                    <select id="modalAssignClassId" class="form-select" onchange="onClassSelectChange()">
+                        <option value="">-- Chọn lớp cần xếp phòng --</option>
+                        @foreach (var c in (ViewBag.AllClasses as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new()))
+                        {
+                            bool isMorning = c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức";
+                            var shiftLabel = isMorning ? "Ca Sáng (09:00)" : "Ca Chiều (15:00)";
+                            <option value="@c.Id" data-shift="@(isMorning ? "MORNING" : "AFTERNOON")" data-enrolled="@c.Enrollments.Count">
+                                @c.Name (@c.GradeLevel) - @shiftLabel - Sĩ số: @c.Enrollments.Count em
+                            </option>
+                        }
+                    </select>
+                    <div id="classShiftNotice" class="form-text small text-primary fw-semibold mt-1"></div>
+                </div>
+
+                <div class="alert alert-info py-2 px-3 small border-0 mb-3">
+                    <i class="bi bi-info-circle me-1"></i> Một phòng có thể xếp cho <strong>1 lớp Sáng</strong> và <strong>1 lớp Chiều</strong>. Hệ thống sẽ tự động chặn nếu xếp 2 lớp cùng ca vào 1 phòng.
+                </div>
+
+                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitAssignRoom()">
+                    Xác Nhận Phân Phòng
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Hàm mở modal khi người dùng bấm vào ô "Sáng: Trống" hoặc "Chiều: Trống"
+        function openAssignModalForRoom(roomId, preferredShift) {
+            // 1. Chọn đúng phòng trên dropdown modal
+            const locSelect = document.getElementById('modalAssignLocationId');
+            if (locSelect) locSelect.value = roomId;
+
+            // 2. Lọc gợi ý lớp học phù hợp với ca được nhấp
+            const classSelect = document.getElementById('modalAssignClassId');
+            if (classSelect) {
+                let firstMatchFound = false;
+                for (let i = 0; i < classSelect.options.length; i++) {
+                    const opt = classSelect.options[i];
+                    if (opt.value === "") continue;
+
+                    const shift = opt.getAttribute('data-shift');
+                    if (shift === preferredShift) {
+                        opt.style.display = ""; // Hiển thị các lớp cùng ca
+                        if (!firstMatchFound) {
+                            classSelect.selectedIndex = i;
+                            firstMatchFound = true;
+                        }
+                    } else {
+                        opt.style.display = "none"; // Ẩn các lớp khác ca để tránh nhầm
+                    }
+                }
+                if (!firstMatchFound) {
+                    classSelect.value = "";
+                }
+                onClassSelectChange();
+            }
+
+            // 3. Mở Modal
+            const modalEl = document.getElementById('assignRoomModal');
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        function onClassSelectChange() {
+            const classSelect = document.getElementById('modalAssignClassId');
+            const selectedOpt = classSelect.options[classSelect.selectedIndex];
+            const notice = document.getElementById('classShiftNotice');
+            if (selectedOpt && selectedOpt.value) {
+                const shift = selectedOpt.getAttribute('data-shift');
+                const isMorning = shift === 'MORNING';
+                notice.innerHTML = `<i class="bi bi-clock me-1"></i>Lớp thuộc <strong>${isMorning ? 'Khối Sáng (09:00 - 10:30)' : 'Khối Chiều (15:00 - 16:30)'}</strong>.`;
+            } else {
+                notice.innerHTML = '';
+            }
+        }
+
+        async function submitAssignRoom() {
+            const classId = document.getElementById('modalAssignClassId').value;
+            const locationId = document.getElementById('modalAssignLocationId').value;
+
+            if (!classId || !locationId) {
+                alert('Vui lòng chọn đầy đủ Lớp học và Phòng học!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('classId', classId);
+            formData.append('locationId', locationId);
+
+            try {
+                const res = await fetch('/Facilities/AssignRoomToClass', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+
+        async function unassignRoom(classId) {
+            if (!confirm('Xác nhận hủy gán phòng cho lớp này?')) return;
+
+            const formData = new FormData();
+            formData.append('classId', classId);
+
+            try {
+                const res = await fetch('/Facilities/UnassignRoom', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            }
+        }
+    </script>
+}

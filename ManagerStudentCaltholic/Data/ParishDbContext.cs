@@ -19,6 +19,21 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
         public DbSet<Announcement> Announcements => Set<Announcement>();
 
+        // --- Facilities & Logistics (Epic 9) ---
+        public DbSet<BuildingZone> BuildingZones => Set<BuildingZone>();
+        public DbSet<ClassRoomLocation> ClassRoomLocations => Set<ClassRoomLocation>();
+        public DbSet<RoomIncidentReport> RoomIncidentReports => Set<RoomIncidentReport>();
+        public DbSet<ClassSchedule> ClassSchedules => Set<ClassSchedule>();
+
+        // --- Role & Governance (Epic 9: US-9.4 & US-9.5) ---
+        public DbSet<BranchHeadAssignment> BranchHeadAssignments => Set<BranchHeadAssignment>();
+        public DbSet<UserRoleHistory> UserRoleHistories => Set<UserRoleHistory>();
+        
+        // --- Syllabus & Lesson Plans (Epic 9: TASK-904) ---
+        //public DbSet<ClassLessonPlan> ClassLessonPlans => Set<ClassLessonPlan>();
+
+        public DbSet<ClassLessonDocument> ClassLessonDocuments => Set<ClassLessonDocument>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -187,6 +202,184 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasIndex(a => a.Scope);
                 entity.HasIndex(a => a.TargetGradeLevel);
                 entity.HasIndex(a => a.IsPinned);
+            });
+
+            // ==========================================
+            // 4. FACILITIES & LOGISTICS (EPIC 9)
+            // ==========================================
+            modelBuilder.Entity<BuildingZone>(entity =>
+            {
+                entity.ToTable("BuildingZones");
+                entity.HasKey(z => z.Id);
+                entity.Property(z => z.ZoneName).HasMaxLength(100).IsRequired();
+                entity.Property(z => z.ZoneCode).HasMaxLength(20);
+                entity.Property(z => z.DisplayOrder).HasDefaultValue(1);
+            });
+
+            modelBuilder.Entity<ClassRoomLocation>(entity =>
+            {
+                entity.ToTable("ClassRoomLocations");
+                entity.HasKey(l => l.Id);
+                entity.Property(l => l.RoomName).HasMaxLength(50).IsRequired();
+                entity.Property(l => l.FloorNumber).HasDefaultValue(1);
+                entity.Property(l => l.Capacity).HasDefaultValue(40);
+                entity.Property(l => l.IsAvailable).HasDefaultValue(true);
+
+                entity.HasOne(l => l.BuildingZone)
+                      .WithMany(z => z.Rooms)
+                      .HasForeignKey(l => l.BuildingZoneId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasIndex(l => new { l.BuildingZoneId, l.FloorNumber });
+            });
+
+            // 4.1. ClassSchedule (TASK-904)
+            modelBuilder.Entity<ClassSchedule>(entity =>
+            {
+                entity.ToTable("ClassSchedules");
+                entity.HasKey(s => s.Id);
+
+                entity.HasOne(s => s.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(s => s.ClassRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(s => s.ClassRoomLocation)
+                      .WithMany()
+                      .HasForeignKey(s => s.ClassRoomLocationId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Property(s => s.DayOfWeek).HasConversion<int>();
+                entity.Property(s => s.Notes).HasMaxLength(255);
+
+                entity.HasIndex(s => new { s.ClassRoomLocationId, s.DayOfWeek, s.StartTime });
+                entity.HasIndex(s => s.ClassRoomId);
+            });
+
+            // 4.2. RoomIncidentReport (TASK-905)
+            modelBuilder.Entity<RoomIncidentReport>(entity =>
+            {
+                entity.ToTable("RoomIncidentReports");
+                entity.HasKey(r => r.Id);
+
+                entity.HasOne(r => r.ClassRoomLocation)
+                      .WithMany()
+                      .HasForeignKey(r => r.ClassRoomLocationId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(r => r.ReporterUser)
+                      .WithMany()
+                      .HasForeignKey(r => r.ReporterUserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(r => r.DeviceType).HasMaxLength(50).IsRequired();
+                entity.Property(r => r.Severity).HasMaxLength(20).HasDefaultValue("NORMAL");
+                entity.Property(r => r.Description).HasMaxLength(500).IsRequired();
+                entity.Property(r => r.Status).HasMaxLength(30).HasDefaultValue("PENDING");
+                entity.Property(r => r.ResolutionNotes).HasMaxLength(255);
+                entity.Property(r => r.ReportedAt).HasDefaultValueSql("NOW()");
+
+                entity.HasIndex(r => new { r.ClassRoomLocationId, r.Status });
+                entity.HasIndex(r => r.ReporterUserId);
+            });
+            // ==========================================
+            // 4.3. ClassLessonPlan (TASK-904: Kế hoạch năm học & Bài giảng theo tuần)
+            // ==========================================
+            modelBuilder.Entity<ClassLessonPlan>(entity =>
+            {
+                entity.ToTable("ClassLessonPlans");
+                entity.HasKey(p => p.Id);
+
+                entity.HasOne(p => p.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(p => p.ClassRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(p => p.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(p => p.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(p => p.AssignedTeacherUser)
+                      .WithMany()
+                      .HasForeignKey(p => p.AssignedTeacherUserId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.Property(p => p.LiturgicalDay).HasMaxLength(100);
+                entity.Property(p => p.LessonCode).HasMaxLength(50);
+                entity.Property(p => p.TopicTitle).HasMaxLength(255).IsRequired();
+                entity.Property(p => p.AssignedTeacherName).HasMaxLength(100);
+                entity.Property(p => p.EventNotes).HasMaxLength(500);
+                entity.Property(p => p.IsExamDay).HasDefaultValue(false);
+                entity.Property(p => p.IsDayOff).HasDefaultValue(false);
+
+                // Index phục vụ load nhanh giáo án tuần theo lớp và năm học
+                entity.HasIndex(p => new { p.ClassRoomId, p.LessonDate });
+                entity.HasIndex(p => p.AcademicYearId);
+                entity.HasIndex(p => p.AssignedTeacherUserId);
+            });
+
+            // ==========================================
+            // 5. GOVERNANCE & ROLES (TASK-906 & TASK-907)
+            // ==========================================
+            // 5.1. BranchHeadAssignment (TASK-906)
+            modelBuilder.Entity<BranchHeadAssignment>(entity =>
+            {
+                entity.ToTable("BranchHeadAssignments");
+                entity.HasKey(b => b.Id);
+
+                entity.HasOne(b => b.User)
+                      .WithMany()
+                      .HasForeignKey(b => b.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(b => b.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(b => b.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(b => b.AssignedByUser)
+                      .WithMany()
+                      .HasForeignKey(b => b.AssignedByUserId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.Property(b => b.ManagedGradeLevel).HasMaxLength(50).IsRequired();
+                entity.Property(b => b.Notes).HasMaxLength(255);
+                entity.Property(b => b.AssignedAt).HasDefaultValueSql("NOW()");
+
+                // Ràng buộc duy nhất: Trong 1 niên khóa, 1 khối chỉ do 1 Trưởng khối phụ trách
+                entity.HasIndex(b => new { b.AcademicYearId, b.ManagedGradeLevel }).IsUnique();
+                entity.HasIndex(b => b.UserId);
+            });
+
+            // 5.2. UserRoleHistory (TASK-907)
+            modelBuilder.Entity<UserRoleHistory>(entity =>
+            {
+                entity.ToTable("UserRoleHistory");
+                entity.HasKey(h => h.Id);
+
+                entity.HasOne(h => h.User)
+                      .WithMany()
+                      .HasForeignKey(h => h.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(h => h.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(h => h.AcademicYearId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(h => h.ChangedByUser)
+                      .WithMany()
+                      .HasForeignKey(h => h.ChangedByUserId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.Property(h => h.OldRole).HasMaxLength(30).IsRequired();
+                entity.Property(h => h.NewRole).HasMaxLength(30).IsRequired();
+                entity.Property(h => h.Reason).HasMaxLength(255);
+                entity.Property(h => h.ChangedAt).HasDefaultValueSql("NOW()");
+
+                entity.HasIndex(h => new { h.UserId, h.AcademicYearId });
+                entity.HasIndex(h => h.ChangedAt);
             });
         }
 
