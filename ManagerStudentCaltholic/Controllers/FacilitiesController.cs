@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,11 +13,14 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly ILogger<FacilitiesController> _logger;
+        private readonly ILessonPlanImportService _importService;
 
-        public FacilitiesController(ParishDbContext context, ILogger<FacilitiesController> logger)
+        public FacilitiesController(ParishDbContext context, ILogger<FacilitiesController> logger
+            , ILessonPlanImportService importService)
         {
             _context = context;
             _logger = logger;
+            _importService = importService;
         }
         /// <summary>
         /// 1. GET: /Facilities (Sơ đồ phòng học, Cảnh báo quá tải, Báo hỏng)
@@ -172,39 +176,6 @@ namespace ManagerStudentCaltholic.Controllers
 
             await _context.SaveChangesAsync();
             return Json(new { success = true, message = "Đã cập nhật trạng thái sửa chữa!" });
-        }
-
-        /// <summary>
-        /// 4. GET: /Facilities/LessonPlans (Tra cứu Kế hoạch năm học - TASK-904)
-        /// </summary>
-        /// <param name="classRoomId"></param>
-        /// <returns></returns>
-        [HttpGet]
-        public async Task<IActionResult> LessonPlans(int? classRoomId)
-        {
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-            var yearId = currentYear?.Id ?? 0;
-
-            var classes = await _context.Classes
-                .Where(c => c.AcademicYearId == yearId)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
-                .AsNoTracking()
-                .ToListAsync();
-
-            ViewBag.Classes = classes;
-            ViewBag.CurrentYear = currentYear;
-
-            var selectedClassId = classRoomId ?? classes.FirstOrDefault()?.Id ?? 0;
-            ViewBag.SelectedClassId = selectedClassId;
-
-            var plans = await _context.ClassLessonPlans
-                .Include(p => p.ClassRoom)
-                .Where(p => p.ClassRoomId == selectedClassId)
-                .OrderBy(p => p.LessonDate)
-                .AsNoTracking()
-                .ToListAsync();
-
-            return View(plans);
         }
 
         /// <summary>

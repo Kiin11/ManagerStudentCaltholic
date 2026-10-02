@@ -30,7 +30,9 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<UserRoleHistory> UserRoleHistories => Set<UserRoleHistory>();
         
         // --- Syllabus & Lesson Plans (Epic 9: TASK-904) ---
-        public DbSet<ClassLessonPlan> ClassLessonPlans => Set<ClassLessonPlan>();
+        //public DbSet<ClassLessonPlan> ClassLessonPlans => Set<ClassLessonPlan>();
+
+        public DbSet<ClassLessonDocument> ClassLessonDocuments => Set<ClassLessonDocument>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
