@@ -1,53 +1,33 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: parish_db
-    restart: always
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    command: >
-      postgres -c shared_buffers=${PG_SHARED_BUFFERS}
-               -c effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE}
-               -c maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM}
-               -c work_mem=${PG_WORK_MEM}
-    networks:
-      - parish_net
-
-  app:
+  dotnet_app:
     build:
-      context: ./ManagerStudentCaltholic
+      context: ./app-source
       dockerfile: Dockerfile
-    container_name: parish_app
+    container_name: dotnet_backend
     restart: always
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENV}
-      - ASPNETCORE_URLS=http://+:5000
-      - ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
-    depends_on:
-      - db
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_HTTP_PORTS=8080
+      # Chuỗi kết nối trực tiếp đến Azure Database for PostgreSQL Flexible Server
+      - ConnectionStrings__DefaultConnection=Host=<TEN_SERVER_AZURE>.postgres.database.azure.com;Port=5432;Database=postgres;Username=<ADMIN_LOGIN>;Password=<MAT_KHAU>;SSL Mode=Require;Trust Server Certificate=true;
+    expose:
+      - "8080"
     networks:
-      - parish_net
+      - app_network
 
   nginx:
     image: nginx:alpine
-    container_name: parish_nginx
+    container_name: nginx_proxy
     restart: always
     ports:
-      - "${WEB_PORT}:80"
+      - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - app
+      - dotnet_app
     networks:
-      - parish_net
-
-volumes:
-  postgres_data:
+      - app_network
 
 networks:
-  parish_net:
+  app_network:
     driver: bridge

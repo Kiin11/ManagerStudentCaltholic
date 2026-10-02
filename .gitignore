@@ -5,3 +5,4 @@ docker-compose.override.yml
 *.pdb
 *.exe
 *.log
+parish-web-app_key.pem
