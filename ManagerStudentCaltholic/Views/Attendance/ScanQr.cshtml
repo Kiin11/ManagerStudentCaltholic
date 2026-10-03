@@ -27,6 +27,9 @@
                     <button class="btn btn-sm btn-outline-light rounded-pill px-3" id="btnToggleCam" onclick="toggleCamera()">
                         <i class="bi bi-power me-1"></i> Bật / Tắt Camera
                     </button>
+                    <button class="btn btn-sm btn-outline-light rounded-pill px-3" onclick="switchCamera()">
+                        <i class="bi bi-arrow-repeat me-1"></i> Đổi Camera
+                    </button>
                 </div>
                 <div class="card-body p-3 text-center bg-black bg-opacity-10">
                     <div id="reader" style="width: 100%; min-height: 320px; border-radius: 12px; overflow: hidden; background: #000;"></div>
@@ -96,6 +99,10 @@
 
 <!-- Âm thanh phản hồi (Audio Synthesizer bằng Web Audio API) -->
 @section Scripts {
+    let html5QrCode = null;
+    let currentFacingMode = "environment"; // Mặc định camera sau
+    let isCameraRunning = false;
+
     <!-- 1. Nạp thư viện html5-qrcode trước -->
     <script src="~/lib/html5-qrcode/html5-qrcode.min.js"></script>
     <script>
@@ -147,10 +154,10 @@
         }
 
         // Khởi động Camera quét QR
-        function startCamera() {
-            if (typeof Html5Qrcode === "undefined") {
-                showCameraError("Thư viện quét mã chưa sẵn sàng.");
-                return;
+        async function startCamera(facingMode = "environment") {
+            
+            if (html5QrCode && isCameraRunning) {
+                await html5QrCode.stop();
             }
 
             html5QrCode = new Html5Qrcode("reader");
@@ -160,37 +167,30 @@
                 aspectRatio: 1.0
             };
 
-            Html5Qrcode.getCameras().then(cameras => {
-                if (cameras && cameras.length > 0) {
-                    const backCamera = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear'));
-                    const cameraId = backCamera ? backCamera.id : cameras[0].id;
-
-                    html5QrCode.start(
-                        cameraId,
-                        config,
-                        (decodedText) => handleScannedCode(decodedText),
-                        (err) => { /* bỏ qua các frame trống */ }
-                    ).then(() => {
-                        isCameraRunning = true;
-                        const btn = document.getElementById("btnToggleCam");
-                        if (btn) btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i> Tắt Camera';
-                    }).catch(err => showCameraError(err));
-                } else {
-                    showCameraError("Không tìm thấy thiết bị camera trên máy!");
-                }
-            }).catch(err => {
-                // Thử fallback sang camera mặc định
-                html5QrCode.start(
-                    { facingMode: "user" },
+            // Ưu tiên camera sau môi trường (environment), nếu thất bại sẽ thử dùng deviceId hoặc chế độ user
+            try {
+                await html5QrCode.start(
+                    { facingMode: { exact: facingMode } },
                     config,
                     (decodedText) => handleScannedCode(decodedText),
                     (err) => {}
-                ).then(() => {
-                    isCameraRunning = true;
-                    const btn = document.getElementById("btnToggleCam");
-                    if (btn) btn.innerHTML = '<i class="bi bi-stop-circle me-1"></i> Tắt Camera';
-                }).catch(fallbackErr => showCameraError(fallbackErr));
-            });
+                );
+                isCameraRunning = true;
+            } catch (e) {
+                // Fallback cho trình duyệt di động không hỗ trợ cú pháp 'exact'
+                await html5QrCode.start(
+                    { facingMode: facingMode },
+                    config,
+                    (decodedText) => handleScannedCode(decodedText),
+                    (err) => {}
+                );
+                isCameraRunning = true;
+            }
+        }
+
+        async function switchCamera() {
+            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+            await startCamera(currentFacingMode);
         }
 
         function showCameraError(err) {

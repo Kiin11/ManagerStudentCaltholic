@@ -277,7 +277,7 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             // 2. Tự động nhận diện khung giờ và trạng thái đi trễ
-            var (isMass, isClass, status, timeOfDay) = AttendanceTimeHelper.EvaluateCheckIn(scanTime, enrollment.ClassRoom.GradeLevel);
+            var (isMass, isClass, status, timeOfDay, message) = AttendanceTimeHelper.EvaluateCheckIn(scanTime, enrollment.ClassRoom.GradeLevel);
 
             if (!isMass && !isClass)
             {

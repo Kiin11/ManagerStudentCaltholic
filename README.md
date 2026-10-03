@@ -53,3 +53,15 @@ Kiểm tra log thời gian thực để xác nhận ứng dụng đã khởi đ�
 ```bash
 docker compose logs -f app
 ```
+
+### d. Build lại image và khởi động lại container
+Chỉ định Docker Compose build lại riêng service ứng dụng (hoặc toàn bộ) mà không sử dụng cache cũ để nạp các thay đổi mới:
+```bash
+docker compose up -d --build <server_name>
+```
+
+### e. Theo dõi log ứng dụng
+Kiểm tra container đã nạp code mới và chạy ổn định hay chưa:
+```bash
+docker compose logs --tail 30 <server_name>
+```

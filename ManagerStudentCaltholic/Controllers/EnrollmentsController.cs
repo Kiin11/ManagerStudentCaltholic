@@ -184,7 +184,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="enrollmentId"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> RemoveStudent(long enrollmentId)
         {
             var enrollment = await _context.Enrollments

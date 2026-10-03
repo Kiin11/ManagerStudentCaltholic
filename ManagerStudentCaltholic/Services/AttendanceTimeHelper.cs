@@ -2,6 +2,7 @@
 {
     public static class AttendanceStatus
     {
+        public const string LinedUp = "LINED_UP";
         public const string Present = "PRESENT";
         public const string Late = "LATE";
         public const string AbsentPermitted = "ABSENT_PERMITTED";
@@ -13,47 +14,59 @@
         /// <summary>
         /// Phân tích thời điểm quét hoặc điểm danh để xác định loại ca và trạng thái đúng giờ/trễ
         /// </summary>
-        public static (bool isMass, bool isClass, string calculatedStatus, TimeSpan timeOfDay) EvaluateCheckIn(DateTime checkTime, string gradeLevel)
+        public static (bool isMass, bool isClass, string calculatedStatus, TimeSpan timeOfDay, string message) EvaluateCheckIn(DateTime checkTime, string gradeLevel)
         {
             var dayOfWeek = checkTime.DayOfWeek;
-            var timeOfDay = checkTime.TimeOfDay;
+            var time = checkTime.TimeOfDay;
 
-            // 1. Thánh Lễ Thứ 5: Bắt đầu 17h45
-            if (dayOfWeek == DayOfWeek.Thursday && timeOfDay >= new TimeSpan(17, 0, 0) && timeOfDay <= new TimeSpan(19, 0, 0))
+            // 1. Thánh Lễ Thứ Năm (Khung giờ: 17:30 - 19:30)
+            if (dayOfWeek == DayOfWeek.Thursday && time >= new TimeSpan(17, 30, 0) && time <= new TimeSpan(19, 30, 0))
             {
-                var isLate = timeOfDay > new TimeSpan(18, 0, 0);
-                return (isMass: true, isClass: false, isLate ? AttendanceStatus.Late : AttendanceStatus.Present, timeOfDay);
+                return (true, false, AttendanceStatus.Present, time, "Tham dự Lễ Thứ Năm");
             }
 
-            // 2. Thánh Lễ Sáng Chúa Nhật: Bắt đầu 06h30
-            if (dayOfWeek == DayOfWeek.Sunday && timeOfDay >= new TimeSpan(6, 0, 0) && timeOfDay <= new TimeSpan(8, 15, 0))
+            // 2. Thánh Lễ Chúa Nhật (Khung giờ: 06:20 - 08:20)
+            if (dayOfWeek == DayOfWeek.Sunday && time >= new TimeSpan(6, 20, 0) && time <= new TimeSpan(8, 20, 0))
             {
-                var isLate = timeOfDay > new TimeSpan(6, 40, 0);
-                return (isMass: true, isClass: false, isLate ? AttendanceStatus.Late : AttendanceStatus.Present, timeOfDay);
+                if (time < new TimeSpan(6, 35, 0))
+                {
+                    return (true, false, AttendanceStatus.LinedUp, time, "Đi Lễ: Có xếp hàng");
+                }
+                if (time < new TimeSpan(7, 0, 0))
+                {
+                    return (true, false, AttendanceStatus.Present, time, "Đi Lễ: Đúng giờ");
+                }
+                return (true, false, AttendanceStatus.Late, time, "Đi Lễ: Trễ");
             }
 
-            // 3. Giờ Học Giáo Lý Chúa Nhật
+            // 3. Đi Học Khối Sáng (Khung giờ: 08:55 - 11:00)
             if (dayOfWeek == DayOfWeek.Sunday)
             {
                 // Khối sáng (Khai tâm, Rước lễ): 09h00
                 if ((gradeLevel == "Khai Tâm" || gradeLevel == "Rước Lễ" || gradeLevel == "Thêm Sức") &&
-                    timeOfDay >= new TimeSpan(8, 30, 0) && timeOfDay <= new TimeSpan(11, 0, 0))
+                    time >= new TimeSpan(8, 55, 0) && time <= new TimeSpan(11, 0, 0))
                 {
-                    var isLate = timeOfDay > new TimeSpan(9, 10, 0);
-                    return (isMass: false, isClass: true, isLate ? AttendanceStatus.Late : AttendanceStatus.Present, timeOfDay);
+                    if (time < new TimeSpan(9, 30, 0))
+                    {
+                        return (false, true, AttendanceStatus.Present, time, "Đi học đúng giờ");
+                    }
+                    return (false, true, AttendanceStatus.Late, time, "Đi học trễ");
                 }
 
                 // Khối chiều (Bao đồng): 15h00
                 if ((gradeLevel == "Bao Đồng") &&
-                    timeOfDay >= new TimeSpan(14, 30, 0) && timeOfDay <= new TimeSpan(17, 10, 0))
+                    time >= new TimeSpan(14, 30, 0) && time <= new TimeSpan(17, 10, 0))
                 {
-                    var isLate = timeOfDay > new TimeSpan(15, 10, 0);
-                    return (isMass: false, isClass: true, isLate ? AttendanceStatus.Late : AttendanceStatus.Present, timeOfDay);
+                    if (time < new TimeSpan(15, 15, 0))
+                    {
+                        return (false, true, AttendanceStatus.Present, time, "Đi học đúng giờ");
+                    }
+                    return (false, true, AttendanceStatus.Late, time, "Đi học trễ");
                 }
             }
 
             // Mặc định cho điểm danh ngoài khung giờ quy ước
-            return (isMass: false, isClass: false, AttendanceStatus.Present, timeOfDay);
+            return (isMass: false, isClass: false, AttendanceStatus.Present, time, "Ngoài khung giờ điểm danh");
         }
     }
 }

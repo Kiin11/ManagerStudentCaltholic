@@ -236,40 +236,54 @@
                     {
                         <li class="nav-item">
                             <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "AcademicYears" ? "active" : "")"
-                               asp-controller="AcademicYears" asp-action="Index">
+                            asp-controller="AcademicYears" asp-action="Index">
                                 <i class="bi bi-calendar3"></i>
                                 <span class="sidebar-text">Niên Khóa</span>
                             </a>
                         </li>
                     }
+                    @if (User.Identity != null && User.Identity.IsAuthenticated &&
+                                                  (User.IsInRole(UserRole.Admin) ||
+                                                  User.IsInRole(UserRole.SpiritualDirector) ||
+                                                  User.IsInRole(UserRole.ExecutiveBoard) ||
+                                                  User.IsInRole(UserRole.BranchHead) ||
+                                                  User.IsInRole(UserRole.Teacher)))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Classes" ? "active" : "")"
+                            asp-controller="Classes" asp-action="Index">
+                                <i class="bi bi-mortarboard-fill"></i>
+                                <span class="sidebar-text">Danh Sách Lớp</span>
+                            </a>
+                        </li>
 
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Students" ? "active" : "")"
+                            asp-controller="Students" asp-action="Index">
+                                <i class="bi bi-people-fill"></i>
+                                <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
+                            </a>
+                        </li>
+                    }
                     <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Classes" ? "active" : "")"
-                           asp-controller="Classes" asp-action="Index">
-                            <i class="bi bi-mortarboard-fill"></i>
-                            <span class="sidebar-text">Danh Sách Lớp</span>
+                        <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Grades" ? "active text-primary fw-bold" : "")"
+                           asp-controller="Grades" asp-action="Index">
+                            <i class="bi bi-mortarboard-fill me-2 text-warning"></i> Sổ Điểm Giáo Lý
                         </a>
                     </li>
-
                     <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Students" ? "active" : "")"
-                           asp-controller="Students" asp-action="Index">
-                            <i class="bi bi-people-fill"></i>
-                            <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
+                        <a class="nav-link" asp-controller="Facilities" asp-action="Index">
+                            <i class="bi bi-building-gear me-2"></i> Cơ Sở Vật Chất
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "LessonPlans" ? "active" : "")"
+                        asp-controller="LessonPlans" asp-action="Index">
+                            <i class="bi bi-calendar3-week-fill me-2 text-info"></i> Kế Hoạch Bài Giảng
                         </a>
                     </li>
                 }
-                <li class="nav-item">
-                    <a class="nav-link" asp-controller="Facilities" asp-action="Index">
-                        <i class="bi bi-building-gear me-2"></i> Cơ Sở Vật Chất
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "LessonPlans" ? "active" : "")"
-                       asp-controller="LessonPlans" asp-action="Index">
-                        <i class="bi bi-calendar3-week-fill me-2 text-info"></i> Kế Hoạch Bài Giảng
-                    </a>
-                </li>
+
             </ul>
             <div class="sidebar-section-title">Chuyên cần & Check-in</div>
             <ul class="nav flex-column">
