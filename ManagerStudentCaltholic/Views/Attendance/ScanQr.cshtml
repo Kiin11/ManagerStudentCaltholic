@@ -279,20 +279,39 @@ else{
         async function startCamera(facingMode = "environment") {
             
             if (html5QrCode && isCameraRunning) {
-                await html5QrCode.stop();
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {
+                    console.warn("Dừng cam cũ thất bại:", e);
+                }
             }
 
             html5QrCode = new Html5Qrcode("reader");
+
+            const qrboxFunction = function(viewfinderWidth, viewfinderHeight) {
+            let minEdgePercentage = 0.7; // 70% khung hình
+            let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+            let qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+                return {
+                    width: qrboxSize,
+                    height: qrboxSize
+                };
+            };
+
             const config = {
                 fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
+                qrbox: qrboxFunction,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
             };
+
+            const cameraConfig = { facingMode: facingMode };
 
             // Ưu tiên camera sau môi trường (environment), nếu thất bại sẽ thử dùng deviceId hoặc chế độ user
             try {
                 await html5QrCode.start(
-                    { facingMode: { exact: facingMode } },
+                    cameraConfig,
                     config,
                     (decodedText) => handleScannedCode(decodedText),
                     (err) => {}
