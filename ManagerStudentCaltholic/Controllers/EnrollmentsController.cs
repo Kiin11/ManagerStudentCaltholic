@@ -102,7 +102,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> AssignStudents([FromBody] AssignStudentsRequest request)
         {
             if (request == null || !request.StudentIds.Any())

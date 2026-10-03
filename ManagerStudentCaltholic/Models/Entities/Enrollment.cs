@@ -17,5 +17,7 @@ namespace ManagerStudentCaltholic.Models.Entities
         public ICollection<Attendance> Attendances { get; set; } = new List<Attendance>(); 
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
+        // Thêm vào trong class Enrollment:
+        public ICollection<GradeRecord> GradeRecords { get; set; } = new List<GradeRecord>();
     }
 }

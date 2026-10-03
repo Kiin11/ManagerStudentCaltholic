@@ -1,0 +1,295 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassGradeMatrixViewModel
+@{
+    ViewData["Title"] = $"Sổ Điểm - {Model.ClassName}";
+    var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <!-- Header & Bộ Lọc -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-3">
+            <div class="row g-3 align-items-center justify-content-between">
+                <div class="col-lg-5 col-md-12">
+                    <h4 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-table text-primary me-2"></i>Sổ Điểm Giáo Lý: @Model.ClassName
+                    </h4>
+                    <small class="text-muted">
+                        Niên khóa: <strong>@Model.AcademicYearName</strong> | Khối: <strong>@Model.GradeLevel</strong> | Sĩ số: <strong>@Model.Rows.Count</strong> em
+                    </small>
+                </div>
+
+                <div class="col-lg-7 col-md-12 d-flex flex-wrap align-items-center justify-content-lg-end gap-2">
+                    <!-- Dropdown chọn Lớp -->
+                    <select id="selectClass" class="form-select form-select-sm w-auto fw-semibold" onchange="onFilterChange()">
+                        @foreach (var c in classes)
+                        {
+                            <!option value="@c.Id" @(c.Id == Model.ClassId ? "selected" : "")>
+                            @c.Name (@c.GradeLevel)
+                            </!option>
+                        }
+                    </select>
+
+                    <!-- Chọn Học kỳ -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <a href="/Grades/Index?classId=@Model.ClassId&semester=1"
+                           class="btn @(Model.CurrentSemester == 1 ? "btn-primary" : "btn-outline-primary")">Học Kỳ 1</a>
+                        <a href="/Grades/Index?classId=@Model.ClassId&semester=2"
+                           class="btn @(Model.CurrentSemester == 2 ? "btn-primary" : "btn-outline-primary")">Học Kỳ 2</a>
+                    </div>
+
+                    <!-- Nút Khóa / Mở Sổ Điểm -->
+                    @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
+                    {
+                        <button type="button" class="btn btn-sm @(Model.IsLocked ? "btn-danger" : "btn-outline-secondary")" onclick="toggleLockGradebook()">
+                            <i class="bi @(Model.IsLocked ? "bi-lock-fill" : "bi-unlock") me-1"></i>
+                            @(Model.IsLocked ? "Sổ Đang Khóa" : "Khóa Sổ Điểm")
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Box Thông Báo Toast/Inline -->
+    <div id="gradeAlert" class="alert d-none shadow-sm border-0" role="alert"></div>
+
+    @if (Model.IsLocked)
+    {
+        <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-3">
+            <i class="bi bi-exclamation-octagon-fill fs-5 me-2 text-warning"></i>
+            <div><strong>Sổ điểm đã được khóa.</strong> Bạn chỉ có thể xem dữ liệu, không thể sửa điểm trực tiếp. Vui lòng liên hệ BĐH nếu cần cập nhật.</div>
+        </div>
+    }
+
+    <!-- Bảng Ma Trận Điểm Grid View -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle mb-0 text-center" id="gridGradeTable">
+                <thead class="table-light small">
+                    <tr>
+                        <th rowspan="2" class="align-middle ps-3" style="width: 40px;">STT</th>
+                        <th rowspan="2" class="align-middle" style="width: 85px;">Mã QR</th>
+                        <th rowspan="2" class="align-middle text-start" style="min-width: 180px;">Tên Thánh & Họ Tên</th>
+
+                        <!-- Header các cột điểm động cấu hình từ DB (TASK-1002) -->
+                        <th colspan="@Model.Columns.Count" class="bg-primary-subtle text-primary border-start border-end">
+                            CÁC CỘT ĐIỂM HỌC KỲ @Model.CurrentSemester
+                        </th>
+
+                        <th rowspan="2" class="align-middle bg-warning-subtle text-dark" style="width: 80px;">ĐTB HK</th>
+                        <th rowspan="2" class="align-middle" style="width: 80px;">% Chuyên Cần</th>
+                        <th rowspan="2" class="align-middle" style="width: 120px;">Xếp Loại</th>
+                        <th rowspan="2" class="align-middle" style="width: 110px;">Xét Bí Tích</th>
+                    </tr>
+                    <tr>
+                        @foreach (var col in Model.Columns)
+                        {
+                            <th class="small py-2 @(col.IsSacramentExam ? "bg-info-subtle text-dark" : "")" style="min-width: 85px;" title="@col.DisplayName (Hệ số @col.WeightFactor)">
+                                <div>@col.DisplayName</div>
+                                <small class="text-muted">(HS: @col.WeightFactor)</small>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Rows.Any())
+                    {
+                        var stt = 1;
+                        var rowIdx = 0;
+                        foreach (var s in Model.Rows)
+                        {
+                            <tr data-enrollment-id="@s.EnrollmentId" data-row-index="@rowIdx">
+                                <td class="ps-3 fw-bold text-muted">@(stt++)</td>
+                                <td><span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span></td>
+                                <td class="text-start">
+                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                </td>
+
+                                <!-- Các ô nhập điểm tương tác bàn phím (TASK-1009) -->
+                                @{
+                                    var colIdx = 0;
+                                }
+                                @foreach (var col in Model.Columns)
+                                {
+                                    s.Scores.TryGetValue(col.Id, out var scoreVal);
+                                    var cellValue = scoreVal.HasValue ? scoreVal.Value.ToString("0.0") : "";
+
+                                    <td class="p-1">
+                                        <input type="text"
+                                               class="form-control form-control-sm text-center fw-bold score-cell"
+                                               data-enrollment-id="@s.EnrollmentId"
+                                               data-config-id="@col.Id"
+                                               data-row="@rowIdx"
+                                               data-col="@colIdx"
+                                               value="@cellValue"
+                                               placeholder="--"
+                                               maxlength="4"
+                                               @(Model.IsLocked ? "readonly disabled" : "")
+                                               onfocus="this.select()"
+                                               onchange="onScoreChange(this)"
+                                               onkeydown="handleKeyNavigation(event, this)" />
+                                    </td>
+                                    colIdx++;
+                                }
+
+                                <!-- ĐTB Tự động tính toán -->
+                                <td class="fw-bold text-primary bg-light avg-cell">
+                                    @(s.SemesterAverage.HasValue? s.SemesterAverage.Value.ToString("0.00") : "--")
+                                </td>
+                                <td><span class="badge bg-light text-dark border">@s.AttendanceRate%</span></td>
+                                <td>
+                                    <span class="badge @(s.AcademicRank == "Xuất sắc" || s.AcademicRank == "Giỏi" ? "bg-success" : (s.AcademicRank == "Khá" ? "bg-primary" : "bg-secondary")) px-2 py-1">
+                                        @s.AcademicRank
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (s.IsEligibleForSacrament)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
+                                            <i class="bi bi-check-circle me-1"></i>Đạt
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
+                                            <i class="bi bi-x-circle me-1"></i>Chưa đạt
+                                        </span>
+                                    }
+                                </td>
+                            </tr>
+                            rowIdx++;
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="@(7 + Model.Columns.Count)" class="py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-2"></i> Lớp chưa có học sinh hoặc chưa được phân công.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const totalRows = @Model.Rows.Count;
+        const totalCols = @Model.Columns.Count;
+        const classId = @Model.ClassId;
+
+        function onFilterChange() {
+            const cId = document.getElementById('selectClass').value;
+            window.location.href = `/Grades/Index?classId=${cId}&semester=@Model.CurrentSemester`;
+        }
+
+        // =========================================================================
+        // PHÍM TẮT ĐIỀU HƯỚNG NHƯ EXCEL (TASK-1009)
+        // =========================================================================
+        function handleKeyNavigation(e, input) {
+            let row = parseInt(input.getAttribute('data-row'));
+            let col = parseInt(input.getAttribute('data-col'));
+
+            if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                e.preventDefault();
+                focusCell(row + 1, col);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                focusCell(row - 1, col);
+            } else if (e.key === 'ArrowRight' && input.selectionEnd === input.value.length) {
+                focusCell(row, col + 1);
+            } else if (e.key === 'ArrowLeft' && input.selectionStart === 0) {
+                focusCell(row, col - 1);
+            }
+        }
+
+        function focusCell(r, c) {
+            const target = document.querySelector(`.score-cell[data-row="${r}"][data-col="${c}"]`);
+            if (target) {
+                target.focus();
+                target.select();
+            }
+        }
+
+        // =========================================================================
+        // LƯU ĐIỂM TỨC THÌ QUA AJAX (TASK-1004 & TASK-1009)
+        // =========================================================================
+        async function onScoreChange(input) {
+            const valStr = input.value.trim().replace(',', '.');
+            const enrollmentId = parseInt(input.getAttribute('data-enrollment-id'));
+            const configId = parseInt(input.getAttribute('data-config-id'));
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            if (valStr === '') {
+                saveCell(enrollmentId, configId, null, input, token);
+                return;
+            }
+
+            const score = parseFloat(valStr);
+            if (isNaN(score) || score < 0 || score > 10) {
+                input.classList.add('is-invalid');
+                alert('Điểm số phải là số hợp lệ từ 0.0 đến 10.0');
+                input.focus();
+                return;
+            }
+
+            input.classList.remove('is-invalid');
+            input.value = score.toFixed(1);
+            await saveCell(enrollmentId, configId, score, input, token);
+        }
+
+        async function saveCell(enrollmentId, configId, score, input, token) {
+            input.classList.add('bg-warning-subtle');
+            try {
+                const res = await fetch('/Grades/SaveSingleCell', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify({
+                        enrollmentId: enrollmentId,
+                        gradeConfigurationId: configId,
+                        score: score
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    input.classList.remove('bg-warning-subtle');
+                    input.classList.add('bg-success-subtle');
+                    setTimeout(() => input.classList.remove('bg-success-subtle'), 600);
+                } else {
+                    input.classList.remove('bg-warning-subtle');
+                    input.classList.add('is-invalid');
+                    alert(data.message);
+                }
+            } catch (err) {
+                input.classList.remove('bg-warning-subtle');
+                input.classList.add('is-invalid');
+                alert('Lỗi khi lưu điểm: ' + err);
+            }
+        }
+
+        // Khóa / Mở Sổ Điểm (TASK-1010)
+        async function toggleLockGradebook() {
+            if (!confirm('Bạn có chắc chắn muốn thay đổi trạng thái khóa sổ điểm của lớp này?')) return;
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            const res = await fetch(`/Grades/ToggleLock?classId=${classId}`, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token }
+            });
+            const data = await res.json();
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Lỗi: ' + data.message);
+            }
+        }
+    </script>
+}

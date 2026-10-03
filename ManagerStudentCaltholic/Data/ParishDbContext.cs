@@ -34,6 +34,10 @@ namespace ManagerStudentCaltholic.Data
 
         public DbSet<ClassLessonDocument> ClassLessonDocuments => Set<ClassLessonDocument>();
 
+        // --- Grade Configuration & Records (Epic 10: TASK-1001, TASK-1002) ---
+        public DbSet<GradeConfiguration> GradeConfigurations => Set<GradeConfiguration>();
+        public DbSet<GradeRecord> GradeRecords => Set<GradeRecord>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -47,6 +51,11 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<ClassRoom>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<Enrollment>().HasIndex(e => e.IsDeleted);
+
+            modelBuilder.Entity<ClassRoom>(entity =>
+            {
+                entity.Property(c => c.IsGradeLocked).HasDefaultValue(false);
+            });
 
             // Ràng buộc duy nhất: 1 học sinh chỉ xếp vào 1 lớp trong cùng 1 niên khóa
             modelBuilder.Entity<Enrollment>()
@@ -380,6 +389,52 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.HasIndex(h => new { h.UserId, h.AcademicYearId });
                 entity.HasIndex(h => h.ChangedAt);
+            });
+
+            // 6. GRADE CONFIGURATION & RECORDS (TASK-1001, TASK-1002)
+            modelBuilder.Entity<GradeConfiguration>(entity =>
+            {
+                entity.ToTable("GradeConfigurations");
+                entity.HasKey(g => g.Id);
+
+                entity.HasOne(g => g.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(g => g.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(g => g.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(g => g.ClassRoomId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                // Index tìm kiếm cấu hình theo năm, học kỳ và khối
+                entity.HasIndex(g => new { g.AcademicYearId, g.GradeLevel, g.Semester });
+                entity.Property(g => g.WeightFactor).HasDefaultValue(1);
+                entity.Property(g => g.IsSacramentExam).HasDefaultValue(false);
+                entity.Property(g => g.IsRequired).HasDefaultValue(true);
+                entity.Property(g => g.CreatedAt).HasDefaultValueSql("NOW()");
+            });
+
+            modelBuilder.Entity<GradeRecord>(entity =>
+            {
+                entity.ToTable("GradeRecords");
+                entity.HasKey(r => r.Id);
+
+                entity.HasOne(r => r.Enrollment)
+                      .WithMany(e => e.GradeRecords)
+                      .HasForeignKey(r => r.EnrollmentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(r => r.GradeConfiguration)
+                      .WithMany(g => g.GradeRecords)
+                      .HasForeignKey(r => r.GradeConfigurationId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Ràng buộc duy nhất: Một học sinh chỉ có 1 điểm duy nhất cho 1 cột cấu hình
+                entity.HasIndex(r => new { r.EnrollmentId, r.GradeConfigurationId })
+                      .IsUnique();
+
+                entity.Property(r => r.UpdatedAt).HasDefaultValueSql("NOW()");
             });
         }
 
