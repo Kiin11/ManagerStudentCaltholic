@@ -38,6 +38,7 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<GradeConfiguration> GradeConfigurations => Set<GradeConfiguration>();
         public DbSet<GradeRecord> GradeRecords => Set<GradeRecord>();
         public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
+        public DbSet<AttendanceRuleConfig> AttendanceRuleConfigs => Set<AttendanceRuleConfig>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

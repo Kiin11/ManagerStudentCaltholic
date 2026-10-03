@@ -201,11 +201,17 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public DateTime Date { get; set; }
         public DayOfWeek DayOfWeek { get; set; }
 
-        // Trạng thái Lễ (T5 hoặc CN)
-        public bool HasMassRecord { get; set; }
-        public string MassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
-        public TimeSpan? MassCheckInTime { get; set; }
-        public bool IsMassMakeUp { get; set; }
+        // Trạng thái Lễ (T5)
+        public bool HasMassThuRecord { get; set; }
+        public string MassThuStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
+        public TimeSpan? MassThuCheckInTime { get; set; }
+        public bool IsMassThuMakeUp { get; set; }
+
+        // Trạng thái Lễ (T5)
+        public bool HasMassSunRecord { get; set; }
+        public string MassSunStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
+        public TimeSpan? MassSunCheckInTime { get; set; }
+        public bool IsMassSunMakeUp { get; set; }
 
         // Trạng thái Học (Chỉ CN)
         public bool HasClassRecord { get; set; }
@@ -226,9 +232,13 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public Dictionary<DateTime, StudentDailyStatusDto> DailyStatuses { get; set; } = new();
 
         // Tổng kết tháng
-        public int TotalMassAttended { get; set; }
-        public int TotalMassLate { get; set; }
-        public int TotalMassAbsent { get; set; }
+        public int TotalMassThuAttended { get; set; }
+        public int TotalMassThuAbsent { get; set; }
+
+        public int TotalMassSunInLine { get; set; }
+        public int TotalMassSunAttended { get; set; }
+        public int TotalMassSunLate { get; set; }
+        public int TotalMassSunAbsent { get; set; }
 
         public int TotalClassAttended { get; set; }
         public int TotalClassLate { get; set; }
