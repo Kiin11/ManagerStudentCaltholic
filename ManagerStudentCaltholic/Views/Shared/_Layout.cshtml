@@ -284,10 +284,10 @@
             <div class="sidebar-section-title">Tổng quan</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")"
-                       asp-controller="Home" asp-action="Index">
-                        <i class="bi bi-grid-1x2-fill"></i>
-                        <span class="sidebar-text">Bảng Điều Khiển</span>
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
+                       asp-controller="Announcements" asp-action="Index">
+                        <i class="bi bi-megaphone-fill"></i>
+                        <span class="sidebar-text">Bảng Tin & Thông Báo</span>
                     </a>
                 </li>
             </ul>
@@ -300,13 +300,6 @@
                        asp-controller="Lookup" asp-action="Index">
                         <i class="bi bi-search text-warning"></i>
                         <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
-                       asp-controller="Announcements" asp-action="Index">
-                        <i class="bi bi-megaphone-fill"></i>
-                        <span class="sidebar-text">Bảng Tin & Thông Báo</span>
                     </a>
                 </li>
             </ul>
