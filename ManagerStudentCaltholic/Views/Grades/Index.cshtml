@@ -25,6 +25,34 @@
 }
 else
 {
+    <div class="btn-group">
+        <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle rounded-pill px-3" data-bs-toggle="dropdown">
+            <i class="bi bi-printer me-1"></i> In Ấn & Biểu Mẫu
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+            <li>
+                <a class="dropdown-item" asp-controller="PrintReports" asp-action="ReportCards" asp-route-classId="@Model.ClassId" target="_blank">
+                    <i class="bi bi-file-earmark-text text-primary me-2"></i> In Phiếu Liên Lạc Gia Đình (A5)
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item" asp-controller="PrintReports" asp-action="CertificatesOfMerit" asp-route-classId="@Model.ClassId" target="_blank">
+                    <i class="bi bi-award text-warning me-2"></i> In Giấy Khen Cuối Năm (A4)
+                </a>
+            </li>
+            <li>
+                <a class="dropdown-item" asp-controller="PrintReports" asp-action="SacramentCertificates" asp-route-classId="@Model.ClassId" target="_blank">
+                    <i class="bi bi-patch-check text-success me-2"></i> In Chứng Chỉ Bí Tích (A4)
+                </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+                <a class="dropdown-item text-danger" asp-controller="Absence" asp-action="Manage" asp-route-classId="@Model.ClassId">
+                    <i class="bi bi-envelope-paper me-2"></i> Duyệt Đơn Nghỉ Phép Lớp
+                </a>
+            </li>
+        </ul>
+    </div>
     <div class="container-fluid py-4">
     <!-- Header & Bộ Lọc -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -194,6 +222,7 @@ else
         </div>
     </div>
 </div>
+
 }
 
 @section Scripts {

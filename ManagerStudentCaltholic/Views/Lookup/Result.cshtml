@@ -10,6 +10,9 @@
         <a href="/TraCuu" class="btn btn-outline-secondary rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i> Tra Cứu Khác
         </a>
+        <button type="button" class="btn btn-outline-primary rounded-pill px-3 shadow-sm d-print-none" data-bs-toggle="modal" data-bs-target="#absenceModal">
+            <i class="bi bi-pencil-square me-1"></i> Nộp Đơn Xin Nghỉ Phép
+        </button>
         <button onclick="window.print()" class="btn btn-outline-primary rounded-pill px-3 shadow-sm d-print-none">
             <i class="bi bi-printer me-1"></i> In Kết Quả Này
         </button>
@@ -199,6 +202,49 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nộp Đơn Xin Nghỉ Phép -->
+<div class="modal fade" id="absenceModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-envelope-paper me-2"></i>Đơn Xin Nghỉ Phép</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="absStudentCode" value="@Model.StudentCode" />
+                <input type="hidden" id="absDob" value="@Model.DateOfBirth.ToString("yyyy-MM-dd")" />
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Ngày xin nghỉ:</label>
+                    <input type="date" id="absDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Xin vắng buổi:</label>
+                    <select id="absSession" class="form-select">
+                        <option value="ALL">Cả Thánh Lễ và Giờ Học</option>
+                        <option value="MASS">Chỉ vắng Thánh Lễ</option>
+                        <option value="CLASS">Chỉ vắng Giờ Học Giáo Lý</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Lý do xin nghỉ:</label>
+                    <textarea id="absReason" class="form-control" rows="3" placeholder="Nhập lý do cụ thể (bị ốm, việc gia đình...)" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">SĐT Phụ Huynh:</label>
+                    <input type="tel" id="absPhone" class="form-control" value="@Model.ParentPhone" placeholder="SĐT liên hệ" />
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-danger rounded-pill px-4 fw-bold" onclick="submitAbsence()">
+                    Gửi Đơn Xin Nghỉ
+                </button>
             </div>
         </div>
     </div>

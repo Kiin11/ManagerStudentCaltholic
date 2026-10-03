@@ -37,6 +37,7 @@ namespace ManagerStudentCaltholic.Data
         // --- Grade Configuration & Records (Epic 10: TASK-1001, TASK-1002) ---
         public DbSet<GradeConfiguration> GradeConfigurations => Set<GradeConfiguration>();
         public DbSet<GradeRecord> GradeRecords => Set<GradeRecord>();
+        public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
