@@ -28,5 +28,6 @@ namespace ManagerStudentCaltholic.Models.Entities
         public DateTime? DeletedAt { get; set; }
         public int? ClassRoomLocationId { get; set; }
         public string Shift { get; set; } = string.Empty; // Buổi học: Sáng, Chiều
+        public bool IsGradeLocked { get; set; } = false;
     }
 }

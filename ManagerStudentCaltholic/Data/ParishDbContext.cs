@@ -52,6 +52,11 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<ClassRoom>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<Enrollment>().HasIndex(e => e.IsDeleted);
 
+            modelBuilder.Entity<ClassRoom>(entity =>
+            {
+                entity.Property(c => c.IsGradeLocked).HasDefaultValue(false);
+            });
+
             // Ràng buộc duy nhất: 1 học sinh chỉ xếp vào 1 lớp trong cùng 1 niên khóa
             modelBuilder.Entity<Enrollment>()
                 .HasIndex(e => new { e.StudentId, e.ClassRoomId }).IsUnique();
@@ -416,7 +421,7 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasKey(r => r.Id);
 
                 entity.HasOne(r => r.Enrollment)
-                      .WithMany()
+                      .WithMany(e => e.GradeRecords)
                       .HasForeignKey(r => r.EnrollmentId)
                       .OnDelete(DeleteBehavior.Cascade);
 

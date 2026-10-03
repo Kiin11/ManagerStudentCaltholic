@@ -1,4 +1,6 @@
-﻿namespace ManagerStudentCaltholic.Models.Entities
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace ManagerStudentCaltholic.Models.Entities
 {
     /// <summary>
     /// Cấu hình danh mục các cột điểm theo Niên khóa và Khối lớp (TASK-1001, TASK-1002)
