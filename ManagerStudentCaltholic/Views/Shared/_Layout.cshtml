@@ -159,30 +159,31 @@
         }
 
         .sidebar-section-title {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: #64748b;
             font-weight: 700;
-            padding: 1.2rem 1.25rem 0.4rem;
+            padding: 0.75rem 1.25rem 0.25rem; /* Giảm padding trên/dưới */
         }
 
         .sidebar-menu .nav-link {
             color: #94a3b8;
             font-weight: 500;
-            padding: 0.65rem 1.25rem;
+            font-size: 0.88rem; /* Giảm nhẹ size chữ cho thanh thoát */
+            padding: 0.45rem 1rem; /* Giảm độ dày từng dòng */
             display: flex;
             align-items: center;
-            border-radius: 0.5rem;
-            margin: 0.15rem 0.75rem;
+            border-radius: 0.4rem;
+            margin: 0.1rem 0.65rem;
             transition: all 0.2s ease;
             cursor: pointer;
         }
 
             .sidebar-menu .nav-link i {
-                font-size: 1.15rem;
-                margin-right: 0.75rem;
-                width: 24px;
+                font-size: 1.05rem;
+                margin-right: 0.65rem;
+                width: 20px;
                 text-align: center;
             }
 
@@ -265,6 +266,7 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarMobile()"></div>
 
     <!-- SIDEBAR BÊN TRÁI -->
+    <!-- SIDEBAR BÊN TRÁI ĐÃ TINH GỌN -->
     <aside id="app-sidebar">
         <!-- Logo & Brand Header -->
         <a asp-controller="Home" asp-action="Index" class="sidebar-brand text-decoration-none">
@@ -272,7 +274,7 @@
                  asp-append-version="true"
                  alt="Logo Giáo Xứ"
                  class="rounded-3 me-2 shadow-sm"
-                 style="width: 38px; height: 38px; object-fit: contain; background-color: #ffffff; padding: 2px;" />
+                 style="width: 36px; height: 36px; object-fit: contain; background-color: #ffffff; padding: 2px;" />
             <div class="sidebar-header-title lh-sm">
                 <span class="fw-bold fs-6 text-white d-block">GIA ĐÌNH GIÁO LÝ</span>
                 <span class="text-white-50" style="font-size: 0.72rem;">Giáo Xứ Phú Trung</span>
@@ -281,7 +283,9 @@
 
         <!-- Menu Navigation Items -->
         <div class="sidebar-menu flex-grow-1 overflow-y-auto py-2">
-            <div class="sidebar-section-title">Tổng quan</div>
+
+            <!-- NHÓM 1: TỔNG QUAN & TRA CỨU -->
+            <div class="sidebar-section-title">Chung</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
                     <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
@@ -290,127 +294,130 @@
                         <span class="sidebar-text">Bảng Tin & Thông Báo</span>
                     </a>
                 </li>
-            </ul>
-
-            <!-- CỔNG TRA CỨU NHANH CHO PHỤ HUYNH / THIẾU NHI -->
-            <div class="sidebar-section-title">Cổng Tra Cứu Trực Tuyến</div>
-            <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-light")"
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-light")"
                        asp-controller="Lookup" asp-action="Index">
                         <i class="bi bi-search text-warning"></i>
-                        <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
+                        <span class="sidebar-text">Tra Cứu Nhanh</span>
                     </a>
                 </li>
             </ul>
 
-            <div class="sidebar-section-title">Học vụ & Lớp học</div>
-            <ul class="nav flex-column">
-                @if (User.Identity != null && User.Identity.IsAuthenticated)
-                {
-                    @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "AcademicYears" ? "active" : "")"
-                            asp-controller="AcademicYears" asp-action="Index">
-                                <i class="bi bi-calendar3"></i>
-                                <span class="sidebar-text">Niên Khóa</span>
-                            </a>
-                        </li>
-                    }
-                    @if (User.Identity != null && User.Identity.IsAuthenticated &&
-                                                  (User.IsInRole(UserRole.Admin) ||
-                                                  User.IsInRole(UserRole.SpiritualDirector) ||
-                                                  User.IsInRole(UserRole.ExecutiveBoard) ||
-                                                  User.IsInRole(UserRole.BranchHead) ||
-                                                  User.IsInRole(UserRole.Teacher)))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Classes" ? "active" : "")"
-                            asp-controller="Classes" asp-action="Index">
-                                <i class="bi bi-mortarboard-fill"></i>
-                                <span class="sidebar-text">Danh Sách Lớp</span>
-                            </a>
-                        </li>
-
-                        <li class="nav-item">
-                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Students" ? "active" : "")"
-                            asp-controller="Students" asp-action="Index">
-                                <i class="bi bi-people-fill"></i>
-                                <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
-                            </a>
-                        </li>
-                    }
-                    <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Grades" ? "active text-primary fw-bold" : "")"
-                           asp-controller="Grades" asp-action="Index">
-                            <i class="bi bi-mortarboard-fill me-2 text-warning"></i> Sổ Điểm Giáo Lý
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" asp-controller="Facilities" asp-action="Index">
-                            <i class="bi bi-building-gear me-2"></i> Cơ Sở Vật Chất
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "LessonPlans" ? "active" : "")"
-                        asp-controller="LessonPlans" asp-action="Index">
-                            <i class="bi bi-calendar3-week-fill me-2 text-info"></i> Kế Hoạch Bài Giảng
-                        </a>
-                    </li>
-                }
-
-            </ul>
-            <div class="sidebar-section-title">Chuyên cần & Check-in</div>
-            <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Attendance" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
-                       asp-controller="Attendance" asp-action="Index">
-                        <i class="bi bi-card-checklist"></i>
-                        <span class="sidebar-text">Sổ Điểm Danh</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link text-warning-emphasis @(ViewContext.RouteData.Values["action"]?.ToString() == "ScanQr" ? "active" : "")"
-                       asp-controller="Attendance" asp-action="ScanQr">
-                        <i class="bi bi-qr-code-scan text-warning"></i>
-                        <span class="sidebar-text">Quét QR Check-in</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Statistics" ? "active" : "")"
-                       asp-controller="Attendance" asp-action="Statistics">
-                        <i class="bi bi-pie-chart-fill"></i>
-                        <span class="sidebar-text">Báo Cáo Chuyên Cần</span>
-                    </a>
-                </li>
-            </ul>
-
-            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.SpiritualDirector))
+            <!-- NHÓM 2: CHUYÊN CẦN & CHECK-IN -->
+            @if (User.Identity != null && User.Identity.IsAuthenticated)
             {
-                <div class="sidebar-section-title">Quản trị hệ thống</div>
+                <div class="sidebar-section-title">Điểm Danh</div>
                 <ul class="nav flex-column">
-                    @if (User.IsInRole("Admin") || User.IsInRole("ExecutiveBoard"))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Users" ? "active" : "")"
-                                asp-controller="Users" asp-action="Index">
-                                <i class="bi bi-person-gear"></i>
-                                <span class="sidebar-text">Tài Khoản & Quyền</span>
-                            </a>
-                        </li>
-                    }
                     <li class="nav-item">
-                        <a class="nav-link text-warning" asp-controller="Governance" asp-action="Index">
-                            <i class="bi bi-person-badge-fill me-2"></i> Bàn Giao & Nhiệm Kỳ
+                        <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Attendance" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")"
+                           asp-controller="Attendance" asp-action="Index">
+                            <i class="bi bi-card-checklist"></i>
+                            <span class="sidebar-text">Sổ Điểm Danh</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-warning-emphasis @(ViewContext.RouteData.Values["action"]?.ToString() == "ScanQr" ? "active" : "")"
+                           asp-controller="Attendance" asp-action="ScanQr">
+                            <i class="bi bi-qr-code-scan text-warning"></i>
+                            <span class="sidebar-text">Quét QR Check-in</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Statistics" ? "active" : "")"
+                           asp-controller="Attendance" asp-action="Statistics">
+                            <i class="bi bi-pie-chart-fill"></i>
+                            <span class="sidebar-text">Báo Cáo Chuyên Cần</span>
                         </a>
                     </li>
                 </ul>
             }
+            <!-- NHÓM 3: HỌC VỤ & LỚP HỌC -->
+            @if (User.Identity != null && User.Identity.IsAuthenticated)
+            {
+                var isLead = User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard);
+                var isStaff = isLead || User.IsInRole(UserRole.BranchHead) || User.IsInRole(UserRole.Teacher);
+
+                if (isStaff)
+                {
+                    <div class="sidebar-section-title">Học Vụ & Đào Tạo</div>
+                    <ul class="nav flex-column">
+                        @if (isLead)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "AcademicYears" ? "active" : "")"
+                                   asp-controller="AcademicYears" asp-action="Index">
+                                    <i class="bi bi-calendar3"></i>
+                                    <span class="sidebar-text">Niên Khóa</span>
+                                </a>
+                            </li>
+                        }
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Classes" ? "active" : "")"
+                               asp-controller="Classes" asp-action="Index">
+                                <i class="bi bi-mortarboard-fill"></i>
+                                <span class="sidebar-text">Danh Sách Lớp</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Students" ? "active" : "")"
+                               asp-controller="Students" asp-action="Index">
+                                <i class="bi bi-people-fill"></i>
+                                <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Grades" ? "active" : "")"
+                               asp-controller="Grades" asp-action="Index">
+                                <i class="bi bi-journal-check text-warning"></i>
+                                <span class="sidebar-text">Sổ Điểm Giáo Lý</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "LessonPlans" ? "active" : "")"
+                               asp-controller="LessonPlans" asp-action="Index">
+                                <i class="bi bi-calendar3-week-fill text-info"></i>
+                                <span class="sidebar-text">Kế Hoạch Bài Giảng</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facilities" ? "active" : "")"
+                               asp-controller="Facilities" asp-action="Index">
+                                <i class="bi bi-building-gear"></i>
+                                <span class="sidebar-text">Cơ Sở Vật Chất</span>
+                            </a>
+                        </li>
+                    </ul>
+                }
+
+                <!-- NHÓM 4: QUẢN TRỊ HỆ THỐNG -->
+                if (isLead)
+                {
+                    <div class="sidebar-section-title">Hệ Thống</div>
+                    <ul class="nav flex-column">
+                        @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Users" ? "active" : "")"
+                                   asp-controller="Users" asp-action="Index">
+                                    <i class="bi bi-person-gear"></i>
+                                    <span class="sidebar-text">Tài Khoản & Quyền</span>
+                                </a>
+                            </li>
+                        }
+                        <li class="nav-item">
+                            <a class="nav-link text-warning" asp-controller="Governance" asp-action="Index">
+                                <i class="bi bi-person-badge-fill"></i>
+                                <span class="sidebar-text">Bàn Giao & Nhiệm Kỳ</span>
+                            </a>
+                        </li>
+                    </ul>
+                }
+            }
         </div>
 
-        <div class="p-3 border-top border-secondary border-opacity-25 small text-center text-muted">
-            <span class="sidebar-text">&copy; 2026 Gia Đình Giáo Lý Giáo Xứ Phú Trung</span>
+        <!-- Sidebar Bottom Footer -->
+        <div class="py-2 px-3 border-top border-secondary border-opacity-25 small text-center text-muted" style="font-size: 0.7rem;">
+            <span class="sidebar-text">&copy; 2026 GLGX Phú Trung</span>
         </div>
     </aside>
 
