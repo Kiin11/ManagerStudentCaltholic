@@ -294,8 +294,9 @@
             <div class="sidebar-section-title">Cổng Tra Cứu Trực Tuyến</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link text-warning-emphasis" href="javascript:void(0)" onclick="openLookupModal()">
-                        <i class="bi bi-search-heart text-warning"></i>
+                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-light")"
+                       asp-controller="Lookup" asp-action="Index">
+                        <i class="bi bi-search text-warning"></i>
                         <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
                     </a>
                 </li>

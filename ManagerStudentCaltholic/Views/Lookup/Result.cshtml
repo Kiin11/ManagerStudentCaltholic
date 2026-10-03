@@ -1,0 +1,205 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.StudentLookupResultViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = $"Kết Quả Học Vụ - {Model.ChristianName} {Model.FullName}";
+}
+
+<div class="container py-4">
+    <!-- Nút quay lại & Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <a href="/TraCuu" class="btn btn-outline-secondary rounded-pill px-3">
+            <i class="bi bi-arrow-left me-1"></i> Tra Cứu Khác
+        </a>
+        <button onclick="window.print()" class="btn btn-outline-primary rounded-pill px-3 shadow-sm d-print-none">
+            <i class="bi bi-printer me-1"></i> In Kết Quả Này
+        </button>
+    </div>
+
+    <div class="row g-4">
+        <!-- Cột Trái: Thẻ Thiếu Nhi & Mã QR Check-in Điện Tử -->
+        <div class="col-lg-4 col-md-5">
+            <div class="card border-0 shadow-sm rounded-4 text-center p-4 mb-4">
+                <div class="mx-auto mb-3 p-2 bg-white rounded-3 shadow-sm border" style="width: 170px; height: 170px;">
+                    @if (!string.IsNullOrEmpty(Model.QrCodeBase64))
+                    {
+                        <img src="@Model.QrCodeBase64" alt="QR Thẻ Học Viên" class="img-fluid rounded" />
+                    }
+                    else
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                            <i class="bi bi-qr-code fs-1"></i>
+                        </div>
+                    }
+                </div>
+
+                <h4 class="fw-bold text-primary mb-1">@Model.ChristianName @Model.FullName</h4>
+                <div class="badge bg-light text-dark border font-monospace fs-6 mb-2">@Model.StudentCode</div>
+
+                <ul class="list-group list-group-flush text-start small mt-3">
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Lớp học:</span>
+                        <span class="fw-bold">@Model.ClassName (@Model.GradeLevel)</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Phòng học:</span>
+                        <span class="fw-bold">@Model.RoomNumber</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">Ngày sinh:</span>
+                        <span class="fw-semibold">@Model.DateOfBirth.ToString("dd/MM/yyyy")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span class="text-muted">GLV Phụ Trách:</span>
+                        <span class="fw-semibold">@(Model.Teachers.Any() ? string.Join(", ", Model.Teachers) : "Đang cập nhật")</span>
+                    </li>
+                </ul>
+
+                @if (!string.IsNullOrEmpty(Model.QrCodeBase64))
+                {
+                    <a href="@Model.QrCodeBase64" download="The_QR_@(Model.StudentCode).png" class="btn btn-sm btn-outline-success rounded-pill mt-3 w-100 d-print-none">
+                        <i class="bi bi-download me-1"></i> Tải Thẻ QR Về Điện Thoại
+                    </a>
+                }
+            </div>
+
+            <!-- Thẻ Điều Kiện Bí Tích Cuối Năm -->
+            <div class="card border-0 shadow-sm rounded-4 p-4 text-center">
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-award text-warning me-1"></i> ĐIỀU KIỆN LÃNH BÍ TÍCH</h6>
+                @if (Model.IsEligibleForSacrament)
+                {
+                    <div class="alert alert-success border-0 mb-2 py-2">
+                        <i class="bi bi-check-circle-fill fs-4 text-success d-block mb-1"></i>
+                        <span class="fw-bold">ĐỦ ĐIỀU KIỆN</span>
+                    </div>
+                    <small class="text-muted">Đạt tiêu chuẩn chuyên cần $\ge 80\%$ và ĐTB Giáo lý $\ge 5.0$.</small>
+                }
+                else
+                {
+                    <div class="alert alert-warning border-0 mb-2 py-2">
+                        <i class="bi bi-exclamation-triangle-fill fs-4 text-warning d-block mb-1"></i>
+                        <span class="fw-bold">CHƯA ĐỦ ĐIỀU KIỆN</span>
+                    </div>
+                    <small class="text-muted">Cần cải thiện tỷ lệ chuyên cần đi Lễ/Học hoặc hoàn thành các bài thi bù.</small>
+                }
+            </div>
+        </div>
+
+        <!-- Cột Phải: Báo Cáo Chuyên Cần & Bảng Điểm 2 Học Kỳ -->
+        <div class="col-lg-8 col-md-7">
+            <!-- Thống Kê Chuyên Cần -->
+            <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                <h5 class="fw-bold text-dark mb-3">
+                    <i class="bi bi-calendar-check text-primary me-2"></i>Tình Hình Chuyên Cần
+                </h5>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-4 bg-light border text-center">
+                            <span class="text-muted small d-block">Tham Dự Thánh Lễ (Thứ 5 & Chúa Nhật)</span>
+                            <h3 class="fw-bold text-primary my-1">@Model.MassAttendanceRate%</h3>
+                            <small class="text-muted">Đã dự: <strong>@Model.AttendedMassCount</strong> / @Model.TotalMassSessions buổi</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 rounded-4 bg-light border text-center">
+                            <span class="text-muted small d-block">Chuyên Cần Giờ Học Giáo Lý</span>
+                            <h3 class="fw-bold text-success my-1">@Model.ClassAttendanceRate%</h3>
+                            <small class="text-muted">Đã học: <strong>@Model.AttendedClassCount</strong> / @Model.TotalClassSessions buổi</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bảng Điểm Chi Tiết -->
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+                <div class="card-header bg-white p-3 border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="fw-bold text-dark mb-0">
+                        <i class="bi bi-journal-bookmark text-primary me-2"></i>Kết Quả Điểm Số Chi Tiết
+                    </h5>
+                    <div>
+                        <span class="badge bg-primary-subtle text-primary border px-3 py-2 rounded-pill">
+                            Xếp loại: <strong>@Model.OverallRank</strong>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-bordered align-middle mb-0 text-center">
+                        <thead class="table-light small">
+                            <tr>
+                                <th class="text-start ps-3">Học Kỳ / Cột Điểm</th>
+                                <th style="width: 90px;">Hệ Số</th>
+                                <th style="width: 110px;">Điểm Số</th>
+                                <th style="width: 140px;">Ghi Chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- HỌC KỲ 1 -->
+                            <tr class="table-primary fw-bold text-start">
+                                <td colspan="4" class="ps-3">
+                                    <i class="bi bi-1-circle me-1"></i> BẢNG ĐIỂM HỌC KỲ 1
+                                    <span class="float-end text-primary me-2">ĐTB HK1: @(Model.HK1.SemesterAverage.HasValue? Model.HK1.SemesterAverage.Value.ToString("0.00") : "--")</span>
+                                </td>
+                            </tr>
+                            @if (Model.HK1.Items.Any())
+                            {
+                                foreach (var g in Model.HK1.Items)
+                                {
+                                    <tr>
+                                        <td class="text-start ps-4">@g.DisplayName</td>
+                                        <td>@g.WeightFactor</td>
+                                        <td class="fw-bold @(g.Score.HasValue && g.Score < 5 ? "text-danger" : "text-dark")">
+                                            @(g.Score.HasValue? g.Score.Value.ToString("0.0") : "--")
+                                        </td>
+                                        <td class="small text-muted">@(g.IsSacramentExam ? "Khảo hạch Bí tích" : "")</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="4" class="text-muted small py-2">Chưa có cột điểm nào trong HK1</td></tr>
+                            }
+
+                            <!-- HỌC KỲ 2 -->
+                            <tr class="table-primary fw-bold text-start">
+                                <td colspan="4" class="ps-3">
+                                    <i class="bi bi-2-circle me-1"></i> BẢNG ĐIỂM HỌC KỲ 2
+                                    <span class="float-end text-primary me-2">ĐTB HK2: @(Model.HK2.SemesterAverage.HasValue? Model.HK2.SemesterAverage.Value.ToString("0.00") : "--")</span>
+                                </td>
+                            </tr>
+                            @if (Model.HK2.Items.Any())
+                            {
+                                foreach (var g in Model.HK2.Items)
+                                {
+                                    <tr>
+                                        <td class="text-start ps-4">@g.DisplayName</td>
+                                        <td>@g.WeightFactor</td>
+                                        <td class="fw-bold @(g.Score.HasValue && g.Score < 5 ? "text-danger" : "text-dark")">
+                                            @(g.Score.HasValue? g.Score.Value.ToString("0.0") : "--")
+                                        </td>
+                                        <td class="small text-muted">@(g.IsSacramentExam ? "Khảo hạch Bí tích" : "")</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="4" class="text-muted small py-2">Chưa có cột điểm nào trong HK2</td></tr>
+                            }
+
+                            <!-- TỔNG KẾT CẢ NĂM -->
+                            <tr class="bg-warning-subtle fw-bold">
+                                <td colspan="2" class="text-end pe-3">ĐIỂM TRUNG BÌNH CẢ NĂM:</td>
+                                <td class="fs-5 text-primary">
+                                    @(Model.YearAverage.HasValue? Model.YearAverage.Value.ToString("0.00") : "--")
+                                </td>
+                                <td>
+                                    <span class="badge bg-success px-2 py-1">@Model.OverallRank</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
