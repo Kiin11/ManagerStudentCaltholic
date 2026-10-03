@@ -444,9 +444,11 @@
 
             <!-- Nút Tra cứu nhanh trên Topbar + Profile -->
             <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm d-flex align-items-center gap-1" onclick="openLookupModal()">
-                    <i class="bi bi-search"></i> <span class="d-none d-md-inline">Tra Cứu Qua Mã</span>
-                </button>
+                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-dark")"
+                   asp-controller="Lookup" asp-action="Index">
+                    <i class="bi bi-search text-warning"></i>
+                    <span class="sidebar-text">Tra Cứu Nhanh</span>
+                </a>
 
                 @if (User.Identity != null && User.Identity.IsAuthenticated)
                 {
