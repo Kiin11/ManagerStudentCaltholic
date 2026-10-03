@@ -971,8 +971,8 @@ namespace ManagerStudentCaltholic.Controllers
             var enrollments = await _context.Enrollments
                 .Include(e => e.Student)
                 .Where(e => e.ClassRoomId == selectedClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.FirstName)
-                .ThenBy(e => e.Student.LastName)
+                .OrderBy(e => e.Student.LastName)
+                .ThenBy(e => e.Student.FirstName)
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
@@ -996,7 +996,7 @@ namespace ManagerStudentCaltholic.Controllers
                     EnrollmentId = en.Id,
                     StudentCode = en.Student.StudentCode,
                     ChristianName = en.Student.ChristianName,
-                    FullName = $"{en.Student.LastName} {en.Student.FirstName}".Trim()
+                    FullName = $"{en.Student.FirstName} {en.Student.LastName}".Trim()
                 };
 
                 var studentAtts = attendances.Where(a => a.EnrollmentId == en.Id).ToList();

@@ -22,15 +22,18 @@
                         Chào mừng bạn đến với Hệ Thống Quản Lý Giáo Lý. Theo dõi sĩ số, cập nhật điểm danh và phân công lớp học trực quan theo thời gian thực.
                     </p>
                     <div class="d-flex flex-wrap gap-2">
-                        <a asp-controller="Attendance" asp-action="ScanQr" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
-                            <i class="bi bi-qr-code-scan me-1"></i> Quét QR Check-in
-                        </a>
-                        <a asp-controller="Attendance" asp-action="Index" class="btn btn-outline-light rounded-pill px-4">
-                            <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
-                        </a>
-                        <button type="button" class="btn btn-light text-primary fw-bold rounded-pill px-4" onclick="openLookupModal()">
+                        @if (User.Identity != null && User.Identity.IsAuthenticated)
+                        {
+                            <a asp-controller="Attendance" asp-action="ScanQr" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
+                                <i class="bi bi-qr-code-scan me-1"></i> Quét QR Check-in
+                            </a>
+                            <a asp-controller="Attendance" asp-action="Index" class="btn btn-outline-light rounded-pill px-4">
+                                <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
+                            </a>
+                        }
+                        <a asp-controller="Lookup" asp-action="Index" class="btn btn-light text-primary fw-bold rounded-pill px-4 shadow-sm">
                             <i class="bi bi-search me-1"></i> Tra Cứu Qua Code
-                        </button>
+                        </a>
                     </div>
                 </div>
                 <div class="col-lg-4 d-none d-lg-flex justify-content-end">
@@ -95,7 +98,7 @@
 
         <!-- THẺ THAY THẾ: CỔNG TRA CỨU ĐIỂM & ĐIỂM DANH QUA MÃ CODE -->
         <div class="col-12 col-sm-6 col-xl-3">
-            <div class="card border-0 rounded-4 shadow-sm h-100 cursor-pointer bg-white" onclick="openLookupModal()" style="cursor: pointer;">
+            <a asp-controller="Lookup" asp-action="Index" class="card border-0 rounded-4 shadow-sm h-100 bg-white text-decoration-none hover-shadow transition">
                 <div class="card-body p-3 p-md-4">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div class="rounded-3 bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center"
@@ -110,7 +113,7 @@
                         <i class="bi bi-arrow-right-circle text-primary fs-5"></i>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 

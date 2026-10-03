@@ -294,8 +294,9 @@
             <div class="sidebar-section-title">Cổng Tra Cứu Trực Tuyến</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link text-warning-emphasis" href="javascript:void(0)" onclick="openLookupModal()">
-                        <i class="bi bi-search-heart text-warning"></i>
+                    <a class="nav-link @(ViewContext.RouteData.Values["Controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-light")"
+                       asp-controller="Lookup" asp-action="Index">
+                        <i class="bi bi-search text-warning"></i>
                         <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
                     </a>
                 </li>
@@ -629,77 +630,75 @@
                 resArea.innerHTML = "<i class='bi bi-x-circle me-1'></i> Có lỗi xảy ra khi tra cứu: " + err.message;
             }
         }
+
+        // Hàm cuộn mượt lên đỉnh trang
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Hàm cuộn mượt xuống đáy trang
+        function scrollToBottom() {
+            window.scrollTo({
+                top: document.documentElement.scrollHeight || document.body.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        // Tự động kiểm tra vị trí cuộn:
+        // - Khi đã cuộn xuống hơn 150px: Hiện nút kéo lên
+        // - Khi chạm đáy trang: Tự làm mờ nút kéo xuống
+        window.addEventListener('scroll', function () {
+            const btnTop = document.getElementById('btnScrollToTop');
+            const btnBottom = document.getElementById('btnScrollToBottom');
+            const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+            const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+            if (btnTop) {
+                if (scrollPosition > 150) {
+                    btnTop.classList.remove('hide-btn');
+                } else {
+                    btnTop.classList.add('hide-btn');
+                }
+            }
+
+            if (btnBottom) {
+                // Nếu gần chạm đáy (cách đáy <= 50px) thì làm mờ nút kéo xuống
+                if (totalHeight - scrollPosition <= 50) {
+                    btnBottom.style.opacity = '0.35';
+                } else {
+                    btnBottom.style.opacity = '0.85';
+                }
+            }
+        });
+
+        // Đăng ký Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((reg) => console.log('[PWA] Service Worker đã kích hoạt với phạm vi:', reg.scope))
+                    .catch((err) => console.warn('[PWA] Đăng ký Service Worker thất bại:', err));
+            });
+        }
+
+        // Bắt sự kiện Online / Offline
+        function updateNetworkStatus() {
+            const notice = document.getElementById('offlineNotice');
+            if (notice) {
+                if (navigator.onLine) {
+                    notice.classList.add('d-none');
+                } else {
+                    notice.classList.remove('d-none');
+                }
+            }
+        }
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        updateNetworkStatus();
     </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
-
-<script>
-    // Hàm cuộn mượt lên đỉnh trang
-    function scrollToTop() {
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
-    }
-
-    // Hàm cuộn mượt xuống đáy trang
-    function scrollToBottom() {
-        window.scrollTo({
-            top: document.documentElement.scrollHeight || document.body.scrollHeight,
-            behavior: 'smooth'
-        });
-    }
-
-    // Tự động kiểm tra vị trí cuộn:
-    // - Khi đã cuộn xuống hơn 150px: Hiện nút kéo lên
-    // - Khi chạm đáy trang: Tự làm mờ nút kéo xuống
-    window.addEventListener('scroll', function () {
-        const btnTop = document.getElementById('btnScrollToTop');
-        const btnBottom = document.getElementById('btnScrollToBottom');
-        const scrollPosition = window.scrollY || document.documentElement.scrollTop;
-        const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-
-        if (btnTop) {
-            if (scrollPosition > 150) {
-                btnTop.classList.remove('hide-btn');
-            } else {
-                btnTop.classList.add('hide-btn');
-            }
-        }
-
-        if (btnBottom) {
-            // Nếu gần chạm đáy (cách đáy <= 50px) thì làm mờ nút kéo xuống
-            if (totalHeight - scrollPosition <= 50) {
-                btnBottom.style.opacity = '0.35';
-            } else {
-                btnBottom.style.opacity = '0.85';
-            }
-        }
-    });
-
-    // Đăng ký Service Worker
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
-                .then((reg) => console.log('[PWA] Service Worker đã kích hoạt với phạm vi:', reg.scope))
-                .catch((err) => console.warn('[PWA] Đăng ký Service Worker thất bại:', err));
-        });
-    }
-
-    // Bắt sự kiện Online / Offline
-    function updateNetworkStatus() {
-        const notice = document.getElementById('offlineNotice');
-        if (notice) {
-            if (navigator.onLine) {
-                notice.classList.add('d-none');
-            } else {
-                notice.classList.remove('d-none');
-            }
-        }
-    }
-
-    window.addEventListener('online', updateNetworkStatus);
-    window.addEventListener('offline', updateNetworkStatus);
-    updateNetworkStatus();
-</script>

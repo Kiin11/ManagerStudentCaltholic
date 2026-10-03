@@ -1,0 +1,78 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.StudentLookupRequestDto
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Cổng Tra Cứu Kết Quả Học Vụ Thiếu Nhi";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8 col-sm-12">
+            <div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="card-header bg-gradient bg-primary text-white p-4 text-center">
+                    <div class="display-6 mb-2">
+                        <i class="bi bi-search"></i>
+                    </div>
+                    <h3 class="fw-bold mb-1">CỔNG TRA CỨU GIÁO LÝ</h3>
+                    <p class="small text-white-50 mb-0">Dành cho Phụ Huynh & Thiếu Nhi theo dõi Điểm số & Chuyên cần</p>
+                </div>
+
+                <div class="card-body p-4 p-md-5">
+                    @if (!ViewData.ModelState.IsValid && ViewData.ModelState[string.Empty] != null)
+                    {
+                        <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            @Html.ValidationSummary(true, "", new { @class = "d-inline" })
+                        </div>
+                    }
+
+                    <form asp-controller="Lookup" asp-action="Search" method="post" autocomplete="off">
+                        @Html.AntiForgeryToken()
+
+                        <!-- Mã Định Danh Thiếu Nhi -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark">
+                                Mã Thiếu Nhi / Mã Thẻ QR <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-lg shadow-sm">
+                                <span class="input-group-text bg-light border-end-0 text-muted">
+                                    <i class="bi bi-qr-code"></i>
+                                </span>
+                                <input asp-for="StudentCode" class="form-control border-start-0 text-uppercase fw-bold text-primary font-monospace"
+                                       placeholder="Ví dụ: TN-2026-0001" required autofocus />
+                            </div>
+                            <span asp-validation-for="StudentCode" class="text-danger small mt-1 d-block"></span>
+                            <div class="form-text text-muted small">
+                                Mã in phía dưới mã QR trên thẻ học viên của em.
+                            </div>
+                        </div>
+
+                        <!-- Ngày Sinh Xác Thực -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark">
+                                Ngày Sinh Của Em <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-lg shadow-sm">
+                                <span class="input-group-text bg-light border-end-0 text-muted">
+                                    <i class="bi bi-calendar3"></i>
+                                </span>
+                                <input asp-for="DateOfBirth" type="date" class="form-control border-start-0 fw-semibold" required />
+                            </div>
+                            <span asp-validation-for="DateOfBirth" class="text-danger small mt-1 d-block"></span>
+                            <div class="form-text text-muted small">
+                                Nhập chính xác ngày sinh để bảo mật thông tin gia đình.
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 rounded-pill fw-bold shadow-sm py-3 mt-2">
+                            <i class="bi bi-arrow-right-circle me-2"></i> Tra Cứu Kết Quả Ngay
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card-footer bg-light p-3 text-center text-muted small">
+                    <i class="bi bi-shield-lock me-1 text-success"></i> Hệ thống tự động giới hạn và bảo vệ thông tin riêng tư.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
