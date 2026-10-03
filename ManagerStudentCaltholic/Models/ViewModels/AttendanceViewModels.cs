@@ -185,4 +185,69 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public bool IsEligibleForSacrament { get; set; } // Đủ điều kiện lãnh Bí tích (>= 80% cả Lễ và Học)
     }
     #endregion
+
+    #region Thống kê điểm danh theo tháng (TASK-412)
+    public class MonthlyAttendanceSessionHeader
+    {
+        public DateTime Date { get; set; }
+        public DayOfWeek DayOfWeek { get; set; }
+        public string FormattedDate => Date.ToString("dd/MM");
+        public bool IsSunday => DayOfWeek == DayOfWeek.Sunday;
+        public bool IsThursday => DayOfWeek == DayOfWeek.Thursday;
+    }
+
+    public class StudentDailyStatusDto
+    {
+        public DateTime Date { get; set; }
+        public DayOfWeek DayOfWeek { get; set; }
+
+        // Trạng thái Lễ (T5 hoặc CN)
+        public bool HasMassRecord { get; set; }
+        public string MassStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
+        public TimeSpan? MassCheckInTime { get; set; }
+        public bool IsMassMakeUp { get; set; }
+
+        // Trạng thái Học (Chỉ CN)
+        public bool HasClassRecord { get; set; }
+        public string ClassStatus { get; set; } = "ABSENT_UNPERMITTED";
+        public TimeSpan? ClassCheckInTime { get; set; }
+        public bool IsClassMakeUp { get; set; }
+    }
+
+    public class StudentMonthlyAttendanceRow
+    {
+        public long StudentId { get; set; }
+        public long EnrollmentId { get; set; }
+        public string StudentCode { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string? ChristianName { get; set; }
+
+        // Key: Date.Date (yyyy-MM-dd)
+        public Dictionary<DateTime, StudentDailyStatusDto> DailyStatuses { get; set; } = new();
+
+        // Tổng kết tháng
+        public int TotalMassAttended { get; set; }
+        public int TotalMassLate { get; set; }
+        public int TotalMassAbsent { get; set; }
+
+        public int TotalClassAttended { get; set; }
+        public int TotalClassLate { get; set; }
+        public int TotalClassAbsent { get; set; }
+    }
+
+    public class MonthlyAttendanceReportViewModel
+    {
+        public int ClassId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public string GradeLevel { get; set; } = string.Empty;
+        public int SelectedMonth { get; set; }
+        public int SelectedYear { get; set; }
+
+        // Danh sách các ngày sinh hoạt (Thứ 5 & Chúa Nhật) trong tháng
+        public List<MonthlyAttendanceSessionHeader> SessionDates { get; set; } = new();
+
+        public List<StudentMonthlyAttendanceRow> Rows { get; set; } = new();
+    }
+
+    #endregion
 }

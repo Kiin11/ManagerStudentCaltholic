@@ -26,6 +26,74 @@
     <meta name="apple-mobile-web-app-title" content="QL Giáo Lý">
 
     <style>
+        /* 1. TÙY CHỈNH THANH CUỘN TRÌNH DUYỆT (SCROLLBAR) */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Dành cho Chrome, Edge, Safari */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 6px;
+            border: 2px solid #f1f5f9;
+        }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #64748b;
+            }
+
+        /* 2. CỤM NÚT TRƯỢT KÉO LÊN / KÉO XUỐNG GÓC PHẢI MÀN HÌNH */
+        .scroll-floating-controls {
+            position: fixed;
+            right: 22px;
+            bottom: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1050;
+        }
+
+        .btn-scroll-action {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: none;
+            background: #1e40af;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            opacity: 0.85;
+        }
+
+            .btn-scroll-action:hover {
+                opacity: 1;
+                transform: translateY(-2px);
+                background: #1d4ed8;
+                box-shadow: 0 6px 16px rgba(30, 64, 175, 0.5);
+                color: #ffffff;
+            }
+
+        /* Nút kéo lên sẽ tự ẩn khi trang đang ở đỉnh */
+        #btnScrollToTop.hide-btn {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(0.8);
+        }
         :root {
             --sidebar-width: 260px;
             --sidebar-collapsed-width: 78px;
@@ -182,6 +250,18 @@
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
+    <!-- CỤM NÚT KÉO LÊN & KÉO XUỐNG NHANH -->
+    <div class="scroll-floating-controls" aria-label="Điều hướng cuộn trang">
+        <!-- Nút Kéo Lên Trên Cùng -->
+        <button type="button" id="btnScrollToTop" class="btn-scroll-action hide-btn" onclick="scrollToTop()" title="Kéo lên đầu trang">
+            <i class="bi bi-chevron-up"></i>
+        </button>
+
+        <!-- Nút Kéo Xuống Dưới Cùng -->
+        <button type="button" id="btnScrollToBottom" class="btn-scroll-action" onclick="scrollToBottom()" title="Kéo xuống chân trang">
+            <i class="bi bi-chevron-down"></i>
+        </button>
+    </div>
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarMobile()"></div>
 
     <!-- SIDEBAR BÊN TRÁI -->
@@ -555,6 +635,49 @@
 </html>
 
 <script>
+    // Hàm cuộn mượt lên đỉnh trang
+    function scrollToTop() {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }
+
+    // Hàm cuộn mượt xuống đáy trang
+    function scrollToBottom() {
+        window.scrollTo({
+            top: document.documentElement.scrollHeight || document.body.scrollHeight,
+            behavior: 'smooth'
+        });
+    }
+
+    // Tự động kiểm tra vị trí cuộn:
+    // - Khi đã cuộn xuống hơn 150px: Hiện nút kéo lên
+    // - Khi chạm đáy trang: Tự làm mờ nút kéo xuống
+    window.addEventListener('scroll', function () {
+        const btnTop = document.getElementById('btnScrollToTop');
+        const btnBottom = document.getElementById('btnScrollToBottom');
+        const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+        const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+        if (btnTop) {
+            if (scrollPosition > 150) {
+                btnTop.classList.remove('hide-btn');
+            } else {
+                btnTop.classList.add('hide-btn');
+            }
+        }
+
+        if (btnBottom) {
+            // Nếu gần chạm đáy (cách đáy <= 50px) thì làm mờ nút kéo xuống
+            if (totalHeight - scrollPosition <= 50) {
+                btnBottom.style.opacity = '0.35';
+            } else {
+                btnBottom.style.opacity = '0.85';
+            }
+        }
+    });
+
     // Đăng ký Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
