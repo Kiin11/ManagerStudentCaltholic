@@ -6,3 +6,5 @@ docker-compose.override.yml
 *.exe
 *.log
 parish-web-app_key.pem
+ManagerStudentCaltholic/appsettings.Development.json
+ManagerStudentCaltholic/bin/Debug/net8.0/appsettings.Development.json
