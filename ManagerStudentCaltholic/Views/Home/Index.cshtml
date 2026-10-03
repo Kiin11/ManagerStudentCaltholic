@@ -22,12 +22,15 @@
                         Chào mừng bạn đến với Hệ Thống Quản Lý Giáo Lý. Theo dõi sĩ số, cập nhật điểm danh và phân công lớp học trực quan theo thời gian thực.
                     </p>
                     <div class="d-flex flex-wrap gap-2">
-                        <a asp-controller="Attendance" asp-action="ScanQr" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
-                            <i class="bi bi-qr-code-scan me-1"></i> Quét QR Check-in
-                        </a>
-                        <a asp-controller="Attendance" asp-action="Index" class="btn btn-outline-light rounded-pill px-4">
-                            <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
-                        </a>
+                        @if (User.Identity != null && User.Identity.IsAuthenticated)
+                        {
+                            <a asp-controller="Attendance" asp-action="ScanQr" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
+                                <i class="bi bi-qr-code-scan me-1"></i> Quét QR Check-in
+                            </a>
+                            <a asp-controller="Attendance" asp-action="Index" class="btn btn-outline-light rounded-pill px-4">
+                                <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
+                            </a>
+                        }
                         <button type="button" class="btn btn-light text-primary fw-bold rounded-pill px-4" onclick="openLookupModal()">
                             <i class="bi bi-search me-1"></i> Tra Cứu Qua Code
                         </button>

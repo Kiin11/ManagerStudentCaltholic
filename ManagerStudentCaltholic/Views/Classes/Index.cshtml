@@ -1,8 +1,15 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.ClassRoom>
+@using System.Security.Claims
+@using ManagerStudentCaltholic.Models.Entities
 @{
     ViewData["Title"] = "Quản lý Lớp Học Giáo Lý";
     var selectedYearId = (int)ViewBag.SelectedYearId;
     var selectedGrade = (string)ViewBag.SelectedGrade;
+    var currentUserIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+    long.TryParse(currentUserIdStr, out var currentUserId);
+    var isLeadership = User.IsInRole(UserRole.Admin) ||
+                       User.IsInRole(UserRole.SpiritualDirector) ||
+                       User.IsInRole(UserRole.ExecutiveBoard);
 }
 
 <div class="container-fluid py-4">
@@ -173,9 +180,41 @@
                                     </a>
                                 </div>
                             </div>
-                            <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-primary btn-sm rounded-pill py-2">
-                                <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh
-                            </a>
+                            @{
+                                // Kiểm tra xem GLV hiện tại có phụ trách lớp này không
+                                var isTeacherOfThisClass = c.ClassTeachers != null && c.ClassTeachers.Any(ct => ct.UserId == currentUserId);
+                            }
+
+                            @if (isLeadership || isTeacherOfThisClass)
+                            {
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-info btn-sm w-100 rounded-pill">
+                                            <i class="bi bi-card-checklist me-1"></i> Điểm Danh
+                                        </a>
+                                    </div>
+                                    <div class="col-6">
+                                        <a href="/Grades/Index?classId=@c.Id" class="btn btn-outline-secondary btn-sm w-100 rounded-pill">
+                                            <i class="bi bi-table me-1 text-warning"></i> Sổ Điểm
+                                        </a>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-danger btn-sm w-100 rounded-pill disabled" title="Bạn không được phân công dạy lớp này">
+                                            <i class="bi bi-card-checklist me-1"></i> Điểm Danh
+                                        </a>
+                                    </div>
+                                    <div class="col-6">
+                                        <a href="/Grades/Index?classId=@c.Id" class="btn btn btn-outline-danger btn-sm w-100 rounded-pill disabled" title="Bạn không được phân công dạy lớp này">
+                                            <i class="bi bi-table me-1 text-warning"></i> Sổ Điểm
+                                        </a>
+                                    </div>
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>

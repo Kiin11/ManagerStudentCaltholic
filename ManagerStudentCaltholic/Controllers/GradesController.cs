@@ -2,11 +2,14 @@
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
     public class GradesController : Controller
     {
         private readonly ParishDbContext _context;
@@ -36,25 +39,64 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction("Index", "Home");
             }
 
-            var classes = await _context.Classes
-                .Where(c => c.AcademicYearId == currentYear.Id)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            long.TryParse(userIdStr, out var currentUserId);
+
+            bool isLeadership = User.IsInRole(UserRole.Admin) ||
+                                User.IsInRole(UserRole.SpiritualDirector) ||
+                                User.IsInRole(UserRole.ExecutiveBoard);
+            bool isBranchHead = User.IsInRole(UserRole.BranchHead);
+            var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+
+
+            var classes =  _context.Classes
+                .Where(c => c.AcademicYearId == currentYear.Id);
+
+            if (isLeadership)
+            {
+                // Admin, Cha, BĐH: Xem được toàn bộ lớp của tất cả các khối
+            }
+            else if (isBranchHead && !string.IsNullOrEmpty(managedGrade))
+            {
+                // Trưởng khối: Xem được tất cả các lớp trong khối mình phụ trách
+                classes = classes.Where(c => c.GradeLevel == managedGrade);
+            }
+            else
+            {
+                // Giáo lý viên (Teacher): CHỈ XEM ĐƯỢC CÁC LỚP MÌNH ĐƯỢC PHÂN CÔNG (dựa theo ClassTeachers.UserId)
+                classes = classes.Where(c => c.ClassTeachers.Any(ct => ct.UserId == currentUserId));
+            }
+
+            var allowedClasses = await classes
+                .OrderBy(c => c.GradeLevel)
+                .ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
 
-            ViewBag.Classes = classes;
-            ViewBag.CurrentSemester = semester;
-
-            if (!classes.Any())
+            if (!allowedClasses.Any())
             {
+                ViewBag.Classes = allowedClasses;
+                ViewBag.CurrentSemester = semester;
+                ViewBag.NoAccessReason = "Bạn chưa được phân công giảng dạy lớp nào trong niên khóa hiện hành.";
                 return View(new ClassGradeMatrixViewModel { CurrentSemester = semester });
             }
 
-            var selectedClassId = classId ?? classes.First().Id;
-            var targetClass = classes.FirstOrDefault(c => c.Id == selectedClassId) ?? classes.First();
-            ViewBag.SelectedClassId = targetClass.Id;
+            // 3. Kiểm tra lớp được yêu cầu (classId)
+            int targetClassId = classId ?? allowedClasses.First().Id;
 
-            // 1. Lấy cấu hình các cột điểm cho khối/lớp này
+            // CHẶN HÀNH VI ĐỔI ID TRÊN URL ĐỂ XEM LỚP KHÁC
+            var targetClass = allowedClasses.FirstOrDefault(c => c.Id == targetClassId);
+            if (targetClass == null)
+            {
+                // Nếu lớp yêu cầu không nằm trong danh sách được phép
+                return Forbid(); // Trả về HTTP 403 Forbidden
+            }
+
+            ViewBag.Classes = allowedClasses;
+            ViewBag.SelectedClassId = targetClass.Id;
+            ViewBag.CurrentSemester = semester;
+
+            // 4. Lấy cấu hình các cột điểm cho khối/lớp này
             var configs = await _context.GradeConfigurations
                 .Where(g => g.AcademicYearId == currentYear.Id &&
                             g.Semester == semester &&
@@ -64,7 +106,7 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
-            // 2. Lấy danh sách học sinh và toàn bộ điểm đã có
+            // 5. Lấy danh sách học sinh và toàn bộ điểm đã có
             var enrollments = await _context.Enrollments
                 .Include(e => e.Student)
                 .Include(e => e.GradeRecords)
@@ -75,7 +117,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
 
-            // 3. Tính % chuyên cần phục vụ đánh giá xếp loại (từ Epic 4[cite: 1, 2])
+            // 6. Tính % chuyên cần phục vụ đánh giá xếp loại (từ Epic 4[cite: 1, 2])
             var attendances = await _context.Attendances
                 .Where(a => enrollmentIds.Contains(a.EnrollmentId))
                 .AsNoTracking()
