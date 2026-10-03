@@ -924,5 +924,146 @@ namespace ManagerStudentCaltholic.Controllers
 
             return Json(new { success = true, data = timeline.OrderByDescending(t => t.Timestamp).ToList() });
         }
+
+        [HttpGet]
+        public async Task<IActionResult> MonthlySummary(int? classId, int? month, int? year)
+        {
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var classesQuery = _context.Classes.AsQueryable();
+
+            if (currentYear != null)
+            {
+                classesQuery = classesQuery.Where(c => c.AcademicYearId == currentYear.Id);
+            }
+
+            var classes = await classesQuery.OrderBy(c => c.Name).ToListAsync();
+            ViewBag.Classes = classes;
+
+            var selectedClass = classId.HasValue
+                ? classes.FirstOrDefault(c => c.Id == classId.Value)
+                : classes.FirstOrDefault();
+
+            if (selectedClass == null)
+            {
+                return View(new MonthlyAttendanceReportViewModel());
+            }
+
+            var targetMonth = month ?? DateTime.Today.Month;
+            var targetYear = year ?? DateTime.Today.Year;
+
+            // 1. Lọc tất cả các ngày Thứ 5 và Chúa Nhật trong tháng được chọn
+            var sessionDates = new List<MonthlyAttendanceSessionHeader>();
+            var daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
+            for (int day = 1; day <= daysInMonth; day++)
+            {
+                var dt = new DateTime(targetYear, targetMonth, day);
+                if (dt.DayOfWeek == DayOfWeek.Thursday || dt.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    sessionDates.Add(new MonthlyAttendanceSessionHeader
+                    {
+                        Date = dt,
+                        DayOfWeek = dt.DayOfWeek
+                    });
+                }
+            }
+
+            // 2. Lấy danh sách học sinh đã xếp vào lớp
+            var enrollments = await _context.Enrollments
+                .Include(e => e.Student)
+                .Where(e => e.ClassRoomId == selectedClass.Id && e.Student.IsActive)
+                .OrderBy(e => e.Student.FirstName)
+                .ThenBy(e => e.Student.LastName)
+                .ToListAsync();
+
+            var enrollmentIds = enrollments.Select(e => e.Id).ToList();
+
+            // 3. Lấy dữ liệu điểm danh trong tháng của lớp
+            var startDate = new DateTime(targetYear, targetMonth, 1);
+            var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
+
+            var attendances = await _context.Attendances
+                .Where(a => enrollmentIds.Contains(a.EnrollmentId) &&
+                            a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
+                .ToListAsync();
+
+            // 4. Tổ chức dữ liệu theo từng dòng học sinh
+            var rows = new List<StudentMonthlyAttendanceRow>();
+            foreach (var en in enrollments)
+            {
+                var row = new StudentMonthlyAttendanceRow
+                {
+                    StudentId = en.StudentId,
+                    EnrollmentId = en.Id,
+                    StudentCode = en.Student.StudentCode,
+                    ChristianName = en.Student.ChristianName,
+                    FullName = $"{en.Student.LastName} {en.Student.FirstName}".Trim()
+                };
+
+                var studentAtts = attendances.Where(a => a.EnrollmentId == en.Id).ToList();
+
+                foreach (var sess in sessionDates)
+                {
+                    var att = studentAtts.FirstOrDefault(a => a.AttendanceDate.Date == sess.Date.Date);
+                    var statusDto = new StudentDailyStatusDto
+                    {
+                        Date = sess.Date,
+                        DayOfWeek = sess.DayOfWeek
+                    };
+
+                    if (att != null)
+                    {
+                        statusDto.HasMassRecord = true;
+                        statusDto.MassStatus = att.MassStatus;
+                        statusDto.MassCheckInTime = att.MassCheckInTime;
+                        statusDto.IsMassMakeUp = att.IsMakeUp;
+
+                        if (sess.IsSunday)
+                        {
+                            statusDto.HasClassRecord = true;
+                            statusDto.ClassStatus = att.ClassStatus;
+                            statusDto.ClassCheckInTime = att.ClassCheckInTime;
+                            statusDto.IsClassMakeUp = att.IsMakeUp;
+                        }
+
+                        // Cộng dồn thống kê
+                        if (att.MassStatus == "PRESENT") row.TotalMassAttended++;
+                        else if (att.MassStatus == "LATE") { row.TotalMassAttended++; row.TotalMassLate++; }
+                        else row.TotalMassAbsent++;
+
+                        if (sess.IsSunday)
+                        {
+                            if (att.ClassStatus == "PRESENT") row.TotalClassAttended++;
+                            else if (att.ClassStatus == "LATE") { row.TotalClassAttended++; row.TotalClassLate++; }
+                            else row.TotalClassAbsent++;
+                        }
+                    }
+                    else
+                    {
+                        // Chưa có bản ghi: mặc định là chưa ghi nhận / vắng không phép
+                        statusDto.MassStatus = "ABSENT_UNPERMITTED";
+                        if (sess.IsSunday) statusDto.ClassStatus = "ABSENT_UNPERMITTED";
+                        row.TotalMassAbsent++;
+                        if (sess.IsSunday) row.TotalClassAbsent++;
+                    }
+
+                    row.DailyStatuses[sess.Date.Date] = statusDto;
+                }
+
+                rows.Add(row);
+            }
+
+            var viewModel = new MonthlyAttendanceReportViewModel
+            {
+                ClassId = selectedClass.Id,
+                ClassName = selectedClass.Name,
+                GradeLevel = selectedClass.GradeLevel,
+                SelectedMonth = targetMonth,
+                SelectedYear = targetYear,
+                SessionDates = sessionDates,
+                Rows = rows
+            };
+
+            return View(viewModel);
+        }
     }
 }
