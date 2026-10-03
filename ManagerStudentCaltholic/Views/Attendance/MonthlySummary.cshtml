@@ -57,6 +57,12 @@
         border: 1px solid #86efac;
     }
 
+    .status-inline {
+        background-color: #f3e8ff; /* Tím nhạt */
+        color: #7e22ce; /* Chữ tím đậm */
+        border: 1px solid #d8b4fe; /* Viền tím vừa */
+    }
+
     .status-late {
         background-color: #fef9c3;
         color: #a16207;
@@ -131,6 +137,7 @@
     <!-- Thanh Chú Thích Ký Hiệu Trạng Thái -->
     <div class="d-flex flex-wrap align-items-center gap-3 mb-3 px-2">
         <span class="small fw-bold text-muted">Chú thích:</span>
+        <span class="small"><span class="badge-status status-inline me-1">✔</span> Xếp hàng</span>
         <span class="small"><span class="badge-status status-present me-1">✔</span> Có mặt</span>
         <span class="small"><span class="badge-status status-late me-1">T</span> Đi trễ</span>
         <span class="small"><span class="badge-status status-absent-p me-1">P</span> Vắng phép</span>
@@ -170,7 +177,8 @@
                             }
                         }
 
-                        <th colspan="3" class="bg-success-subtle text-success border-start">Tổng Lễ</th>
+                        <th colspan="2" class="bg-success-subtle text-success border-start">Tổng Lễ Thứ 5</th>
+                        <th colspan="4" class="bg-success-subtle text-success border-start">Tổng Lễ Chúa Nhật</th>
                         <th colspan="3" class="bg-primary-subtle text-primary border-start">Tổng Học</th>
                     </tr>
 
@@ -189,7 +197,12 @@
                             }
                         }
 
-                        <!-- Cột Thống Kê Tổng Lễ -->
+                        <!-- Cột Thống Kê Tổng Lễ Thứ 5 -->
+                        <th class="bg-light" style="width: 30px;" title="Có mặt Lễ">Đ</th>
+                        <th class="bg-light border-end" style="width: 30px;" title="Vắng Lễ">V</th>
+
+                        <!-- Cột Thống Kê Tổng Lễ Chúa Nhật -->
+                        <th class="bg-light" style="width: 30px;" title="Xếp hàng">X</th>
                         <th class="bg-light" style="width: 30px;" title="Có mặt Lễ">Đ</th>
                         <th class="bg-light" style="width: 30px;" title="Trễ Lễ">T</th>
                         <th class="bg-light border-end" style="width: 30px;" title="Vắng Lễ">V</th>
@@ -223,7 +236,7 @@
                                     {
                                         <!-- CN: CỘT 1 - LỄ -->
                                         <td class="border-start">
-                                            @RenderStatusBadge(dayStat.MassStatus, dayStat.MassCheckInTime, dayStat.IsMassMakeUp)
+                                            @RenderStatusBadge(dayStat.MassSunStatus, dayStat.MassSunCheckInTime, dayStat.IsMassSunMakeUp)
                                         </td>
                                         <!-- CN: CỘT 2 - HỌC -->
                                         <td class="border-end">
@@ -234,15 +247,20 @@
                                     {
                                         <!-- T5: CHỈ CÓ 1 CỘT LỄ -->
                                         <td class="border-start border-end">
-                                            @RenderStatusBadge(dayStat.MassStatus, dayStat.MassCheckInTime, dayStat.IsMassMakeUp)
+                                            @RenderStatusBadge(dayStat.MassThuStatus, dayStat.MassThuCheckInTime, dayStat.IsMassThuMakeUp)
                                         </td>
                                     }
                                 }
 
-                                <!-- Cột Tổng Kết Lễ -->
-                                <td class="text-success fw-bold border-start">@row.TotalMassAttended</td>
-                                <td class="text-warning fw-bold">@row.TotalMassLate</td>
-                                <td class="text-danger fw-bold border-end">@row.TotalMassAbsent</td>
+                                <!-- Cột Tổng Kết Lễ T5 -->
+                                <td class="text-success fw-bold border-start">@row.TotalMassThuAttended</td>
+                                <td class="text-danger fw-bold border-end">@row.TotalMassThuAbsent</td>
+
+                                <!-- Cột Tổng Kết Lễ CN -->
+                                <td class="text-success fw-bold border-start">@row.TotalMassSunInLine</td>
+                                <td class="text-warning fw-bold">@row.TotalMassSunAttended</td>
+                                <td class="text-warning fw-bold">@row.TotalMassSunLate</td>
+                                <td class="text-danger fw-bold border-end">@row.TotalMassSunAbsent</td>
 
                                 <!-- Cột Tổng Kết Học -->
                                 <td class="text-primary fw-bold">@row.TotalClassAttended</td>
@@ -276,6 +294,10 @@
 
         switch (status)
         {
+            case "LINED_UP":
+                var titleLU = checkInTime.HasValue ? $"Có xếp hàng ({checkInTime.Value:hh\\:mm})" : "Xếp hàng đầu lễ";
+                return new Microsoft.AspNetCore.Html.HtmlString($"<span class='badge-status status-present' title='{titleLU}'>✔</span>");
+
             case "PRESENT":
                 var titleP = checkInTime.HasValue ? $"Có mặt ({checkInTime.Value:hh\\:mm})" : "Có mặt đúng giờ";
                 return new Microsoft.AspNetCore.Html.HtmlString($"<span class='badge-status status-present' title='{titleP}'>✔</span>");

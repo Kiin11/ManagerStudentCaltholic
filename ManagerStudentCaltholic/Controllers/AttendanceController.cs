@@ -7,6 +7,7 @@ using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -1012,11 +1013,6 @@ namespace ManagerStudentCaltholic.Controllers
 
                     if (att != null)
                     {
-                        statusDto.HasMassRecord = true;
-                        statusDto.MassStatus = att.MassStatus;
-                        statusDto.MassCheckInTime = att.MassCheckInTime;
-                        statusDto.IsMassMakeUp = att.IsMakeUp;
-
                         if (sess.IsSunday)
                         {
                             statusDto.HasClassRecord = true;
@@ -1026,9 +1022,10 @@ namespace ManagerStudentCaltholic.Controllers
                         }
 
                         // Cộng dồn thống kê
-                        if (att.MassStatus == "PRESENT") row.TotalMassAttended++;
-                        else if (att.MassStatus == "LATE") { row.TotalMassAttended++; row.TotalMassLate++; }
-                        else row.TotalMassAbsent++;
+                        if (att.MassStatus == "LINED_UP") row.TotalMassSunInLine++;
+                        else if (att.MassStatus == "PRESENT") row.TotalMassSunAttended++;
+                        else if (att.MassStatus == "LATE") { row.TotalMassSunAttended++; row.TotalMassSunLate++; }
+                        else row.TotalMassSunAbsent++;
 
                         if (sess.IsSunday)
                         {
@@ -1040,9 +1037,9 @@ namespace ManagerStudentCaltholic.Controllers
                     else
                     {
                         // Chưa có bản ghi: mặc định là chưa ghi nhận / vắng không phép
-                        statusDto.MassStatus = "ABSENT_UNPERMITTED";
+                        //statusDto.MassStatus = "ABSENT_UNPERMITTED";
                         if (sess.IsSunday) statusDto.ClassStatus = "ABSENT_UNPERMITTED";
-                        row.TotalMassAbsent++;
+                        row.TotalMassSunAbsent++;
                         if (sess.IsSunday) row.TotalClassAbsent++;
                     }
 
@@ -1065,5 +1062,105 @@ namespace ManagerStudentCaltholic.Controllers
 
             return View(viewModel);
         }
+
+        #region Attendance Rule Configuration
+        /// <summary>
+        /// 1. GET: /Attendance/GetClassRule?classId=... (Lấy quy ước tính điểm của lớp)
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>
+        [HttpGet]
+        public async Task<IActionResult> GetClassRule(int classId)
+        {
+            var targetClass = await _context.Classes.FindAsync(classId);
+            if (targetClass == null) return NotFound(new { success = false, message = "Không tìm thấy lớp" });
+
+            // Kiểm tra quyền: Admin, Cha, BĐH hoặc GLV Chủ nhiệm của lớp
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            long.TryParse(userIdStr, out var currentUserId);
+
+            bool isLeadership = User.IsInRole(UserRole.Admin) ||
+                                User.IsInRole(UserRole.SpiritualDirector) ||
+                                User.IsInRole(UserRole.ExecutiveBoard);
+
+            bool isHeadTeacher = await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
+
+            var rule = await _context.AttendanceRuleConfigs.FirstOrDefaultAsync(r => r.ClassRoomId == classId);
+            if (rule == null)
+            {
+                rule = new AttendanceRuleConfig { ClassRoomId = classId };
+            }
+
+            return Json(new
+            {
+                success = true,
+                data = new ClassAttendanceRuleDto
+                {
+                    ClassId = classId,
+                    ClassName = targetClass.Name,
+                    ThursdayMassWeightPercent = rule.ThursdayMassWeightPercent,
+                    SundayMassWeightPercent = rule.SundayMassWeightPercent,
+                    ClassWeightPercent = rule.ClassWeightPercent,
+                    LateMultiplier = rule.LateMultiplier,
+                    PermittedAbsentMultiplier = rule.PermittedAbsentMultiplier,
+                    MakeUpBonusRate = rule.MakeUpBonusRate,
+                    MinAttendanceRateForSacrament = rule.MinAttendanceRateForSacrament,
+                    CanEdit = isLeadership || isHeadTeacher
+                }
+            });
+        }
+
+        // =========================================================================
+        // 2. POST: /Attendance/SaveClassRule (GLV Chủ nhiệm lưu quy ước tính điểm)
+        // =========================================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveClassRule([FromBody] ClassAttendanceRuleDto dto)
+        {
+            if (dto == null) return Json(new { success = false, message = "Dữ liệu không hợp lệ" });
+
+            if (dto.ThursdayMassWeightPercent + dto.SundayMassWeightPercent + dto.ClassWeightPercent != 100)
+            {
+                return Json(new { success = false, message = "Tổng tỷ trọng Thánh Lễ và Giờ Học phải bằng 100%!" });
+            }
+
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            long.TryParse(userIdStr, out var currentUserId);
+
+            bool isLeadership = User.IsInRole(UserRole.Admin) ||
+                                User.IsInRole(UserRole.SpiritualDirector) ||
+                                User.IsInRole(UserRole.ExecutiveBoard);
+
+            bool isHeadTeacher = await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == dto.ClassId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
+
+            if (!isLeadership && !isHeadTeacher)
+            {
+                return Json(new { success = false, message = "Chỉ có Giáo lý viên Chủ nhiệm hoặc Ban Điều Hành mới được quyền cấu hình quy ước tính điểm của lớp này!" });
+            }
+
+            var rule = await _context.AttendanceRuleConfigs.FirstOrDefaultAsync(r => r.ClassRoomId == dto.ClassId);
+            if (rule == null)
+            {
+                rule = new AttendanceRuleConfig { ClassRoomId = dto.ClassId };
+                _context.AttendanceRuleConfigs.Add(rule);
+            }
+
+            rule.ThursdayMassWeightPercent = dto.ThursdayMassWeightPercent;
+            rule.SundayMassWeightPercent = dto.SundayMassWeightPercent;
+            rule.ClassWeightPercent = dto.ClassWeightPercent;
+            rule.LateMultiplier = dto.LateMultiplier;
+            rule.PermittedAbsentMultiplier = dto.PermittedAbsentMultiplier;
+            rule.MakeUpBonusRate = dto.MakeUpBonusRate;
+            rule.MinAttendanceRateForSacrament = dto.MinAttendanceRateForSacrament;
+            rule.UpdatedBy = User.Identity?.Name ?? "GLV Chủ nhiệm";
+            rule.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return Json(new { success = true, message = "Đã lưu quy ước tính điểm chuyên cần cho lớp thành công!" });
+        }
+
+        #endregion
     }
 }

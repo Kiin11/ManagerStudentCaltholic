@@ -267,10 +267,12 @@
     <!-- SIDEBAR BÊN TRÁI -->
     <aside id="app-sidebar">
         <!-- Logo & Brand Header -->
-        <a asp-controller="Home" asp-action="Index" class="sidebar-brand">
-            <span class="d-flex align-items-center justify-content-center bg-primary text-white rounded-3 p-2 me-2 shadow-sm" style="width: 38px; height: 38px;">
-                <i class="bi bi-book-half fs-5"></i>
-            </span>
+        <a asp-controller="Home" asp-action="Index" class="sidebar-brand text-decoration-none">
+            <img src="~/image/logo.jpg"
+                 asp-append-version="true"
+                 alt="Logo Giáo Xứ"
+                 class="rounded-3 me-2 shadow-sm"
+                 style="width: 38px; height: 38px; object-fit: contain; background-color: #ffffff; padding: 2px;" />
             <div class="sidebar-header-title lh-sm">
                 <span class="fw-bold fs-6 text-white d-block">GIA ĐÌNH GIÁO LÝ</span>
                 <span class="text-white-50" style="font-size: 0.72rem;">Giáo Xứ Phú Trung</span>
@@ -282,10 +284,10 @@
             <div class="sidebar-section-title">Tổng quan</div>
             <ul class="nav flex-column">
                 <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Home" ? "active" : "")"
-                       asp-controller="Home" asp-action="Index">
-                        <i class="bi bi-grid-1x2-fill"></i>
-                        <span class="sidebar-text">Bảng Điều Khiển</span>
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
+                       asp-controller="Announcements" asp-action="Index">
+                        <i class="bi bi-megaphone-fill"></i>
+                        <span class="sidebar-text">Bảng Tin & Thông Báo</span>
                     </a>
                 </li>
             </ul>
@@ -298,13 +300,6 @@
                        asp-controller="Lookup" asp-action="Index">
                         <i class="bi bi-search text-warning"></i>
                         <span class="sidebar-text">Tra Cứu Điểm & Điểm Danh</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Announcements" ? "active" : "")"
-                       asp-controller="Announcements" asp-action="Index">
-                        <i class="bi bi-megaphone-fill"></i>
-                        <span class="sidebar-text">Bảng Tin & Thông Báo</span>
                     </a>
                 </li>
             </ul>

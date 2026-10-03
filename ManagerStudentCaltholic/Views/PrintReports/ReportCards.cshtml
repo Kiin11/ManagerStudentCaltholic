@@ -1,0 +1,105 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.BatchPrintViewModel
+@{
+    Layout = null; // In độc lập không dính Layout
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Phiếu Liên Lạc - @Model.ClassName</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <style>
+        @@media print {
+            body {
+                background: transparent;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .page-break {
+                page-break-after: always;
+            }
+        }
+
+        .report-card {
+            width: 148mm;
+            min-height: 205mm;
+            padding: 12mm;
+            margin: auto;
+            border: 2px solid #2b3a4a;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background: #fff;
+            position: relative;
+        }
+    </style>
+</head>
+<body class="bg-light py-4">
+    <div class="text-center mb-4 no-print">
+        <button onclick="window.print()" class="btn btn-primary px-4 fw-bold shadow">
+            🖨️ Tiến Hành In Toàn Bộ (@Model.Students.Count Phiếu)
+        </button>
+    </div>
+
+    @foreach (var s in Model.Students)
+    {
+        <div class="report-card page-break mb-4">
+            <div class="text-center mb-3">
+                <h6 class="text-uppercase mb-0 text-muted">GIÁO PHẬN SÀI GÒN - GIÁO XỨ TRUNG BẮC</h6>
+                <h4 class="fw-bold text-primary mt-1">PHIẾU LIÊN LẠC GIÁO LÝ</h4>
+                <div class="small fw-semibold">Niên Khóa: @Model.AcademicYearName</div>
+            </div>
+
+            <div class="border-top border-bottom py-2 mb-3 small">
+                <div>Tên Thánh & Họ Tên: <strong class="fs-6">@s.ChristianName @s.FullName</strong></div>
+                <div class="row mt-1">
+                    <div class="col-6">Mã Định Danh: <strong>@s.StudentCode</strong></div>
+                    <div class="col-6">Lớp: <strong>@Model.ClassName</strong></div>
+                </div>
+            </div>
+
+            <!-- Bảng kết quả -->
+            <table class="table table-bordered text-center align-middle small mb-3">
+                <thead class="table-light">
+                    <tr>
+                        <th>Học Kỳ 1</th>
+                        <th>Học Kỳ 2</th>
+                        <th>ĐTB Cả Năm</th>
+                        <th>Chuyên Cần</th>
+                        <th>Xếp Loại</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>@(s.Semester1Average.HasValue? s.Semester1Average.Value.ToString("0.0") : "--")</td>
+                        <td>@(s.Semester2Average.HasValue? s.Semester2Average.Value.ToString("0.0") : "--")</td>
+                        <td class="fw-bold text-primary">@(s.YearAverage.HasValue? s.YearAverage.Value.ToString("0.0") : "--")</td>
+                        <td>@s.AttendanceRate%</td>
+                        <td><span class="badge bg-secondary">@s.AcademicRank</span></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="p-2 border rounded bg-light small mb-4">
+                <strong>Nhận xét của GLV Chủ nhiệm:</strong>
+                <p class="fst-italic text-muted mt-1 mb-0">@s.TeacherComment</p>
+            </div>
+
+            <!-- Ký tên -->
+            <div class="row text-center small mt-4 pt-3">
+                <div class="col-6">
+                    <div>Ý Kiến Phụ Huynh</div>
+                    <div style="height: 60px;"></div>
+                    <div class="text-muted">(Ký và ghi rõ họ tên)</div>
+                </div>
+                <div class="col-6">
+                    <div>Giáo Lý Viên Chủ Nhiệm</div>
+                    <div style="height: 60px;"></div>
+                    <div class="text-muted">(Ký xác nhận)</div>
+                </div>
+            </div>
+        </div>
+    }
+</body>
+</html>

@@ -23,6 +23,9 @@
                     </select>
                 </div>
                 <div class="col-lg-3 col-md-6">
+                   <!-- <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-sm" onclick="openAttendanceRuleModal(@Model.ClassId)">
+                        <i class="bi bi-sliders me-1 text-primary"></i> Quy Ước Tính Điểm
+                    </button> -->
                     <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
@@ -255,7 +258,80 @@
         </div>
     </div>
 </div>
+<!-- MODAL CẤU HÌNH QUY ƯỚC TÍNH ĐIỂM CHUYÊN CẦN (TASK-1014) -->
+<div class="modal fade" id="attendanceRuleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white p-3">
+                <h6 class="modal-title fw-bold" id="ruleModalTitle">
+                    <i class="bi bi-sliders me-2"></i>Quy Ước Tính Điểm Chuyên Cần
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="ruleClassId" />
 
+                <!-- Tỷ trọng Lễ / Học -->
+                <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light">Thánh Lễ</span>
+                            <input type="number" id="ruleMassWeight" class="form-control text-center fw-bold" min="0" max="100" onchange="autoBalanceClassWeight(this)" />
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light">Giờ Học</span>
+                            <input type="number" id="ruleClassWeight" class="form-control text-center fw-bold" min="0" max="100" readonly />
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quy đổi Đi Trễ -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-dark">2. Hệ Số Tính Điểm Khi Đi Trễ</label>
+                    <select id="ruleLateMultiplier" class="form-select form-select-sm">
+                        <option value="0.80">Tính 80% điểm chuyên cần buổi đó (Mặc định)</option>
+                        <option value="0.50">Tính 50% điểm chuyên cần buổi đó</option>
+                        <option value="1.00">Vẫn tính 100% điểm (Chỉ nhắc nhở)</option>
+                        <option value="0.00">Không tính điểm (Xem như vắng)</option>
+                    </select>
+                </div>
+
+                <!-- Quy đổi Vắng có phép -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-dark">3. Điểm Khi Vắng Có Phép (Đơn duyệt)</label>
+                    <select id="rulePermittedAbsentMultiplier" class="form-select form-select-sm">
+                        <option value="0.50">Tính 50% điểm (Có phép)</option>
+                        <option value="1.00">Bảo lưu 100% điểm (Miễn trừ do ốm đau/việc chung)</option>
+                        <option value="0.00">Không tính điểm (0%)</option>
+                    </select>
+                </div>
+
+                <!-- Tiêu chuẩn xét Bí tích -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-dark">4. Mức Tối Thiểu Xét Bí Tích / Khen Thưởng</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light">Tỷ lệ chuyên cần đạt từ</span>
+                        <input type="number" id="ruleMinSacrament" class="form-control text-center fw-bold" value="80" min="50" max="100" />
+                        <span class="input-group-text">% trở lên</span>
+                    </div>
+                </div>
+
+                <div id="ruleAlert" class="alert alert-danger d-none small py-2 mb-0"></div>
+            </div>
+            <div class="modal-footer bg-light p-2">
+                <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" id="btnSaveRule" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" onclick="saveClassRule()">
+                    <i class="bi bi-check2-circle me-1"></i> Lưu Quy Ước
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 @section Scripts {
     <script>
         function onFilterChange() {
@@ -518,6 +594,89 @@
                 localStorage.setItem(`offline_class_${classId}`, JSON.stringify(cachePayload));
             } catch (e) {
                 console.warn("Không thể lưu LocalStorage:", e);
+            }
+        }
+                function autoBalanceClassWeight(massInput) {
+            let mass = parseInt(massInput.value) || 0;
+            if (mass < 0) mass = 0;
+            if (mass > 100) mass = 100;
+            massInput.value = mass;
+            document.getElementById('ruleClassWeight').value = 100 - mass;
+        }
+
+        async function openAttendanceRuleModal(classId) {
+            document.getElementById('ruleClassId').value = classId;
+            document.getElementById('ruleAlert').classList.add('d-none');
+
+            try {
+                const res = await fetch(`/Attendance/GetClassRule?classId=${classId}`);
+                const data = await res.json();
+                if (data.success) {
+                    const r = data.data;
+                    document.getElementById('ruleModalTitle').innerHTML = `<i class="bi bi-sliders me-2"></i>Quy Ước Lớp: ${r.className}`;
+                    document.getElementById('ruleMassWeight').value = r.massWeightPercent;
+                    document.getElementById('ruleClassWeight').value = r.classWeightPercent;
+                    document.getElementById('ruleLateMultiplier').value = r.lateMultiplier.toFixed(2);
+                    document.getElementById('rulePermittedAbsentMultiplier').value = r.permittedAbsentMultiplier.toFixed(2);
+                    document.getElementById('ruleMinSacrament').value = r.minAttendanceRateForSacrament;
+
+                    const btnSave = document.getElementById('btnSaveRule');
+                    if (!r.canEdit) {
+                        btnSave.disabled = true;
+                        btnSave.innerText = "Chỉ xem (Không có quyền sửa)";
+                    } else {
+                        btnSave.disabled = false;
+                        btnSave.innerText = "Lưu Quy Ước";
+                    }
+
+                    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('attendanceRuleModal'));
+                    modal.show();
+                }
+            } catch (err) {
+                alert("Lỗi tải quy ước: " + err);
+            }
+        }
+
+        async function saveClassRule() {
+            const classId = parseInt(document.getElementById('ruleClassId').value);
+            const massWeight = parseInt(document.getElementById('ruleMassWeight').value);
+            const classWeight = parseInt(document.getElementById('ruleClassWeight').value);
+            const lateMult = parseFloat(document.getElementById('ruleLateMultiplier').value);
+            const permMult = parseFloat(document.getElementById('rulePermittedAbsentMultiplier').value);
+            const minSacrament = parseFloat(document.getElementById('ruleMinSacrament').value);
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            const payload = {
+                classId: classId,
+                massWeightPercent: massWeight,
+                classWeightPercent: classWeight,
+                lateMultiplier: lateMult,
+                permittedAbsentMultiplier: permMult,
+                minAttendanceRateForSacrament: minSacrament
+            };
+
+            try {
+                const res = await fetch('/Attendance/SaveClassRule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+                if (result.success) {
+                    alert(result.message);
+                    bootstrap.Modal.getInstance(document.getElementById('attendanceRuleModal')).hide();
+                    location.reload();
+                } else {
+                    const alertBox = document.getElementById('ruleAlert');
+                    alertBox.innerText = result.message;
+                    alertBox.classList.remove('d-none');
+                }
+            } catch (err) {
+                alert("Lỗi lưu quy ước: " + err);
             }
         }
     </script>

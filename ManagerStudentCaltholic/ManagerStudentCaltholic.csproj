@@ -31,4 +31,8 @@
     <Folder Include="Migrations\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="wwwroot\image\logo.jpg" />
+  </ItemGroup>
+
 </Project>
