@@ -1,112 +1,234 @@
 ﻿@{
     ViewData["Title"] = "Quét Mã QR Điểm Danh";
+    // Kiểm tra thiết bị truy cập có phải là Mobile hay không qua User-Agent
+    var userAgent = Context.Request.Headers["User-Agent"].ToString();
+    bool isMobile = System.Text.RegularExpressions.Regex.IsMatch(
+        userAgent,
+        @"Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+    );
 }
 
 @Html.AntiForgeryToken()
 
-<div class="container py-4">
-    <!-- Tiêu đề & Nút quay lại -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="fw-bold text-dark mb-0">
-                <i class="bi bi-qr-code-scan text-primary me-2"></i>Cổng Quét Mã QR Điểm Danh Tức Thì
-            </h4>
-            <small class="text-muted">Niên khóa: <strong>@ViewBag.AcademicYearName</strong> | Ngày: <strong>@DateTime.Now.ToString("dd/MM/yyyy (dddd)")</strong></small>
-        </div>
-        <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
-            <i class="bi bi-arrow-left me-1"></i> Trở về Sổ Lớp
-        </a>
-    </div>
+@if (isMobile)
+{
+    @* ==========================================
+       GIAO DIỆN DÀNH RIÊNG CHO MOBILE (1 MÀN HÌNH - KHÔNG CUỘN)
+       ========================================== *@
+    <style>
+        /* Khóa cứng cuộn trang trên mobile để thao tác ổn định */
+        html, body {
+            overflow: hidden !important;
+            height: 100%;
+            touch-action: manipulation;
+        }
 
-    <div class="row g-4">
-        <!-- CỘT BÊN TRÁI: KHUNG CAMERA QUÉT & Ô NHẬP TAY / SÚNG QUÉT BẰNG CỔNG USB -->
-        <div class="col-lg-6">
-            <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-                <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
-                    <span class="fw-bold"><i class="bi bi-camera-fill me-2 text-warning"></i>Khung Quét Camera</span>
-                    <button class="btn btn-sm btn-outline-light rounded-pill px-3" id="btnToggleCam" onclick="toggleCamera()">
-                        <i class="bi bi-power me-1"></i> Bật / Tắt Camera
-                    </button>
-                    <button class="btn btn-sm btn-outline-light rounded-pill px-3" onclick="switchCamera()">
-                        <i class="bi bi-arrow-repeat me-1"></i> Đổi Camera
-                    </button>
+        .mobile-scan-container {
+            display: flex;
+            flex-direction: column;
+            height: calc(100dvh - 60px); /* Tối ưu cho viewport mobile */
+            padding: 8px 12px;
+            gap: 10px;
+        }
+
+        /* Khung quét camera nửa trên */
+        .mobile-cam-box {
+            position: relative;
+            height: 40%;
+            min-height: 200px;
+            max-height: 250px;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        #reader {
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+        }
+
+            #reader video {
+                object-fit: cover !important;
+                height: 100% !important;
+                width: 100% !important;
+            }
+
+        /* Nút đổi camera nổi trên góc camera */
+        .cam-controls-overlay {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 10;
+        }
+
+        /* Khung hiển thị kết quả nửa dưới */
+        .mobile-result-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #e9ecef;
+            background: #fff;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+            .mobile-result-box.status-success {
+                border-color: #198754;
+                background-color: #f8fff9;
+            }
+
+            .mobile-result-box.status-late {
+                border-color: #ffc107;
+                background-color: #fffdf5;
+            }
+
+            .mobile-result-box.status-error {
+                border-color: #dc3545;
+                background-color: #fff8f8;
+            }
+    </style>
+
+    <div class="mobile-scan-container">
+        <!-- NỬA TRÊN: CAMERA QUÉT GỌN GÀNG -->
+        <div class="mobile-cam-box">
+            <div id="reader"></div>
+
+            <div class="cam-controls-overlay d-flex gap-1">
+                <button class="btn btn-sm btn-dark bg-opacity-75 rounded-circle text-white shadow-sm p-2" onclick="switchCamera()" title="Đổi camera">
+                    <i class="bi bi-camera-reverse fs-6"></i>
+                </button>
+                <button class="btn btn-sm btn-dark bg-opacity-75 rounded-circle text-white shadow-sm p-2" id="btnToggleCam" onclick="toggleCamera()" title="Bật/Tắt camera">
+                    <i class="bi bi-power fs-6"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- NỬA DƯỚI: KẾT QUẢ HIỆN NGAY LẬP TỨC -->
+        <div class="mobile-result-box p-3 text-center justify-content-center" id="scanResultCard">
+            <div id="scanResultBody">
+                <div class="py-3 text-muted">
+                    <i class="bi bi-qr-code-scan fs-1 d-block mb-2 text-primary opacity-50"></i>
+                    <h6 class="fw-bold mb-1">Sẵn sàng điểm danh</h6>
+                    <small>Hướng camera vào mã QR của thẻ thiếu nhi</small>
                 </div>
-                <div class="card-body p-3 text-center bg-black bg-opacity-10">
-                    <div id="reader" style="width: 100%; min-height: 320px; border-radius: 12px; overflow: hidden; background: #000;"></div>
-                    <div class="text-muted small mt-2">
-                        <i class="bi bi-info-circle me-1"></i> Căn giữa mã QR của thẻ thiếu nhi vào ô quét camera.
+            </div>
+        </div>
+
+        <!-- THANH NHẬP TAY THU GỌN / ĐẨY XUỐNG DƯỚI CÙNG -->
+        <div class="input-group input-group-sm">
+            <input type="text" id="manualCodeInput" class="form-control font-monospace text-uppercase" placeholder="Nhập mã nếu không quét được..." />
+            <button class="btn btn-primary fw-bold" onclick="submitManualCode()">
+                <i class="bi bi-send-fill"></i> Check-in
+            </button>
+        </div>
+    </div>
+}
+
+else{
+    <div class="container py-4">
+        <!-- Tiêu đề & Nút quay lại -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="fw-bold text-dark mb-0">
+                    <i class="bi bi-qr-code-scan text-primary me-2"></i>Cổng Quét Mã QR Điểm Danh Tức Thì
+                </h4>
+                <small class="text-muted">Niên khóa: <strong>@ViewBag.AcademicYearName</strong> | Ngày: <strong>@DateTime.Now.ToString("dd/MM/yyyy (dddd)")</strong></small>
+            </div>
+            <a asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
+                <i class="bi bi-arrow-left me-1"></i> Trở về Sổ Lớp
+            </a>
+        </div>
+
+        <div class="row g-4">
+            <!-- CỘT BÊN TRÁI: KHUNG CAMERA QUÉT & Ô NHẬP TAY / SÚNG QUÉT BẰNG CỔNG USB -->
+            <div class="col-lg-6">
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+                    <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold"><i class="bi bi-camera-fill me-2 text-warning"></i>Khung Quét Camera</span>
+                        <button class="btn btn-sm btn-outline-light rounded-pill px-3" id="btnToggleCam" onclick="toggleCamera()">
+                            <i class="bi bi-power me-1"></i> Bật / Tắt Camera
+                        </button>
+                        <button class="btn btn-sm btn-outline-light rounded-pill px-3" onclick="switchCamera()">
+                            <i class="bi bi-arrow-repeat me-1"></i> Đổi Camera
+                        </button>
+                    </div>
+                    <div class="card-body p-3 text-center bg-black bg-opacity-10">
+                        <div id="reader" style="width: 100%; min-height: 320px; border-radius: 12px; overflow: hidden; background: #000;"></div>
+                        <div class="text-muted small mt-2">
+                            <i class="bi bi-info-circle me-1"></i> Căn giữa mã QR của thẻ thiếu nhi vào ô quét camera.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hộp súng quét Barcode / Nhập tay -->
+                <div class="card border-0 shadow-sm rounded-4 p-3">
+                    <label class="form-label fw-bold text-muted small mb-1">
+                        <i class="bi bi-upc-scan me-1 text-primary"></i>Dành cho Súng Quét Cầm Tay / Nhập Mã Thủ Công:
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="manualCodeInput" class="form-control form-control-lg font-monospace text-uppercase"
+                               placeholder="Quét hoặc nhập mã TN-2026-XXXX..." autofocus />
+                        <button class="btn btn-primary px-4 fw-bold" onclick="submitManualCode()">
+                            <i class="bi bi-send-fill me-1"></i> Check-in
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Hộp súng quét Barcode / Nhập tay -->
-            <div class="card border-0 shadow-sm rounded-4 p-3">
-                <label class="form-label fw-bold text-muted small mb-1">
-                    <i class="bi bi-upc-scan me-1 text-primary"></i>Dành cho Súng Quét Cầm Tay / Nhập Mã Thủ Công:
-                </label>
-                <div class="input-group">
-                    <input type="text" id="manualCodeInput" class="form-control form-control-lg font-monospace text-uppercase"
-                           placeholder="Quét hoặc nhập mã TN-2026-XXXX..." autofocus />
-                    <button class="btn btn-primary px-4 fw-bold" onclick="submitManualCode()">
-                        <i class="bi bi-send-fill me-1"></i> Check-in
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- CỘT BÊN PHẢI: KẾT QUẢ QUÉT TỨC THÌ & LỊCH SỬ QUÉT -->
-        <div class="col-lg-6">
-            <!-- Thẻ Kết Quả Quét Mới Nhất -->
-            <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" id="scanResultCard">
-                <div class="card-header bg-primary text-white py-3">
-                    <h5 class="fw-bold mb-0"><i class="bi bi-person-check-fill me-2"></i>Kết Quả Quét Gần Nhất</h5>
-                </div>
-                <div class="card-body p-4 text-center" id="scanResultBody">
-                    <div class="py-5 text-muted">
-                        <i class="bi bi-upc fs-1 d-block mb-3 opacity-50"></i>
-                        Vui lòng hướng camera về phía mã QR hoặc quét bằng đầu đọc USB...
+            <!-- CỘT BÊN PHẢI: KẾT QUẢ QUÉT TỨC THÌ & LỊCH SỬ QUÉT -->
+            <div class="col-lg-6">
+                <!-- Thẻ Kết Quả Quét Mới Nhất -->
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" id="scanResultCard">
+                    <div class="card-header bg-primary text-white py-3">
+                        <h5 class="fw-bold mb-0"><i class="bi bi-person-check-fill me-2"></i>Kết Quả Quét Gần Nhất</h5>
+                    </div>
+                    <div class="card-body p-4 text-center" id="scanResultBody">
+                        <div class="py-5 text-muted">
+                            <i class="bi bi-upc fs-1 d-block mb-3 opacity-50"></i>
+                            Vui lòng hướng camera về phía mã QR hoặc quét bằng đầu đọc USB...
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Bảng Lịch Sử 10 Lần Quét Gần Nhất -->
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                    <span class="fw-bold text-dark"><i class="bi bi-clock-history me-2 text-secondary"></i>Lịch Sử Quét Gần Đây</span>
-                    <button class="btn btn-link btn-sm text-decoration-none text-muted p-0" onclick="clearHistory()">Xóa lịch sử</button>
-                </div>
-                <div class="table-responsive" style="max-height: 280px;">
-                    <table class="table table-hover align-middle mb-0" id="scanHistoryTable">
-                        <thead class="table-light small">
-                            <tr>
-                                <th class="ps-3">Thời gian</th>
-                                <th>Thiếu Nhi</th>
-                                <th>Lớp</th>
-                                <th class="text-center">Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scanHistoryBody">
-                            <tr>
-                                <td colspan="4" class="text-center py-4 text-muted small">Chưa có lượt quét nào</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- Bảng Lịch Sử 10 Lần Quét Gần Nhất -->
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark"><i class="bi bi-clock-history me-2 text-secondary"></i>Lịch Sử Quét Gần Đây</span>
+                        <button class="btn btn-link btn-sm text-decoration-none text-muted p-0" onclick="clearHistory()">Xóa lịch sử</button>
+                    </div>
+                    <div class="table-responsive" style="max-height: 280px;">
+                        <table class="table table-hover align-middle mb-0" id="scanHistoryTable">
+                            <thead class="table-light small">
+                                <tr>
+                                    <th class="ps-3">Thời gian</th>
+                                    <th>Thiếu Nhi</th>
+                                    <th>Lớp</th>
+                                    <th class="text-center">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scanHistoryBody">
+                                <tr>
+                                    <td colspan="4" class="text-center py-4 text-muted small">Chưa có lượt quét nào</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-
+}
 <!-- Âm thanh phản hồi (Audio Synthesizer bằng Web Audio API) -->
 @section Scripts {
-    let html5QrCode = null;
-    let currentFacingMode = "environment"; // Mặc định camera sau
-    let isCameraRunning = false;
-
     <!-- 1. Nạp thư viện html5-qrcode trước -->
     <script src="~/lib/html5-qrcode/html5-qrcode.min.js"></script>
     <script>
         let html5QrCode = null;
+        let currentFacingMode = "environment"; // Mặc định camera sau
         let isCameraRunning = false;
         let isProcessing = false;
         let lastScannedCode = "";
