@@ -13,9 +13,6 @@
 
 @if (isMobile)
 {
-    @* ==========================================
-       GIAO DIỆN DÀNH RIÊNG CHO MOBILE (1 MÀN HÌNH - KHÔNG CUỘN)
-       ========================================== *@
     <style>
         /* Khóa cứng cuộn trang trên mobile để thao tác ổn định */
         html, body {
@@ -51,9 +48,10 @@
         }
 
             #reader video {
-                object-fit: cover !important;
+                object-fit: contain !important;
                 height: 100% !important;
                 width: 100% !important;
+                background-color: #000;
             }
 
         /* Nút đổi camera nổi trên góc camera */
@@ -365,16 +363,19 @@ else{
 
         // Xử lý gửi mã lên Backend
         async function handleScannedCode(decodedText) {
-            if (!decodedText) return;
+            const code = decodedText?.trim();
+            if (!code || isProcessing) return;
 
             try {
+                const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
                 const response = await fetch('/Attendance/ScanCheckIn', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Accept': 'application/json',
+                        'RequestVerificationToken': tokenInput ? tokenInput.value : ''
                     },
-                    body: JSON.stringify({ studentCode: decodedText.trim() })
+                    body: JSON.stringify({ studentCode: code })
                 });
 
                 // Đọc text trước khi parse để tránh lỗi "Unexpected end of JSON"
