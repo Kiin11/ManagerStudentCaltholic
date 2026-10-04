@@ -142,7 +142,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> SaveBatch([FromBody] AttendanceBatchSubmitDto request)
         {
             if (request == null || !request.Items.Any())
