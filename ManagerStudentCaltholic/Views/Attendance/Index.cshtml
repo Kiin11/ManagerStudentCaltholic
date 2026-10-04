@@ -137,7 +137,7 @@
                                                    @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
                                         </div>
                                         <select class="form-select form-select-sm select-mass-status">
-                                            <!option value="PRESENT" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
+                                            <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
                                             <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                             <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
                                             <!option value="ABSENT_PERMITTED" @(s.MassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
