@@ -162,14 +162,14 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         // Thống kê Lễ CN
         public int MassPresentCount { get; set; }
+        public int MassLinedUpCount { get; set; }
         public int MassLateCount { get; set; }
         public int MassAbsentPermitted { get; set; }
         public int MassAbsentUnpermitted { get; set; }
         public double MassAttendanceRate { get; set; } // Tỷ lệ %
 
-        // Thống kê Lễ
+        // Thống kê Lễ T5
         public int MassThuPresentCount { get; set; }
-        public int MassThuLateCount { get; set; }
         public int MassThuAbsentPermitted { get; set; }
         public int MassThuAbsentUnpermitted { get; set; }
         public double MassThuAttendanceRate { get; set; } // Tỷ lệ %
