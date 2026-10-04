@@ -588,12 +588,12 @@ namespace ManagerStudentCaltholic.Controllers
                 var attList = allAttendances.Where(a => a.EnrollmentId == e.Id).ToList();
 
                 var massPresent = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Sunday);
+                var massLinedUp = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp && a.DayOfWeek == DayOfWeek.Sunday);
                 var massLate = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Sunday);
                 var massAbsPermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Sunday);
                 var massAbsUnpermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday);
 
                 var massThuPresent = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Thursday);
-                var massThuLate = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Thursday);
                 var massThuAbsPermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Thursday);
                 var massThuAbsUnpermitted = attList.Count(a => a.MassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Thursday);
 
@@ -605,8 +605,8 @@ namespace ManagerStudentCaltholic.Controllers
                 var makeUps = attList.Count(a => a.IsMakeUp);
 
                 // Tính % chuyên cần (Có mặt + 0.5 * Đi trễ)
-                var massRate = Math.Round(((massPresent + massLate * 0.8) / (double)totalMassSessions) * 100, 1);
-                var massThuRate = Math.Round(((massThuPresent + massThuLate * 0.8) / (double)totalMassSessions) * 100, 1);
+                var massRate = Math.Round(((massPresent + massLinedUp + massLate * 0.8) / (double)totalMassSessions) * 100, 1);
+                var massThuRate = Math.Round(((massThuPresent) / (double)totalMassSessions) * 100, 1);
                 var classRate = Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1);
 
                 return new StudentAttendanceStatRow
@@ -615,6 +615,7 @@ namespace ManagerStudentCaltholic.Controllers
                     StudentCode = e.Student.StudentCode,
                     ChristianName = e.Student.ChristianName,
                     FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
+                    MassLinedUpCount = massLinedUp,
                     MassPresentCount = massPresent,
                     MassLateCount = massLate,
                     MassAbsentPermitted = massAbsPermitted,
@@ -622,7 +623,6 @@ namespace ManagerStudentCaltholic.Controllers
                     MassAttendanceRate = Math.Min(100, massRate),
 
                     MassThuPresentCount = massThuPresent,
-                    MassThuLateCount = massThuLate,
                     MassThuAbsentPermitted = massThuAbsPermitted,
                     MassThuAbsentUnpermitted = massThuAbsUnpermitted,
                     MassThuAttendanceRate = Math.Min(100, massThuRate),
