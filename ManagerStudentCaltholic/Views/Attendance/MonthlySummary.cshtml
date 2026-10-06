@@ -296,7 +296,7 @@
         {
             case "LINED_UP":
                 var titleLU = checkInTime.HasValue ? $"Có xếp hàng ({checkInTime.Value:hh\\:mm})" : "Xếp hàng đầu lễ";
-                return new Microsoft.AspNetCore.Html.HtmlString($"<span class='badge-status status-present' title='{titleLU}'>✔</span>");
+                return new Microsoft.AspNetCore.Html.HtmlString($"<span class='badge-status status-inline' title='{titleLU}'>✔</span>");
 
             case "PRESENT":
                 var titleP = checkInTime.HasValue ? $"Có mặt ({checkInTime.Value:hh\\:mm})" : "Có mặt đúng giờ";

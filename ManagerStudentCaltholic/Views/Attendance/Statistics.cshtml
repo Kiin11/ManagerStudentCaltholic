@@ -55,9 +55,9 @@
                         <th rowspan="2" class="align-middle ps-3">STT</th>
                         <th rowspan="2" class="align-middle">Mã QR</th>
                         <th rowspan="2" class="align-middle text-start">Tên Thánh, Họ và Tên</th>
-                        <th colspan="5" class="bg-success-subtle text-success border-start border-end">CHUYÊN CẦN THÁNH LỄ CHÚA NHẬT (@Model.TotalMassSessions buổi)</th>
-                        <th colspan="3" class="bg-success-subtle text-success border-start border-end">CHUYÊN CẦN THÁNH LỄ THỨ NĂM (@Model.TotalThuMassSessions buổi)</th>
-                        <th colspan="4" class="bg-primary-subtle text-primary border-end">CHUYÊN CẦN HỌC GIÁO LÝ (@Model.TotalClassSessions buổi)</th>
+                        <th colspan="4" class="bg-success-subtle text-success border-start border-end">CHUYÊN CẦN THÁNH LỄ CHÚA NHẬT (@Model.TotalMassSessions buổi)</th>
+                        <th colspan="2" class="bg-success-subtle text-success border-start border-end">CHUYÊN CẦN THÁNH LỄ THỨ NĂM (@Model.TotalThuMassSessions buổi)</th>
+                        <th colspan="3" class="bg-primary-subtle text-primary border-end">CHUYÊN CẦN HỌC GIÁO LÝ (@Model.TotalClassSessions buổi)</th>
                         <th rowspan="2" class="align-middle">Số buổi bù</th>
                         <th rowspan="2" class="align-middle text-center">Xét Bí Tích</th>
                     </tr>
@@ -65,17 +65,14 @@
                         <th class="border-start">Xếp Hàng</th>
                         <th>Có mặt</th>
                         <th>Trễ</th>
-                        <th>Vắng</th>
-                        <th class="border-end text-success fw-bold">% Lễ</th>
+                        <th class="border-end text-success fw-bold">Vắng</th>
 
                         <th class="border-start">Có mặt</th>
-                        <th>Vắng</th>
-                        <th class="border-end text-success fw-bold">% Lễ</th>
+                        <th class="border-end text-success fw-bold">Vắng</th>
 
-                        <th>Có mặt</th>
+                        <th class="border-start">Có mặt</th>
                         <th>Trễ</th>
-                        <th>Vắng</th>
-                        <th class="border-end text-primary fw-bold">% Học</th>
+                        <th class="border-end text-primary fw-bold">Vắng</th>
                     </tr>
                 </thead>
                 <tbody class="text-center">
@@ -96,24 +93,24 @@
                                 <td class="text-success fw-bold">@s.MassPresentCount</td>
                                 <td class="text-warning fw-bold">@s.MassLateCount</td>
                                 <td class="text-danger">@(s.MassAbsentPermitted + s.MassAbsentUnpermitted)</td>
-                                <td class="border-end fw-bold">
+                                <!-- <td class="border-end fw-bold">
                                     <span class="badge @(s.MassAttendanceRate >= 80 ? "bg-success" : "bg-danger")">@s.MassAttendanceRate%</span>
-                                </td>
+                                </td> -->
 
                                 <!-- Thống kê Lễ T5 -->
                                 <td class="border-start text-success fw-bold">@s.MassThuPresentCount</td>
                                 <td class="text-danger">@(s.MassThuAbsentPermitted + s.MassThuAbsentUnpermitted)</td>
-                                <td class="border-end fw-bold">
+                                <!-- <td class="border-end fw-bold">
                                     <span class="badge @(s.MassThuAttendanceRate >= 80 ? "bg-success" : "bg-danger")">@s.MassThuAttendanceRate%</span>
-                                </td>
+                                </td>-->
 
                                 <!-- Thống kê Học -->
                                 <td class="text-primary fw-bold">@s.ClassPresentCount</td>
                                 <td class="text-warning fw-bold">@s.ClassLateCount</td>
                                 <td class="text-danger">@(s.ClassAbsentPermitted + s.ClassAbsentUnpermitted)</td>
-                                <td class="border-end fw-bold">
+                                <!-- <td class="border-end fw-bold">
                                     <span class="badge @(s.ClassAttendanceRate >= 80 ? "bg-primary" : "bg-danger")">@s.ClassAttendanceRate%</span>
-                                </td>
+                                </td>-->
 
                                 <td><span class="badge bg-light text-dark border">@s.TotalMakeUpCount</span></td>
                                 <td>

@@ -1019,19 +1019,26 @@ namespace ManagerStudentCaltholic.Controllers
                             statusDto.ClassStatus = att.ClassStatus;
                             statusDto.ClassCheckInTime = att.ClassCheckInTime;
                             statusDto.IsClassMakeUp = att.IsMakeUp;
+
+                            statusDto.HasMassSunRecord = true;
+                            statusDto.MassSunStatus = att.MassStatus;
+                            statusDto.MassSunCheckInTime = att.MassCheckInTime;
+
+                            // Cộng dồn thống kê
+                            if (att.MassStatus == "LINED_UP") row.TotalMassSunInLine++;
+                            else if (att.MassStatus == "PRESENT") row.TotalMassSunAttended++;
+                            else if (att.MassStatus == "LATE") { row.TotalMassSunAttended++; row.TotalMassSunLate++; }
+                            else row.TotalMassSunAbsent++;
                         }
 
-                        // Cộng dồn thống kê
-                        if (att.MassStatus == "LINED_UP") row.TotalMassSunInLine++;
-                        else if (att.MassStatus == "PRESENT") row.TotalMassSunAttended++;
-                        else if (att.MassStatus == "LATE") { row.TotalMassSunAttended++; row.TotalMassSunLate++; }
-                        else row.TotalMassSunAbsent++;
-
-                        if (sess.IsSunday)
+                        else
                         {
-                            if (att.ClassStatus == "PRESENT") row.TotalClassAttended++;
-                            else if (att.ClassStatus == "LATE") { row.TotalClassAttended++; row.TotalClassLate++; }
-                            else row.TotalClassAbsent++;
+                            statusDto.HasMassThuRecord = true;
+                            statusDto.MassThuStatus = att.MassStatus;
+                            statusDto.MassThuCheckInTime = att.MassCheckInTime;
+                            // Cộng dồn thống kê
+                            if (att.MassStatus == "PRESENT") row.TotalMassThuAttended++;
+                            else row.TotalMassThuAbsent++;
                         }
                     }
                     else

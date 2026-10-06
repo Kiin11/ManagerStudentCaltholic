@@ -118,10 +118,8 @@
             {
                 var isHdgx = r.RoomName.Contains("HĐGX");
                 var icon = isHdgx ? "bi-briefcase-fill" : "bi-people-fill";
-                var badgeText = isHdgx ? "Phòng Họp Ban Hành Giáo" : "Sảnh Sinh Hoạt Chung / Hội Trường";
-                var desc = isHdgx
-                ? $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})"
-                : $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})";
+                var badgeText = isHdgx ? "Phòng Hội Đồng Giáo Xứ" : "Sảnh Sinh Hoạt Chung / Hội Trường";
+                var desc = $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})";
 
                 sb.Append($@"
         <div class='d-flex justify-content-between align-items-center mb-2'>
