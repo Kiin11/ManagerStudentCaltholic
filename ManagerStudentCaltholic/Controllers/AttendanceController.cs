@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using DocumentFormat.OpenXml.InkML;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
@@ -1168,6 +1169,250 @@ namespace ManagerStudentCaltholic.Controllers
             return Json(new { success = true, message = "Đã lưu quy ước tính điểm chuyên cần cho lớp thành công!" });
         }
 
-        #endregion
+    
+    /// <summary>
+    /// XUẤT BẢNG TỔNG HỢP ĐIỂM DANH THEO THÁNG RA EXCEL (.XLSX)
+    /// </summary>
+    /// <param name="classId"></param>
+    /// <param name="month"></param>
+    /// <param name="year"></param>
+    /// <returns></returns>
+    [HttpGet]
+    public async Task<IActionResult> ExportMonthlySummaryExcel(int classId, int? month, int? year)
+    {
+        var targetClass = await _context.Classes
+            .Include(c => c.AcademicYear)
+            .FirstOrDefaultAsync(c => c.Id == classId);
+
+        if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
+
+        var targetMonth = month ?? DateTime.Today.Month;
+        var targetYear = year ?? DateTime.Today.Year;
+        var daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
+
+        // 1. Xác định danh sách ngày T5 và CN trong tháng
+        var sessionDates = new List<(DateTime Date, DayOfWeek DayOfWeek)>();
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            var dt = new DateTime(targetYear, targetMonth, day);
+            if (dt.DayOfWeek == DayOfWeek.Thursday || dt.DayOfWeek == DayOfWeek.Sunday)
+            {
+                sessionDates.Add((dt, dt.DayOfWeek));
+            }
+        }
+
+        // 2. Lấy danh sách học sinh và điểm danh trong tháng
+        var enrollments = await _context.Enrollments
+            .Include(e => e.Student)
+            .Where(e => e.ClassRoomId == classId && e.Student.IsActive)
+            .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+            .ToListAsync();
+
+        var enrollmentIds = enrollments.Select(e => e.Id).ToList();
+        var startDate = new DateTime(targetYear, targetMonth, 1);
+        var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
+
+        var attendances = await _context.Attendances
+            .Where(a => enrollmentIds.Contains(a.EnrollmentId) &&
+                        a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
+            .AsNoTracking()
+            .ToListAsync();
+
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add($"Thang_{targetMonth}_{targetYear}");
+
+        // 3. Tiêu đề chính
+        worksheet.Cell("A1").Value = $"BẢNG TỔNG HỢP ĐIỂM DANH CHUYÊN CẦN - THÁNG {targetMonth}/{targetYear}";
+        worksheet.Cell("A1").Style.Font.Bold = true;
+        worksheet.Cell("A1").Style.Font.FontSize = 14;
+
+        worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) | Niên khóa: {targetClass.AcademicYear.Name} | Sĩ số: {enrollments.Count} em";
+        worksheet.Cell("A2").Style.Font.Italic = true;
+
+        // 4. Dựng Header 2 tầng
+        int hRow1 = 4;
+        int hRow2 = 5;
+
+        worksheet.Cell(hRow1, 1).Value = "STT";
+        worksheet.Range(hRow1, 1, hRow2, 1).Merge();
+
+        worksheet.Cell(hRow1, 2).Value = "Mã QR";
+        worksheet.Range(hRow1, 2, hRow2, 2).Merge();
+
+        worksheet.Cell(hRow1, 3).Value = "Tên Thánh, Họ và Tên";
+        worksheet.Range(hRow1, 3, hRow2, 3).Merge();
+
+        int col = 4;
+        foreach (var sess in sessionDates)
+        {
+            if (sess.DayOfWeek == DayOfWeek.Sunday)
+            {
+                // CN: 2 cột (Lễ & Học)
+                worksheet.Cell(hRow1, col).Value = $"CN {sess.Date:dd/MM}";
+                worksheet.Range(hRow1, col, hRow1, col + 1).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(224, 231, 255);
+
+                worksheet.Cell(hRow2, col).Value = "Lễ";
+                worksheet.Cell(hRow2, col + 1).Value = "Học";
+                col += 2;
+            }
+            else
+            {
+                // T5: 1 cột (Lễ)
+                worksheet.Cell(hRow1, col).Value = $"T5 {sess.Date:dd/MM}";
+                worksheet.Range(hRow1, col, hRow2, col).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(254, 243, 199);
+                col += 1;
+            }
+        }
+
+        // Cột tổng kết Lễ
+        int massSummaryStart = col;
+        worksheet.Cell(hRow1, col).Value = "TỔNG LỄ";
+        worksheet.Range(hRow1, col, hRow1, col + 2).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(220, 252, 231);
+        worksheet.Cell(hRow2, col).Value = "Đ";
+        worksheet.Cell(hRow2, col + 1).Value = "T";
+        worksheet.Cell(hRow2, col + 2).Value = "V";
+        col += 3;
+
+        // Cột tổng kết Học
+        int classSummaryStart = col;
+        worksheet.Cell(hRow1, col).Value = "TỔNG HỌC";
+        worksheet.Range(hRow1, col, hRow1, col + 2).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(219, 234, 254);
+        worksheet.Cell(hRow2, col).Value = "Đ";
+        worksheet.Cell(hRow2, col + 1).Value = "T";
+        worksheet.Cell(hRow2, col + 2).Value = "V";
+
+        int totalCols = col + 2;
+        worksheet.Range(1, 1, 1, totalCols).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        worksheet.Range(2, 1, 2, totalCols).Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        // Đóng khung Header
+        var headerRange = worksheet.Range(hRow1, 1, hRow2, totalCols);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        headerRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        headerRange.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+
+        // 5. Đổ dữ liệu học sinh
+        int currRow = 6;
+        int stt = 1;
+
+        foreach (var en in enrollments)
+        {
+            var attList = attendances.Where(a => a.EnrollmentId == en.Id).ToList();
+
+            worksheet.Cell(currRow, 1).Value = stt++;
+            worksheet.Cell(currRow, 2).Value = en.Student.StudentCode;
+            worksheet.Cell(currRow, 3).Value = $"{en.Student.ChristianName} {en.Student.LastName} {en.Student.FirstName}".Trim();
+
+            int dataCol = 4;
+            int mPresent = 0, mLate = 0, mAbsent = 0;
+            int cPresent = 0, cLate = 0, cAbsent = 0;
+
+            foreach (var sess in sessionDates)
+            {
+                var att = attList.FirstOrDefault(a => a.AttendanceDate.Date == sess.Date.Date);
+
+                // Xử lý cột Lễ (T5 hoặc CN)
+                string mCode = GetStatusCode(att?.MassStatus, att?.IsMakeUp ?? false);
+                worksheet.Cell(currRow, dataCol).Value = mCode;
+                FormatStatusCell(worksheet.Cell(currRow, dataCol), mCode);
+
+                if (mCode == "✔") mPresent++;
+                else if (mCode == "T") { mPresent++; mLate++; }
+                else mAbsent++;
+
+                dataCol++;
+
+                // Xử lý cột Học (Chỉ CN)
+                if (sess.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    string cCode = GetStatusCode(att?.ClassStatus, att?.IsMakeUp ?? false);
+                    worksheet.Cell(currRow, dataCol).Value = cCode;
+                    FormatStatusCell(worksheet.Cell(currRow, dataCol), cCode);
+
+                    if (cCode == "✔") cPresent++;
+                    else if (cCode == "T") { cPresent++; cLate++; }
+                    else cAbsent++;
+
+                    dataCol++;
+                }
+            }
+
+            // Điền tổng Lễ
+            worksheet.Cell(currRow, massSummaryStart).Value = mPresent;
+            worksheet.Cell(currRow, massSummaryStart + 1).Value = mLate;
+            worksheet.Cell(currRow, massSummaryStart + 2).Value = mAbsent;
+
+            // Điền tổng Học
+            worksheet.Cell(currRow, classSummaryStart).Value = cPresent;
+            worksheet.Cell(currRow, classSummaryStart + 1).Value = cLate;
+            worksheet.Cell(currRow, classSummaryStart + 2).Value = cAbsent;
+
+            // Canh lề và viền từng ô
+            for (int c = 1; c <= totalCols; c++)
+            {
+                worksheet.Cell(currRow, c).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                if (c != 3) worksheet.Cell(currRow, c).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            }
+
+            currRow++;
+        }
+
+        worksheet.Columns().AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        var content = stream.ToArray();
+        var fileName = $"DiemDanh_Thang{targetMonth}_{targetYear}_{targetClass.Name.Replace(" ", "_")}.xlsx";
+
+        return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
+
+    // Hàm chuyển trạng thái thành ký hiệu viết tắt
+    private static string GetStatusCode(string? status, bool isMakeUp)
+    {
+        if (isMakeUp) return "Bù";
+        return status switch
+        {
+            "LINED_UP" => "XH",
+            "PRESENT" => "✔",
+            "LATE" => "T",
+            "ABSENT_PERMITTED" => "P",
+            _ => "K"
+        };
+    }
+
+    // Định dạng màu sắc ô Excel theo trạng thái
+    private static void FormatStatusCell(IXLCell cell, string code)
+    {
+        switch (code)
+        {
+            case "XH":
+                cell.Style.Font.FontColor = XLColor.FromArgb(126, 34, 206);
+                cell.Style.Font.Bold = true;
+                    break;
+                case "✔":
+                cell.Style.Font.FontColor = XLColor.FromArgb(21, 128, 61);
+                cell.Style.Font.Bold = true;
+                break;
+            case "T":
+                cell.Style.Font.FontColor = XLColor.FromArgb(161, 98, 7);
+                cell.Style.Font.Bold = true;
+                break;
+            case "P":
+                cell.Style.Font.FontColor = XLColor.FromArgb(3, 105, 161);
+                break;
+            case "K":
+                cell.Style.Font.FontColor = XLColor.FromArgb(185, 28, 28);
+                cell.Style.Font.Bold = true;
+                break;
+            case "Bù":
+                cell.Style.Font.FontColor = XLColor.FromArgb(194, 65, 12);
+                break;
+        }
+    }
+
+    #endregion
+}
 }
