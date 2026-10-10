@@ -39,6 +39,11 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<GradeRecord> GradeRecords => Set<GradeRecord>();
         public DbSet<AbsenceRequest> AbsenceRequests => Set<AbsenceRequest>();
         public DbSet<AttendanceRuleConfig> AttendanceRuleConfigs => Set<AttendanceRuleConfig>();
+        public DbSet<GradeColumn> GradeColumns => Set<GradeColumn>();
+        public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
+        public DbSet<AttendanceScoreRule> AttendanceScoreRules => Set<AttendanceScoreRule>();
+        public DbSet<GradingFormula> GradingFormulas => Set<GradingFormula>();
+        public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -438,6 +443,26 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.Property(r => r.UpdatedAt).HasDefaultValueSql("NOW()");
             });
+
+            modelBuilder.Entity<GradeColumn>()
+                .HasIndex(g => new { g.AcademicYear, g.Semester, g.ClassId, g.ColumnCode })
+                .IsUnique();
+
+            modelBuilder.Entity<StudentGrade>()
+                .HasIndex(sg => new { sg.StudentId, sg.GradeColumnId, sg.Semester })
+                .IsUnique();
+
+            modelBuilder.Entity<AttendanceScoreRule>()
+                .HasIndex(r => new { r.AcademicYear, r.Semester })
+                .IsUnique();
+
+            modelBuilder.Entity<GradingFormula>()
+                .HasIndex(f => new { f.AcademicYear, f.Semester })
+                .IsUnique();
+
+            modelBuilder.Entity<StudentGradeSummary>()
+                .HasIndex(s => new { s.StudentId, s.AcademicYear, s.Semester })
+                .IsUnique();
         }
 
         /// <summary>
