@@ -17,6 +17,9 @@ namespace ManagerStudentCaltholic.Models.Entities
         [Column("semester")]
         public int Semester { get; set; }
 
+        [Column("class_id")]
+        public int? ClassId { get; set; }
+
         [Required]
         [Column("formula_expression")]
         public string FormulaExpression { get; set; } = string.Empty;

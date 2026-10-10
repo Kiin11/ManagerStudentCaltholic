@@ -18,7 +18,7 @@ namespace ManagerStudentCaltholic.Models.Entities
         public int Semester { get; set; }
 
         [Column("class_id")]
-        public int? ClassId { get; set; }
+        public int? ClassId { get; set; } // Nullable: Áp dụng chung hoặc riêng theo lớp
 
         [Required, MaxLength(50)]
         [Column("column_code")]
@@ -36,7 +36,5 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [Column("sort_order")]
         public int SortOrder { get; set; } = 0;
-
-        public virtual ICollection<StudentGrade> StudentGrades { get; set; } = new List<StudentGrade>();
     }
 }

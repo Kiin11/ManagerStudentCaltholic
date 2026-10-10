@@ -26,6 +26,9 @@ namespace ManagerStudentCaltholic.Models.Entities
         [Column("note")]
         public string? Note { get; set; }
 
+        [Column("updated_by")]
+        public string? UpdatedBy { get; set; }
+
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

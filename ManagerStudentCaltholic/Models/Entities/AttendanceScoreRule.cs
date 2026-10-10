@@ -17,6 +17,9 @@ namespace ManagerStudentCaltholic.Models.Entities
         [Column("semester")]
         public int Semester { get; set; }
 
+        [Column("class_id")]
+        public int? ClassId { get; set; }
+
         [Column("base_score")]
         public decimal BaseScore { get; set; } = 10.0m;
 
