@@ -1,7 +1,7 @@
 ﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-using ManagerStudentCaltholic.Interface;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using System.Globalization;
 using System.Text.RegularExpressions;

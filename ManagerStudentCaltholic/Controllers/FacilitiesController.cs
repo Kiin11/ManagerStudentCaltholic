@@ -1,5 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
-using ManagerStudentCaltholic.Interface;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
