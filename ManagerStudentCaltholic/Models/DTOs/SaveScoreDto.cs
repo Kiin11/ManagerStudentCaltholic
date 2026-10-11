@@ -6,5 +6,6 @@
         public int GradeColumnId { get; set; }
         public int Semester { get; set; }
         public decimal? Score { get; set; }
+        public int ClassId { get; set; }
     }
 }

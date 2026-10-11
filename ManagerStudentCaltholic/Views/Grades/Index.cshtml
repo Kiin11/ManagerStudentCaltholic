@@ -1,5 +1,8 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.GradeManagementViewModel
-
+@{
+    bool isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+    var assignedClasses = ViewBag.AssignedClasses as List<int> ?? new List<int>();
+}
 <div class="container-fluid mt-3">
     <!-- Thanh điều hướng và Bộ lọc -->
     <div class="card shadow-sm mb-3">
@@ -8,6 +11,16 @@
                 <select name="academicYear" class="form-select form-select-sm">
                     <option value="2025-2026" selected>Niên khóa: 2025-2026</option>
                 </select>
+                <!-- Chọn Lớp Phụ Trách -->
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-people"></i> Lớp:</span>
+                    <select name="classId" class="form-select" onchange="this.form.submit()">
+                        @foreach (var cId in assignedClasses)
+                        {
+                            <option value="@cId" selected="@(Model.ClassId == cId)">Lớp ID: @cId</option>
+                        }
+                    </select>
+                </div>
                 <select name="semester" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="1" selected="@(Model.Semester == 1)">Học kỳ 1</option>
                     <option value="2" selected="@(Model.Semester == 2)">Học kỳ 2</option>

@@ -43,7 +43,8 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
         public DbSet<AttendanceScoreRule> AttendanceScoreRules => Set<AttendanceScoreRule>();
         public DbSet<GradingFormula> GradingFormulas => Set<GradingFormula>();
-        public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>();
+        public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>(); 
+        public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -463,6 +464,9 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<StudentGradeSummary>()
                 .HasIndex(s => new { s.StudentId, s.AcademicYear, s.Semester })
                 .IsUnique();
+
+            modelBuilder.Entity<TeacherClass>()
+                .HasIndex(t => new { t.UserId, t.ClassId, t.AcademicYear }).IsUnique();
         }
 
         /// <summary>
