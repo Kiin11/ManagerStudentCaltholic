@@ -90,7 +90,7 @@ namespace ManagerStudentCaltholic.Controllers
             var enrollments = await _context.Enrollments
                 .Include(e => e.Student)
                 .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
                 .AsNoTracking()
                 .ToListAsync();
 
@@ -565,7 +565,7 @@ namespace ManagerStudentCaltholic.Controllers
             var enrollments = await _context.Enrollments
                 .Include(e => e.Student)
                 .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
                 .AsNoTracking()
                 .ToListAsync();
 
@@ -672,7 +672,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             var enrollments = targetClass.Enrollments
                 .Where(e => e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
                 .ToList();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
@@ -973,8 +973,8 @@ namespace ManagerStudentCaltholic.Controllers
             var enrollments = await _context.Enrollments
                 .Include(e => e.Student)
                 .Where(e => e.ClassRoomId == selectedClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName)
-                .ThenBy(e => e.Student.FirstName)
+                .OrderBy(e => e.Student.StudentCode)
+                .ThenBy(e => e.Student.LastName)
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
