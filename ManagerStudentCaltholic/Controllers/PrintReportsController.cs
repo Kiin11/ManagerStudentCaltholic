@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
@@ -103,7 +104,7 @@ namespace ManagerStudentCaltholic.Controllers
                     var sem2Avg = _gradeService.CalculateSemesterAverage(hk2Dict, hk2Configs);
 
                     var yearAvg = _gradeService.CalculateYearAverage(sem1Avg, sem2Avg);
-                    var (rank, eligible) = _gradeService.EvaluateStudent(yearAvg, attRate, targetClass.GradeLevel, 2);
+                    //var (rank, eligible) = _gradeService.EvaluateStudent(yearAvg, attRate, targetClass.GradeLevel);
 
                     return new PrintStudentItemViewModel
                     {
@@ -116,9 +117,9 @@ namespace ManagerStudentCaltholic.Controllers
                         Semester1Average = sem1Avg,
                         Semester2Average = sem2Avg,
                         YearAverage = yearAvg,
-                        AcademicRank = rank,
+                        AcademicRank = "!",//rank,
                         AttendanceRate = attRate,
-                        IsEligibleForSacrament = eligible
+                        IsEligibleForSacrament = false
                     };
                 }).ToList();
 
