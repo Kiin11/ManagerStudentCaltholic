@@ -1,0 +1,52 @@
+-- 1. Bảng phân công Giáo lý viên phụ trách lớp
+CREATE TABLE IF NOT EXISTS teacher_classes (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    class_id INT NOT NULL,
+    role_in_class VARCHAR(50) DEFAULT 'GLV',
+    academic_year VARCHAR(20) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    CONSTRAINT uq_teacher_class UNIQUE (user_id, class_id, academic_year)
+);
+
+-- 2. Bảng định nghĩa cột điểm (Chặn trùng NULL trên class_id)
+CREATE TABLE IF NOT EXISTS grade_columns (
+    id SERIAL PRIMARY KEY,
+    academic_year VARCHAR(20) NOT NULL,
+    semester INT NOT NULL,
+    class_id INT NULL,
+    column_code VARCHAR(50) NOT NULL,
+    column_name VARCHAR(100) NOT NULL,
+    coefficient NUMERIC(3, 1) DEFAULT 1.0,
+    is_attendance_based BOOLEAN DEFAULT FALSE,
+    sort_order INT DEFAULT 0,
+    CONSTRAINT uq_column_class UNIQUE NULLS NOT DISTINCT (academic_year, semester, class_id, column_code)
+);
+
+-- 3. Bảng quy tắc chuyên cần (Chặn trùng NULL trên class_id)
+CREATE TABLE IF NOT EXISTS attendance_score_rules (
+    id SERIAL PRIMARY KEY,
+    academic_year VARCHAR(20) NOT NULL,
+    semester INT NOT NULL,
+    class_id INT NULL,
+    base_score NUMERIC(4, 2) DEFAULT 10.0,
+    penalty_mass_unexcused NUMERIC(4, 2) DEFAULT 1.0,
+    penalty_mass_excused NUMERIC(4, 2) DEFAULT 0.5,
+    penalty_mass_late NUMERIC(4, 2) DEFAULT 0.25,
+    penalty_class_unexcused NUMERIC(4, 2) DEFAULT 1.0,
+    penalty_class_excused NUMERIC(4, 2) DEFAULT 0.5,
+    penalty_class_late NUMERIC(4, 2) DEFAULT 0.25,
+    min_score NUMERIC(4, 2) DEFAULT 0.0,
+    CONSTRAINT uq_att_rule_class UNIQUE NULLS NOT DISTINCT (academic_year, semester, class_id)
+);
+
+-- 4. Bảng công thức tính điểm (Chặn trùng NULL trên class_id)
+CREATE TABLE IF NOT EXISTS grading_formulas (
+    id SERIAL PRIMARY KEY,
+    academic_year VARCHAR(20) NOT NULL,
+    semester INT NOT NULL,
+    class_id INT NULL,
+    formula_expression TEXT NOT NULL,
+    evaluation_rules JSONB DEFAULT '{"Gioi": 8.0, "Kha": 6.5, "Dat": 5.0}'::jsonb,
+    CONSTRAINT uq_formula_class UNIQUE NULLS NOT DISTINCT (academic_year, semester, class_id)
+);

@@ -1,8 +1,10 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,66 +16,122 @@ namespace ManagerStudentCaltholic.Controllers
     public class GradesController : Controller
     {
         private readonly ParishDbContext _db;
+        private readonly IGradePermissionService _permService;
         private readonly IGradeCalculationService _calcService;
-        private readonly IGradePermissionService _permissionService;
 
-        public GradesController(ParishDbContext db, IGradeCalculationService calcService, IGradePermissionService permissionService)
+        public GradesController(
+            ParishDbContext db,
+            IGradePermissionService permService,
+            IGradeCalculationService calcService)
         {
             _db = db;
+            _permService = permService;
             _calcService = calcService;
-            _permissionService = permissionService;
         }
 
         private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         private bool IsAdmin => User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard);
 
         [HttpGet]
-        public async Task<IActionResult> Index(string academicYear = "2025-2026", int semester = 1, int classId = 1)
+        public async Task<IActionResult> Index(string academicYear = "2025-2026", int semester = 1, int? classId = null)
         {
-            var accessibleClasses = await _permissionService.GetAssignedClassIdsAsync(CurrentUserId, academicYear, IsAdmin);
+            var accessibleClasses = await _permService.GetAssignedClassIdsAsync(CurrentUserId, academicYear, IsAdmin);
             if (!accessibleClasses.Any())
             {
                 return Forbid("Bạn chưa được phân công phụ trách lớp nào trong niên khóa này.");
             }
 
-            int selectedClassId = accessibleClasses.Contains(classId) ? classId : accessibleClasses.First();
-            if (selectedClassId != classId)
+            int selectedClassId = classId ?? accessibleClasses.First();
+            if (!accessibleClasses.Contains(selectedClassId))
             {
                 return Forbid("Bạn không có quyền quản lý bảng điểm của lớp này.");
             }
 
-            var columns = await _db.GradeColumns
-                .Where(c => c.AcademicYear == academicYear && (c.Semester == semester || semester == 0))
-                .OrderBy(c => c.SortOrder)
+            var columns = await _permService.GetEffectiveColumnsAsync(selectedClassId, academicYear, semester);
+            var formula = await _permService.GetEffectiveFormulaAsync(selectedClassId, academicYear, semester);
+            var colIds = columns.Select(c => c.Id).ToList();
+
+            // Lấy điểm hiện có của các cột thuộc lớp & học kỳ
+            var grades = await _db.StudentGrades
+                .Include(sg => sg.GradeColumn)
+                .Where(sg => colIds.Contains(sg.GradeColumnId) && sg.Semester == semester)
                 .ToListAsync();
 
-            // Truy vấn học sinh cùng bảng điểm hiện có
-            var students = await _db.Set<StudentGrade>()
-                .Include(sg => sg.GradeColumn)
-                .Where(sg => sg.GradeColumn.AcademicYear == academicYear && sg.Semester == semester)
-                .ToListAsync();
+            // Tổng hợp danh sách dòng điểm theo từng học viên
+            var rows = grades
+                .GroupBy(g => g.StudentId)
+                .Select(grp =>
+                {
+                    var scoresByCode = grp
+                        .Where(x => x.Score.HasValue)
+                        .ToDictionary(x => x.GradeColumn.ColumnCode, x => x.Score);
+
+                    var nonNullScores = grp
+                        .Where(x => x.Score.HasValue)
+                        .ToDictionary(x => x.GradeColumn.ColumnCode, x => x.Score!.Value);
+
+                    decimal? avg = null;
+                    string classification = "Chưa xếp loại";
+
+                    if (formula != null && nonNullScores.Any())
+                    {
+                        avg = _calcService.EvaluateGradeFormula(formula.FormulaExpression, nonNullScores);
+                        if (avg.HasValue)
+                        {
+                            classification = _calcService.DetermineClassification(avg.Value, formula.EvaluationRules);
+                        }
+                    }
+
+                    return new StudentGradeRowViewModel
+                    {
+                        StudentId = grp.Key,
+                        Semester = semester,
+                        ScoresByCode = scoresByCode,
+                        SemesterAverage = avg,
+                        Classification = classification
+                    };
+                })
+                .OrderBy(r => r.StudentId)
+                .ToList();
 
             var vm = new GradeManagementViewModel
             {
                 AcademicYear = academicYear,
                 Semester = semester,
-                ClassId = classId,
-                Columns = columns
+                ClassId = selectedClassId,
+                Columns = columns,
+                Rows = rows
             };
 
+            ViewBag.IsAdmin = IsAdmin;
+            ViewBag.AssignedClasses = accessibleClasses;
             return View(vm);
         }
 
         [HttpPost]
         public async Task<IActionResult> SaveScoreInline([FromBody] SaveScoreDto dto)
         {
-            var activeAcademicYear = await _db.AcademicYears.FirstOrDefaultAsync(a => a.IsCurrent);
+            if (dto.Score.HasValue && (dto.Score.Value < 0m || dto.Score.Value > 10m))
+            {
+                return BadRequest(new { message = "Điểm số phải nằm trong khoảng từ 0 đến 10." });
+            }
 
-            // Kiểm tra quyền trên lớp mà học sinh đang theo học
-            var canEdit = await _permissionService.CanManageClassAsync(CurrentUserId, dto.ClassId, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
+            // 1. Kiểm tra quyền của GLV trên lớp
+            var canEdit = await _permService.CanManageClassAsync(CurrentUserId, dto.ClassId, dto.AcademicYear, IsAdmin);
             if (!canEdit)
             {
                 return Forbid();
+            }
+
+            // 2. Fix IDOR: Kiểm tra cột điểm có thuộc cấu hình hợp lệ của lớp và năm học này không
+            var validColumn = await _db.GradeColumns.FirstOrDefaultAsync(c =>
+                c.Id == dto.GradeColumnId &&
+                c.AcademicYear == dto.AcademicYear &&
+                (c.ClassId == dto.ClassId || c.ClassId == null));
+
+            if (validColumn == null)
+            {
+                return BadRequest(new { message = "Cột điểm không hợp lệ với lớp hiện tại." });
             }
 
             var grade = await _db.StudentGrades
@@ -89,6 +147,7 @@ namespace ManagerStudentCaltholic.Controllers
                     GradeColumnId = dto.GradeColumnId,
                     Semester = dto.Semester,
                     Score = dto.Score,
+                    UpdatedBy = CurrentUserId,
                     UpdatedAt = DateTime.UtcNow
                 };
                 _db.StudentGrades.Add(grade);
@@ -96,6 +155,7 @@ namespace ManagerStudentCaltholic.Controllers
             else
             {
                 grade.Score = dto.Score;
+                grade.UpdatedBy = CurrentUserId;
                 grade.UpdatedAt = DateTime.UtcNow;
             }
 
@@ -109,7 +169,7 @@ namespace ManagerStudentCaltholic.Controllers
             var activeAcademicYear = await _db.AcademicYears.FirstOrDefaultAsync(a => a.IsCurrent);
 
             // Kiểm tra quyền trên lớp mà học sinh đang theo học
-            var canEdit = await _permissionService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
+            var canEdit = await _permService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
             if (!canEdit)
             {
                 return Forbid();
@@ -127,7 +187,7 @@ namespace ManagerStudentCaltholic.Controllers
             var activeAcademicYear = await _db.AcademicYears.FirstOrDefaultAsync(a => a.IsCurrent);
 
             // Kiểm tra quyền trên lớp mà học sinh đang theo học
-            var canEdit = await _permissionService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
+            var canEdit = await _permService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
             if (!canEdit)
             {
                 return Forbid();

@@ -11,7 +11,10 @@ namespace ManagerStudentCaltholic.Interface.Services
         decimal CalculateAttendanceScore(int absentMassUnexcused, int absentMassExcused, int lateMass,
                                          int absentClassUnexcused, int absentClassExcused, int lateClass,
                                          AttendanceScoreRule rule);
-        decimal? EvaluateGradeFormula(string formulaExpression, Dictionary<string, decimal> scores);
+        decimal? EvaluateGradeFormula(
+            string formulaExpression,
+            Dictionary<string, decimal> scores,
+            IEnumerable<string>? allColumnCodes = null);
         string DetermineClassification(decimal average, string evaluationRulesJson);
     }
 }

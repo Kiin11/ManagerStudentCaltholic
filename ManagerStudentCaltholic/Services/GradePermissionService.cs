@@ -25,9 +25,10 @@ namespace ManagerStudentCaltholic.Services
         {
             if (isAdmin)
             {
-                // Giả định có bảng Classes
-                //return await _db.Database.SqlQueryRaw<int>("SELECT id FROM Classes").ToListAsync();
-                return await _db.Classes.Select(c => c.Id).ToListAsync();
+                // Fix: Đặt alias AS "Value" cho EF Core SqlQueryRaw<int>
+                return await _db.Database
+                    .SqlQueryRaw<int>("SELECT id AS \"Value\" FROM classes ORDER BY id")
+                    .ToListAsync();
             }
 
             return await _db.TeacherClasses

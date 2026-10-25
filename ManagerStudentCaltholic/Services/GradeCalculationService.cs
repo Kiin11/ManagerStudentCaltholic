@@ -1,6 +1,6 @@
 ﻿using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
-using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using NCalc;
 
@@ -8,7 +8,9 @@ namespace ManagerStudentCaltholic.Services
 {
     public class GradeCalculationService : IGradeCalculationService
     {
-        public decimal CalculateAttendanceScore(int absentMassUnexcused, int absentMassExcused, int lateMass, int absentClassUnexcused, int absentClassExcused, int lateClass, AttendanceScoreRule rule)
+        public decimal CalculateAttendanceScore(int absentMassUnexcused, int absentMassExcused, 
+            int lateMass, int absentClassUnexcused, int absentClassExcused, 
+            int lateClass, AttendanceScoreRule rule)
         {
             var totalPenalty = (absentMassUnexcused * rule.PenaltyMassUnexcused)
                              + (absentMassExcused * rule.PenaltyMassExcused)
@@ -73,17 +75,45 @@ namespace ManagerStudentCaltholic.Services
             }
         }
 
-        public decimal? EvaluateGradeFormula(string formulaExpression, Dictionary<string, decimal> scores)
+        /// <summary>
+        /// Fix: Truyền danh sách toàn bộ mã cột để gán mặc định 0 nếu học viên chưa có điểm cột đó,
+        /// đồng thời kiểm tra NaN / Infinity khi chia cho 0
+        /// </summary>
+        /// <param name="formulaExpression"></param>
+        /// <param name="scores"></param>
+        /// <returns></returns>
+        public decimal? EvaluateGradeFormula(
+            string formulaExpression,
+            Dictionary<string, decimal> scores,
+            IEnumerable<string>? allColumnCodes = null)
         {
+            if (string.IsNullOrWhiteSpace(formulaExpression)) return null;
+
             try
             {
-                var expr = new NCalc.Expression(formulaExpression);
+                var expr = new Expression(formulaExpression);
+
+                if (allColumnCodes != null)
+                {
+                    foreach (var code in allColumnCodes)
+                    {
+                        expr.Parameters[code] = 0.0;
+                    }
+                }
+
                 foreach (var kvp in scores)
                 {
                     expr.Parameters[kvp.Key] = (double)kvp.Value;
                 }
+
                 var result = expr.Evaluate();
-                return Math.Round(Convert.ToDecimal(result), 2);
+                if (result == null) return null;
+
+                double numericResult = Convert.ToDouble(result);
+                if (double.IsNaN(numericResult) || double.IsInfinity(numericResult))
+                    return null;
+
+                return Math.Round(Convert.ToDecimal(numericResult), 2);
             }
             catch
             {
