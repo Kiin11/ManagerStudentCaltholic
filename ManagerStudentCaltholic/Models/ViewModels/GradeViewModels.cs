@@ -14,6 +14,25 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? Note { get; set; }
     }
 
+    public class CreateGradeColumnDto
+    {
+        [Required]
+        public int ClassId { get; set; }
+
+        [Range(1, 2)]
+        public int Semester { get; set; } = 1;
+
+        [Required(ErrorMessage = "Vui lòng nhập tên cột điểm")]
+        [MaxLength(100)]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [MaxLength(30)]
+        public string ScoreType { get; set; } = "CUSTOM";
+
+        [Range(1, 5)]
+        public int WeightFactor { get; set; } = 1;
+    }
+
     public class SaveBatchGradeRequestDto
     {
         public int ClassId { get; set; }
@@ -46,13 +65,13 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string ChristianName { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
 
-        // Điểm theo từng cấu hình: Key = GradeConfigurationId, Value = Score
         public Dictionary<int, decimal?> Scores { get; set; } = new();
 
-        // Điểm trung bình và kết quả xếp loại
+        public decimal? Semester1Average { get; set; }
+        public decimal? Semester2Average { get; set; }
         public decimal? SemesterAverage { get; set; }
         public decimal? YearAverage { get; set; }
-        public double AttendanceRate { get; set; } // Tỷ lệ chuyên cần (%)
+        public double AttendanceRate { get; set; }
         public string AcademicRank { get; set; } = "Chưa xếp loại";
         public bool IsEligibleForSacrament { get; set; }
     }

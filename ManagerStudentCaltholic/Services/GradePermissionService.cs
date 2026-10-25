@@ -17,22 +17,35 @@ namespace ManagerStudentCaltholic.Services
         public async Task<bool> CanManageClassAsync(string userId, int classId, string academicYear, bool isAdmin)
         {
             if (isAdmin) return true;
-            return await _db.TeacherClasses.AnyAsync(tc =>
-                tc.UserId == userId && tc.ClassId == classId && tc.AcademicYear == academicYear && tc.IsActive);
+            if (!long.TryParse(userId, out var uid)) return false;
+
+            return await _db.ClassTeachers
+                .Include(ct => ct.AcademicYear)
+                .AnyAsync(ct => ct.UserId == uid &&
+                                ct.ClassRoomId == classId &&
+                                (ct.AcademicYear.Name == academicYear || ct.AcademicYear.IsCurrent));
         }
 
         public async Task<List<int>> GetAssignedClassIdsAsync(string userId, string academicYear, bool isAdmin)
         {
+            var currentYear = await _db.AcademicYears
+                .FirstOrDefaultAsync(y => y.Name == academicYear || y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
+
             if (isAdmin)
             {
-                // Giả định có bảng Classes
-                //return await _db.Database.SqlQueryRaw<int>("SELECT id FROM Classes").ToListAsync();
-                return await _db.Classes.Select(c => c.Id).ToListAsync();
+                return await _db.Classes
+                    .Where(c => yearId == 0 || c.AcademicYearId == yearId)
+                    .Select(c => c.Id)
+                    .ToListAsync();
             }
 
-            return await _db.TeacherClasses
-                .Where(tc => tc.UserId == userId && tc.AcademicYear == academicYear && tc.IsActive)
-                .Select(tc => tc.ClassId)
+            if (!long.TryParse(userId, out var uid)) return new List<int>();
+
+            return await _db.ClassTeachers
+                .Where(ct => ct.UserId == uid && (yearId == 0 || ct.AcademicYearId == yearId))
+                .Select(ct => ct.ClassRoomId)
+                .Distinct()
                 .ToListAsync();
         }
 

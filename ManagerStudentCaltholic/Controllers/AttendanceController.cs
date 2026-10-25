@@ -578,10 +578,20 @@ namespace ManagerStudentCaltholic.Controllers
                 .ToListAsync();
 
             // Tổng số buổi lễ và buổi học đã diễn ra
-            var distinctMassDates = allAttendances.Where(a => a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted).Select(a => a.AttendanceDate).Distinct().Count();
-            var distinctClassDates = allAttendances.Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted).Select(a => a.AttendanceDate).Distinct().Count();
+            var distinctSunMassDates = allAttendances
+                .Where(a => a.DayOfWeek == DayOfWeek.Sunday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted))
+                .Select(a => a.AttendanceDate).Distinct().Count();
 
-            var totalMassSessions = Math.Max(1, distinctMassDates);
+            var distinctThuMassDates = allAttendances
+                .Where(a => a.DayOfWeek == DayOfWeek.Thursday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted))
+                .Select(a => a.AttendanceDate).Distinct().Count();
+
+            var distinctClassDates = allAttendances
+                .Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted)
+                .Select(a => a.AttendanceDate).Distinct().Count();
+
+            var totalMassSessions = Math.Max(1, distinctSunMassDates);
+            var totalThuMassSessions = Math.Max(1, distinctThuMassDates);
             var totalClassSessions = Math.Max(1, distinctClassDates);
 
             var statRows = enrollments.Select(e =>
@@ -606,9 +616,11 @@ namespace ManagerStudentCaltholic.Controllers
                 var makeUps = attList.Count(a => a.IsMakeUp);
 
                 // Tính % chuyên cần (Có mặt + 0.5 * Đi trễ)
-                var massRate = Math.Round(((massPresent + massLinedUp + massLate * 0.8) / (double)totalMassSessions) * 100, 1);
-                var massThuRate = Math.Round(((massThuPresent) / (double)totalMassSessions) * 100, 1);
-                var classRate = Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1);
+                var massRate = Math.Min(100, Math.Round(((massPresent + massLinedUp + massLate * 0.8) / (double)totalMassSessions) * 100, 1));
+                var massThuRate = distinctThuMassDates > 0
+                    ? Math.Min(100, Math.Round((massThuPresent / (double)totalThuMassSessions) * 100, 1))
+                    : 0;
+                var classRate = Math.Min(100, Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1));
 
                 return new StudentAttendanceStatRow
                 {
@@ -636,7 +648,7 @@ namespace ManagerStudentCaltholic.Controllers
 
                     TotalMakeUpCount = makeUps,
                     // Quy chuẩn lãnh bí tích: Cả 2 tỷ lệ >= 80%
-                    IsEligibleForSacrament = false // (massRate >= 80 && classRate >= 80)
+                    IsEligibleForSacrament = false // IsEligibleForSacrament = (massRate >= 80.0 && classRate >= 80.0)
                 };
             }).ToList();
 
@@ -1025,30 +1037,40 @@ namespace ManagerStudentCaltholic.Controllers
                             statusDto.MassSunStatus = att.MassStatus;
                             statusDto.MassSunCheckInTime = att.MassCheckInTime;
 
-                            // Cộng dồn thống kê
+                            // Cộng dồn thống kê Lễ Chúa Nhật
                             if (att.MassStatus == "LINED_UP") row.TotalMassSunInLine++;
                             else if (att.MassStatus == "PRESENT") row.TotalMassSunAttended++;
                             else if (att.MassStatus == "LATE") { row.TotalMassSunAttended++; row.TotalMassSunLate++; }
                             else row.TotalMassSunAbsent++;
-                        }
 
+                            // FIX: Cộng dồn thống kê Giờ Học Giáo Lý Chúa Nhật
+                            if (att.ClassStatus == "PRESENT") row.TotalClassAttended++;
+                            else if (att.ClassStatus == "LATE") { row.TotalClassAttended++; row.TotalClassLate++; }
+                            else row.TotalClassAbsent++;
+                        }
                         else
                         {
                             statusDto.HasMassThuRecord = true;
                             statusDto.MassThuStatus = att.MassStatus;
                             statusDto.MassThuCheckInTime = att.MassCheckInTime;
-                            // Cộng dồn thống kê
+
                             if (att.MassStatus == "PRESENT") row.TotalMassThuAttended++;
                             else row.TotalMassThuAbsent++;
                         }
                     }
                     else
                     {
-                        // Chưa có bản ghi: mặc định là chưa ghi nhận / vắng không phép
-                        //statusDto.MassStatus = "ABSENT_UNPERMITTED";
-                        if (sess.IsSunday) statusDto.ClassStatus = "ABSENT_UNPERMITTED";
-                        row.TotalMassSunAbsent++;
-                        if (sess.IsSunday) row.TotalClassAbsent++;
+                        // FIX: Phân biệt vắng Lễ Chúa Nhật và vắng Lễ Thứ Năm khi chưa có bản ghi
+                        if (sess.IsSunday)
+                        {
+                            statusDto.ClassStatus = "ABSENT_UNPERMITTED";
+                            row.TotalMassSunAbsent++;
+                            row.TotalClassAbsent++;
+                        }
+                        else
+                        {
+                            row.TotalMassThuAbsent++;
+                        }
                     }
 
                     row.DailyStatuses[sess.Date.Date] = statusDto;
