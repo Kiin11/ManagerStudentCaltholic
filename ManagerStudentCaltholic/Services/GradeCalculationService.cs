@@ -154,5 +154,10 @@ namespace ManagerStudentCaltholic.Services
             bool eligible = avg >= 5.0m && attendanceScore >= 7.0m;
             return (rank, eligible);
         }
+
+        public (string AcademicRank, bool IsEligibleForSacrament) EvaluateStudent(decimal? averageScore, double combinedAttendanceRate, decimal attendanceScore, string gradeLevel)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

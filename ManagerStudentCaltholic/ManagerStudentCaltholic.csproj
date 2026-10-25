@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <Compile Remove="Controllers\GradesController_copy.cs" />
+    <Compile Remove="Controllers\LookupController.cs" />
   </ItemGroup>
 
   <ItemGroup>
