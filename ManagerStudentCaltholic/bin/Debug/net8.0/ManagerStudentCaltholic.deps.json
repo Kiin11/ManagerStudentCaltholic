@@ -14,6 +14,7 @@
           "Microsoft.EntityFrameworkCore.Design": "8.0.11",
           "Microsoft.EntityFrameworkCore.Relational": "8.0.11",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "1.22.1",
+          "NCalc": "7.0.0",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "8.0.11",
           "PdfPig": "0.1.9",
           "QRCoder": "1.6.0",
@@ -59,6 +60,14 @@
           "lib/netstandard2.0/ExcelNumberFormat.dll": {
             "assemblyVersion": "1.1.0.0",
             "fileVersion": "1.1.0.0"
+          }
+        }
+      },
+      "ExtendedNumerics.BigDecimal/3003.2.0.161": {
+        "runtime": {
+          "lib/net8.0/ExtendedNumerics.BigDecimal.dll": {
+            "assemblyVersion": "3003.2.0.161",
+            "fileVersion": "3003.2.0.161"
           }
         }
       },
@@ -109,7 +118,7 @@
       "Microsoft.CodeAnalysis.Common/4.5.0": {
         "dependencies": {
           "Microsoft.CodeAnalysis.Analyzers": "3.3.3",
-          "System.Collections.Immutable": "6.0.0",
+          "System.Collections.Immutable": "10.0.10",
           "System.Reflection.Metadata": "6.0.1",
           "System.Runtime.CompilerServices.Unsafe": "6.0.0",
           "System.Text.Encoding.CodePages": "6.0.0"
@@ -384,8 +393,8 @@
       "Microsoft.Extensions.Caching.Memory/8.0.1": {
         "dependencies": {
           "Microsoft.Extensions.Caching.Abstractions": "8.0.0",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Microsoft.Extensions.Options": "8.0.2",
           "Microsoft.Extensions.Primitives": "8.0.0"
         },
@@ -408,7 +417,7 @@
       },
       "Microsoft.Extensions.DependencyInjection/8.0.1": {
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10"
         },
         "runtime": {
           "lib/net8.0/Microsoft.Extensions.DependencyInjection.dll": {
@@ -417,11 +426,11 @@
           }
         }
       },
-      "Microsoft.Extensions.DependencyInjection.Abstractions/8.0.2": {
+      "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.10": {
         "runtime": {
           "lib/net8.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.1024.46610"
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1026.32716"
           }
         }
       },
@@ -435,9 +444,9 @@
       },
       "Microsoft.Extensions.Diagnostics.Abstractions/8.0.0": {
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
           "Microsoft.Extensions.Options": "8.0.2",
-          "System.Diagnostics.DiagnosticSource": "8.0.0"
+          "System.Diagnostics.DiagnosticSource": "10.0.10"
         }
       },
       "Microsoft.Extensions.FileProviders.Abstractions/8.0.0": {
@@ -448,16 +457,16 @@
       "Microsoft.Extensions.Hosting.Abstractions/8.0.0": {
         "dependencies": {
           "Microsoft.Extensions.Configuration.Abstractions": "8.0.0",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
           "Microsoft.Extensions.Diagnostics.Abstractions": "8.0.0",
           "Microsoft.Extensions.FileProviders.Abstractions": "8.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2"
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
         }
       },
       "Microsoft.Extensions.Logging/8.0.1": {
         "dependencies": {
           "Microsoft.Extensions.DependencyInjection": "8.0.1",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Microsoft.Extensions.Options": "8.0.2"
         },
         "runtime": {
@@ -467,20 +476,21 @@
           }
         }
       },
-      "Microsoft.Extensions.Logging.Abstractions/8.0.2": {
+      "Microsoft.Extensions.Logging.Abstractions/10.0.10": {
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
+          "System.Diagnostics.DiagnosticSource": "10.0.10"
         },
         "runtime": {
           "lib/net8.0/Microsoft.Extensions.Logging.Abstractions.dll": {
-            "assemblyVersion": "8.0.0.0",
-            "fileVersion": "8.0.1024.46610"
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1026.32716"
           }
         }
       },
       "Microsoft.Extensions.Options/8.0.2": {
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
           "Microsoft.Extensions.Primitives": "8.0.0"
         },
         "runtime": {
@@ -577,6 +587,52 @@
           }
         }
       },
+      "NCalc/7.0.0": {
+        "dependencies": {
+          "NCalc.Core": "7.0.0"
+        },
+        "runtime": {
+          "lib/net8.0/NCalc.dll": {
+            "assemblyVersion": "7.0.0.0",
+            "fileVersion": "7.0.0.2"
+          }
+        }
+      },
+      "NCalc.Core/7.0.0": {
+        "dependencies": {
+          "ExtendedNumerics.BigDecimal": "3003.2.0.161",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
+          "NCalc.Parser": "7.0.0",
+          "Parlot": "1.5.8",
+          "System.Collections.Immutable": "10.0.10"
+        },
+        "runtime": {
+          "lib/net8.0/NCalc.Core.dll": {
+            "assemblyVersion": "7.0.0.0",
+            "fileVersion": "7.0.0.2"
+          }
+        }
+      },
+      "NCalc.Domain/7.0.0": {
+        "runtime": {
+          "lib/net8.0/NCalc.Domain.dll": {
+            "assemblyVersion": "7.0.0.0",
+            "fileVersion": "7.0.0.2"
+          }
+        }
+      },
+      "NCalc.Parser/7.0.0": {
+        "dependencies": {
+          "NCalc.Domain": "7.0.0",
+          "Parlot": "1.5.8"
+        },
+        "runtime": {
+          "lib/net8.0/NCalc.Parser.dll": {
+            "assemblyVersion": "7.0.0.0",
+            "fileVersion": "7.0.0.2"
+          }
+        }
+      },
       "NETStandard.Library/1.6.1": {
         "dependencies": {
           "Microsoft.NETCore.Platforms": "1.1.1",
@@ -627,7 +683,7 @@
       },
       "Npgsql/8.0.6": {
         "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2"
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
         },
         "runtime": {
           "lib/net8.0/Npgsql.dll": {
@@ -647,6 +703,14 @@
           "lib/net8.0/Npgsql.EntityFrameworkCore.PostgreSQL.dll": {
             "assemblyVersion": "8.0.11.0",
             "fileVersion": "8.0.11.0"
+          }
+        }
+      },
+      "Parlot/1.5.8": {
+        "runtime": {
+          "lib/net8.0/Parlot.dll": {
+            "assemblyVersion": "1.5.8.0",
+            "fileVersion": "1.5.8.0"
           }
         }
       },
@@ -766,9 +830,9 @@
       },
       "Serilog.Extensions.Hosting/8.0.0": {
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
           "Microsoft.Extensions.Hosting.Abstractions": "8.0.0",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.2",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
           "Serilog": "4.0.0",
           "Serilog.Extensions.Logging": "8.0.0"
         },
@@ -899,9 +963,12 @@
           "System.Threading.Tasks": "4.3.0"
         }
       },
-      "System.Collections.Immutable/6.0.0": {
-        "dependencies": {
-          "System.Runtime.CompilerServices.Unsafe": "6.0.0"
+      "System.Collections.Immutable/10.0.10": {
+        "runtime": {
+          "lib/net8.0/System.Collections.Immutable.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1026.32716"
+          }
         }
       },
       "System.Composition/6.0.0": {
@@ -980,7 +1047,14 @@
           "System.Runtime": "4.3.1"
         }
       },
-      "System.Diagnostics.DiagnosticSource/8.0.0": {},
+      "System.Diagnostics.DiagnosticSource/10.0.10": {
+        "runtime": {
+          "lib/net8.0/System.Diagnostics.DiagnosticSource.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1026.32716"
+          }
+        }
+      },
       "System.Diagnostics.Tools/4.3.0": {
         "dependencies": {
           "Microsoft.NETCore.Platforms": "1.1.1",
@@ -1134,7 +1208,7 @@
           "Microsoft.NETCore.Platforms": "1.1.1",
           "System.Collections": "4.3.0",
           "System.Diagnostics.Debug": "4.3.0",
-          "System.Diagnostics.DiagnosticSource": "8.0.0",
+          "System.Diagnostics.DiagnosticSource": "10.0.10",
           "System.Diagnostics.Tracing": "4.3.0",
           "System.Globalization": "4.3.0",
           "System.Globalization.Extensions": "4.3.0",
@@ -1229,7 +1303,7 @@
       },
       "System.Reflection.Metadata/6.0.1": {
         "dependencies": {
-          "System.Collections.Immutable": "6.0.0"
+          "System.Collections.Immutable": "10.0.10"
         }
       },
       "System.Reflection.Primitives/4.3.0": {
@@ -1556,6 +1630,13 @@
       "path": "excelnumberformat/1.1.0",
       "hashPath": "excelnumberformat.1.1.0.nupkg.sha512"
     },
+    "ExtendedNumerics.BigDecimal/3003.2.0.161": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-VMTiP6rMaghsAILVw+2W7FzReJH0kuF+YU9/4u110IWtsCWe+5HvzJqWxyknd860zFEbA9N37+qk5IjRLdF5UQ==",
+      "path": "extendednumerics.bigdecimal/3003.2.0.161",
+      "hashPath": "extendednumerics.bigdecimal.3003.2.0.161.nupkg.sha512"
+    },
     "Humanizer.Core/2.14.1": {
       "type": "package",
       "serviceable": true,
@@ -1689,12 +1770,12 @@
       "path": "microsoft.extensions.dependencyinjection/8.0.1",
       "hashPath": "microsoft.extensions.dependencyinjection.8.0.1.nupkg.sha512"
     },
-    "Microsoft.Extensions.DependencyInjection.Abstractions/8.0.2": {
+    "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.10": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-3iE7UF7MQkCv1cxzCahz+Y/guQbTqieyxyaWKhrRO91itI9cOKO76OHeQDahqG4MmW5umr3CcCvGmK92lWNlbg==",
-      "path": "microsoft.extensions.dependencyinjection.abstractions/8.0.2",
-      "hashPath": "microsoft.extensions.dependencyinjection.abstractions.8.0.2.nupkg.sha512"
+      "sha512": "sha512-z/2xXlFw2aLGjHyEm6E0tQ+In6VfzQzTrtArbQ2c0TQE16ZbyDCMGPvaUT9I0s8rgy9sRWlU2P9waW37qV04qA==",
+      "path": "microsoft.extensions.dependencyinjection.abstractions/10.0.10",
+      "hashPath": "microsoft.extensions.dependencyinjection.abstractions.10.0.10.nupkg.sha512"
     },
     "Microsoft.Extensions.DependencyModel/8.0.2": {
       "type": "package",
@@ -1731,12 +1812,12 @@
       "path": "microsoft.extensions.logging/8.0.1",
       "hashPath": "microsoft.extensions.logging.8.0.1.nupkg.sha512"
     },
-    "Microsoft.Extensions.Logging.Abstractions/8.0.2": {
+    "Microsoft.Extensions.Logging.Abstractions/10.0.10": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-nroMDjS7hNBPtkZqVBbSiQaQjWRDxITI8Y7XnDs97rqG3EbzVTNLZQf7bIeUJcaHOV8bca47s1Uxq94+2oGdxA==",
-      "path": "microsoft.extensions.logging.abstractions/8.0.2",
-      "hashPath": "microsoft.extensions.logging.abstractions.8.0.2.nupkg.sha512"
+      "sha512": "sha512-zkFxGYUvdxAvIKTyXHrmW+Sux53D4SezD9dMyZ6hrwwzPQJNuwCRy1f5W7AvYTqacEGhWF2XderRQG1OvbV8og==",
+      "path": "microsoft.extensions.logging.abstractions/10.0.10",
+      "hashPath": "microsoft.extensions.logging.abstractions.10.0.10.nupkg.sha512"
     },
     "Microsoft.Extensions.Options/8.0.2": {
       "type": "package",
@@ -1829,6 +1910,34 @@
       "path": "mono.texttemplating/2.2.1",
       "hashPath": "mono.texttemplating.2.2.1.nupkg.sha512"
     },
+    "NCalc/7.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-vX6KLPOrh/VMSaUAb+k3Zslz9ZNMYILlFFhjuitODbcH86I6yzALERIFGlLu7/Fhlp9fmbFH92yA82Q2q1wSGw==",
+      "path": "ncalc/7.0.0",
+      "hashPath": "ncalc.7.0.0.nupkg.sha512"
+    },
+    "NCalc.Core/7.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/M4m1AfSZ67WWbbTfg8BuIG0C94kD7ANSmsJbso4K3AECKWHPuABabiiHLv6TAaQe3OSe29Hr7tc6sEje7h5Lg==",
+      "path": "ncalc.core/7.0.0",
+      "hashPath": "ncalc.core.7.0.0.nupkg.sha512"
+    },
+    "NCalc.Domain/7.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-A+NPb3BcUM34H5GAWKOKr87SsREf0H3XG5pzN519MJZf41qne6cloxncK5rcWCPyMTlGS8RM5yNvDUPR8BxRsg==",
+      "path": "ncalc.domain/7.0.0",
+      "hashPath": "ncalc.domain.7.0.0.nupkg.sha512"
+    },
+    "NCalc.Parser/7.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-JTtEP1sPR0g7/HdIkYWd/U5zYJonCz3yGascteNKzcmrMfwEtNVr4m399OG9FdPyvHSgvKUr/iSVmeUaRhLnbQ==",
+      "path": "ncalc.parser/7.0.0",
+      "hashPath": "ncalc.parser.7.0.0.nupkg.sha512"
+    },
     "NETStandard.Library/1.6.1": {
       "type": "package",
       "serviceable": true,
@@ -1849,6 +1958,13 @@
       "sha512": "sha512-leShR/O/nSIS3Jpj8yUBmkzaXzBbtlV326+MYkX2BwAj2qSNrUv/H6m8G9Hnv2zUkQYccTpmV5jIVq5vdciEUA==",
       "path": "npgsql.entityframeworkcore.postgresql/8.0.11",
       "hashPath": "npgsql.entityframeworkcore.postgresql.8.0.11.nupkg.sha512"
+    },
+    "Parlot/1.5.8": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QBFNAMKQPRvBwrXOl6Gp24a2nbhzqJ5X4pe0I1g1RtR4SqoT2ThyE6RwFAOZLcWMQxzo8YC08VmHspPDeOLYWg==",
+      "path": "parlot/1.5.8",
+      "hashPath": "parlot.1.5.8.nupkg.sha512"
     },
     "PdfPig/0.1.9": {
       "type": "package",
@@ -2081,12 +2197,12 @@
       "path": "system.collections.concurrent/4.3.0",
       "hashPath": "system.collections.concurrent.4.3.0.nupkg.sha512"
     },
-    "System.Collections.Immutable/6.0.0": {
+    "System.Collections.Immutable/10.0.10": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-l4zZJ1WU2hqpQQHXz1rvC3etVZN+2DLmQMO79FhOTZHMn8tDRr+WU287sbomD0BETlmKDn0ygUgVy9k5xkkJdA==",
-      "path": "system.collections.immutable/6.0.0",
-      "hashPath": "system.collections.immutable.6.0.0.nupkg.sha512"
+      "sha512": "sha512-Ih5zrydoDc1H5I0eNP6f4Lzw3cjsPMN4Nikd86kbyi66y0flkM9GfjVo62aUbcxeTbypzBCFAFQ+/6RF2jRORg==",
+      "path": "system.collections.immutable/10.0.10",
+      "hashPath": "system.collections.immutable.10.0.10.nupkg.sha512"
     },
     "System.Composition/6.0.0": {
       "type": "package",
@@ -2144,12 +2260,12 @@
       "path": "system.diagnostics.debug/4.3.0",
       "hashPath": "system.diagnostics.debug.4.3.0.nupkg.sha512"
     },
-    "System.Diagnostics.DiagnosticSource/8.0.0": {
+    "System.Diagnostics.DiagnosticSource/10.0.10": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-c9xLpVz6PL9lp/djOWtk5KPDZq3cSYpmXoJQY524EOtuFl5z9ZtsotpsyrDW40U1DRnQSYvcPKEUV0X//u6gkQ==",
-      "path": "system.diagnostics.diagnosticsource/8.0.0",
-      "hashPath": "system.diagnostics.diagnosticsource.8.0.0.nupkg.sha512"
+      "sha512": "sha512-cjtKi6ERMYWp6b9UTVPcwDT29PjKDtlM3W9OwnWL5abRsI8ku42Q2wqZoLIIXJnT/XF2s2CjuK8Nl4a3mmTxQQ==",
+      "path": "system.diagnostics.diagnosticsource/10.0.10",
+      "hashPath": "system.diagnostics.diagnosticsource.10.0.10.nupkg.sha512"
     },
     "System.Diagnostics.Tools/4.3.0": {
       "type": "package",

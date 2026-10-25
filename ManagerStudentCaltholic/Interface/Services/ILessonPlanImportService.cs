@@ -1,6 +1,6 @@
 ﻿using ManagerStudentCaltholic.Models.Entities;
 
-namespace ManagerStudentCaltholic.Interface
+namespace ManagerStudentCaltholic.Interface.Services
 {
     public interface ILessonPlanImportService
     {
