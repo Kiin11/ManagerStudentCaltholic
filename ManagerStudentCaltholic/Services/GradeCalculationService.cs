@@ -1,16 +1,16 @@
-﻿using ManagerStudentCaltholic.Interface.Services;
+﻿using System.Text.Json;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using NCalc;
 
 namespace ManagerStudentCaltholic.Services
 {
     public class GradeCalculationService : IGradeCalculationService
     {
-        public decimal CalculateAttendanceScore(int absentMassUnexcused, int absentMassExcused, 
-            int lateMass, int absentClassUnexcused, int absentClassExcused, 
-            int lateClass, AttendanceScoreRule rule)
+        public decimal CalculateAttendanceScore(
+            int absentMassUnexcused, int absentMassExcused, int lateMass,
+            int absentClassUnexcused, int absentClassExcused, int lateClass,
+            AttendanceScoreRule rule)
         {
             var totalPenalty = (absentMassUnexcused * rule.PenaltyMassUnexcused)
                              + (absentMassExcused * rule.PenaltyMassExcused)
@@ -57,6 +57,7 @@ namespace ManagerStudentCaltholic.Services
             return Math.Round(totalWeighted / (hk1Weight + hk2Weight), 2, MidpointRounding.AwayFromZero);
         }
 
+        // 3. Xếp loại dựa trên cấu hình ngưỡng JSON
         public string DetermineClassification(decimal average, string evaluationRulesJson)
         {
             try
@@ -75,13 +76,7 @@ namespace ManagerStudentCaltholic.Services
             }
         }
 
-        /// <summary>
-        /// Fix: Truyền danh sách toàn bộ mã cột để gán mặc định 0 nếu học viên chưa có điểm cột đó,
-        /// đồng thời kiểm tra NaN / Infinity khi chia cho 0
-        /// </summary>
-        /// <param name="formulaExpression"></param>
-        /// <param name="scores"></param>
-        /// <returns></returns>
+        // 4. Tính điểm theo biểu thức động NCalc (An toàn với cột thiếu điểm và lỗi chia cho 0)
         public decimal? EvaluateGradeFormula(
             string formulaExpression,
             Dictionary<string, decimal> scores,
@@ -113,7 +108,7 @@ namespace ManagerStudentCaltholic.Services
                 if (double.IsNaN(numericResult) || double.IsInfinity(numericResult))
                     return null;
 
-                return Math.Round(Convert.ToDecimal(numericResult), 2);
+                return Math.Round(Convert.ToDecimal(numericResult), 2, MidpointRounding.AwayFromZero);
             }
             catch
             {
@@ -121,73 +116,27 @@ namespace ManagerStudentCaltholic.Services
             }
         }
 
-
-        // 3. Tính Điểm Chuyên Cần theo quy ước Điểm Gốc - Điểm Trừ + Điểm Cộng
-        //public decimal CalculateAttendanceScore(List<Attendance> attendances, AttendanceRuleConfig rule)
-        //{
-        //    decimal score = rule.BaseAttendanceScore;
-
-        //    // Nghỉ học
-        //    int unpermittedClass = attendances.Count(a => a.AttendanceDate.DayOfWeek == DayOfWeek.Sunday && a.ClassStatus == "ABSENT_UNPERMITTED");
-        //    int permittedClass = attendances.Count(a => a.AttendanceDate.DayOfWeek == DayOfWeek.Sunday && a.ClassStatus == "ABSENT_PERMITTED");
-        //    score -= (unpermittedClass * rule.UnpermittedClassDeduction);
-        //    score -= (permittedClass * rule.PermittedClassDeduction);
-
-        //    // Nghỉ Lễ Chúa Nhật
-        //    int unpermittedSunMass = attendances.Count(a => a.AttendanceDate.DayOfWeek == DayOfWeek.Sunday && a.MassStatus == "ABSENT_UNPERMITTED");
-        //    int permittedSunMass = attendances.Count(a => a.AttendanceDate.DayOfWeek == DayOfWeek.Sunday && a.MassStatus == "ABSENT_PERMITTED");
-        //    score -= (unpermittedSunMass * rule.UnpermittedSunMassDeduction);
-        //    score -= (permittedSunMass * rule.PermittedSunMassDeduction);
-
-        //    // Tham dự Lễ Thứ Năm (Cộng điểm thưởng lũy kế nhiều mức)
-        //    int thuAttendedCount = attendances.Count(a => a.AttendanceDate.DayOfWeek == DayOfWeek.Thursday && a.MassAttended);
-        //    if (!string.IsNullOrEmpty(rule.ThuMassBonusTiersJson))
-        //    {
-        //        try
-        //        {
-        //            var tiers = JsonSerializer.Deserialize<List<ThuBonusTier>>(rule.ThuMassBonusTiersJson)
-        //                            ?.OrderByDescending(t => t.MinDays).ToList();
-        //            if (tiers != null)
-        //            {
-        //                var matchedTier = tiers.FirstOrDefault(t => thuAttendedCount >= t.MinDays);
-        //                if (matchedTier != null)
-        //                {
-        //                    score += matchedTier.Bonus;
-        //                }
-        //            }
-        //        }
-        //        catch { }
-        //    }
-
-        //    // Giới hạn thang điểm từ 0.0 đến 10.0
-        //    if (score < 0m) score = 0m;
-        //    if (score > 10m) score = 10m;
-
-        //    return Math.Round(score, 2);
-        //}
-
+        // 5. Đánh giá Học lực & Điều kiện lãnh Bí tích / Lên lớp
         public (string AcademicRank, bool IsEligibleForSacrament) EvaluateStudent(
-            decimal? averageScore, decimal attendanceScore, string gradeLevel)
+            decimal? averageScore,
+            double combinedAttendanceRate,
+            string gradeLevel,
+            int semester = 0)
         {
             if (!averageScore.HasValue) return ("Chưa đủ điểm", false);
 
             var avg = averageScore.Value;
             string rank;
 
-            // Tiêu chuẩn xếp loại kết hợp Điểm TB & Điểm Chuyên cần
-            if (avg >= 9.0m && attendanceScore >= 9.0m) rank = "Xuất sắc";
-            else if (avg >= 8.0m && attendanceScore >= 8.0m) rank = "Giỏi";
-            else if (avg >= 6.5m && attendanceScore >= 6.5m) rank = "Khá";
-            else if (avg >= 5.0m && attendanceScore >= 5.0m) rank = "Trung bình";
+            if (avg >= 9.0m && combinedAttendanceRate >= 90.0) rank = "Xuất sắc";
+            else if (avg >= 8.0m && combinedAttendanceRate >= 80.0) rank = "Giỏi";
+            else if (avg >= 6.5m && combinedAttendanceRate >= 70.0) rank = "Khá";
+            else if (avg >= 5.0m && combinedAttendanceRate >= 60.0) rank = "Trung bình";
             else rank = "Yếu / Ở lại lớp";
 
-            bool eligible = avg >= 5.0m && attendanceScore >= 7.0m;
+            // Điều kiện lãnh Bí tích / Lên lớp: ĐTB >= 5.0 và Chuyên cần >= 80%
+            bool eligible = avg >= 5.0m && combinedAttendanceRate >= 80.0;
             return (rank, eligible);
-        }
-
-        public (string AcademicRank, bool IsEligibleForSacrament) EvaluateStudent(decimal? averageScore, double combinedAttendanceRate, decimal attendanceScore, string gradeLevel)
-        {
-            throw new NotImplementedException();
         }
     }
 }

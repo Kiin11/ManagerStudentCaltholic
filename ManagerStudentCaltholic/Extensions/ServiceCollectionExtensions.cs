@@ -75,6 +75,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddSingleton<IAuthorizationHandler, GradeScopeHandler>();
             services.AddScoped<ILessonPlanImportService, LessonPlanImportService>();
             services.AddScoped<IGradeCalculationService, GradeCalculationService>();
+            services.AddScoped<IGradePermissionService, GradePermissionService>();
 
             return services;
         }

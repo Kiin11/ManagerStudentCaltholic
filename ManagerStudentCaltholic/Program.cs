@@ -25,56 +25,56 @@ builder.Services.Configure<KestrelServerOptions>(options =>
 builder.Host.AddSerilogLogging();
 
 // Addd Extensions for Database Configuration, Reverse Proxy, and Application Services
-builder.Services.AddDatabaseConfiguration(builder.Configuration)
-                .AddReverseProxyConfiguration()
-                .AddApplicationServices()
-                .AddHybridAuthentication(builder.Configuration)
-                .AddStrictSecurityConfigurations() // task -707: Add Security Headers Middleware
-                .AddAppRateLimiter(); // task-705: Add Rate Limiting
+builder.Services
+    .AddDatabaseConfiguration(builder.Configuration)
+    .AddReverseProxyConfiguration()
+    .AddApplicationServices()
+    .AddHybridAuthentication(builder.Configuration)
+    .AddStrictSecurityConfigurations() // task -707: Add Security Headers Middleware
+    .AddAppRateLimiter()  // task-705: Add Rate Limiting
+    .AddMemoryCache();  // Make sure IMemoryCache active for LookupController
 
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("RequireAdminOnly", policy =>
-        policy.RequireRole(UserRole.Admin));
+//builder.Services.AddAuthorization(options =>
+//{
+//    options.AddPolicy("RequireAdminOnly", policy =>
+//        policy.RequireRole(UserRole.Admin));
 
-    options.AddPolicy("RequireSpiritualDirector", policy =>
-        policy.RequireRole(UserRole.SpiritualDirector));
+//    options.AddPolicy("RequireSpiritualDirector", policy =>
+//        policy.RequireRole(UserRole.SpiritualDirector));
 
-    options.AddPolicy("RequireExecutiveBoard", policy =>
-        policy.RequireRole(UserRole.ExecutiveBoard, UserRole.Admin));
+//    options.AddPolicy("RequireExecutiveBoard", policy =>
+//        policy.RequireRole(UserRole.ExecutiveBoard, UserRole.Admin));
 
-    options.AddPolicy("RequireLeadership", policy =>
-        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard));
+//    options.AddPolicy("RequireLeadership", policy =>
+//        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard));
 
-    options.AddPolicy("RequireStaff", policy =>
-        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
-});
-builder.Services.AddControllersWithViews();
-
+//    options.AddPolicy("RequireStaff", policy =>
+//        policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
+//});
+//builder.Services.AddControllersWithViews();
 var app = builder.Build();
 
-// Apply database migrations automatically on application startup
 app.ApplyDatabaseMigrations();
 
-// 5. ACTIVE CUSTOM LOGGING MIDDLEWARE
-app.UseCustomRequestLogging();
+// 1. IP & HTTPS from Nginx Reverse Proxy
+app.UseForwardedHeaders();
 
-// TASK-707: Active Security Headers Middleware head-pipeline
+// 2. Logging & Security Headers
+app.UseCustomRequestLogging();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
 
+// 3. Active Rate Limiter, Authentication & Authorization 
+app.UseRateLimiter();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
