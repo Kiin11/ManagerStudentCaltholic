@@ -3,15 +3,12 @@
     bool isAdmin = (bool)(ViewBag.IsAdmin ?? false);
     var assignedClasses = ViewBag.AssignedClasses as List<int> ?? new List<int>();
 }
+
 <div class="container-fluid mt-3">
-    <!-- Thanh điều hướng và Bộ lọc -->
+    <!-- Thanh điều hướng và Bộ lọc lớp -->
     <div class="card shadow-sm mb-3">
         <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-2">
             <form method="get" class="d-flex align-items-center gap-2">
-                <select name="academicYear" class="form-select form-select-sm">
-                    <option value="2025-2026" selected>Niên khóa: 2025-2026</option>
-                </select>
-                <!-- Chọn Lớp Phụ Trách -->
                 <div class="input-group input-group-sm">
                     <span class="input-group-text"><i class="bi bi-people"></i> Lớp:</span>
                     <select name="classId" class="form-select" onchange="this.form.submit()">
@@ -21,43 +18,58 @@
                         }
                     </select>
                 </div>
-                <select name="semester" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="1" selected="@(Model.Semester == 1)">Học kỳ 1</option>
-                    <option value="2" selected="@(Model.Semester == 2)">Học kỳ 2</option>
-                    <option value="0" selected="@(Model.Semester == 0)">Cả năm</option>
-                </select>
-                <button type="submit" class="btn btn-sm btn-outline-primary">Lọc</button>
+
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-calendar3"></i></span>
+                    <select name="semester" class="form-select" onchange="this.form.submit()">
+                        <option value="1" selected="@(Model.Semester == 1)">Học kỳ 1</option>
+                        <option value="2" selected="@(Model.Semester == 2)">Học kỳ 2</option>
+                        <option value="0" selected="@(Model.Semester == 0)">Cả năm</option>
+                    </select>
+                </div>
+
+                <input type="hidden" name="academicYear" value="@Model.AcademicYear" />
             </form>
 
-            <div class="btn-group">
-                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAddColumn">
-                    <i class="bi bi-plus-circle"></i> Thêm Cột Điểm
-                </button>
-                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalFormula">
-                    <i class="bi bi-gear"></i> Cấu Hình Công Thức
-                </button>
-            </div>
+            @if (isAdmin)
+            {
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#modalAddColumn">
+                        <i class="bi bi-plus-circle"></i> Thêm Cột Điểm Cho Lớp
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalFormula">
+                        <i class="bi bi-sliders"></i> Công Thức Tính Điểm
+                    </button>
+                </div>
+            }
+            else
+            {
+                <span class="badge bg-secondary"><i class="bi bi-person-badge"></i> Quyền: Giáo Lý Viên Lớp</span>
+            }
         </div>
     </div>
 
-    <!-- Bảng điểm chính -->
+    <!-- Bảng điểm học sinh -->
     <div class="card shadow-sm">
         <div class="table-responsive">
-            <table class="table table-bordered table-hover align-middle text-center mb-0" id="gradeTable">
+            <table class="table table-bordered table-hover align-middle text-center mb-0">
                 <thead class="table-light">
                     <tr>
                         <th style="width: 50px;">STT</th>
-                        <th>Họ và Tên</th>
-                        <th style="width: 120px;" class="bg-info-subtle">Học Kỳ</th>
+                        <th>Họ và Tên Thiếu Nhi</th>
+                        <th style="width: 110px;" class="bg-light">Học Kỳ</th>
                         @foreach (var col in Model.Columns)
                         {
                             <th>
-                                @col.ColumnName <br />
-                                <small class="text-muted">(@col.ColumnCode - HS @col.Coefficient)</small>
+                                <span>@col.ColumnName</span><br />
+                                <small class="badge bg-secondary-subtle text-dark">
+                                    @col.ColumnCode (x@(col.Coefficient))
+                                    @(col.IsAttendanceBased ? " - Tự động" : "")
+                                </small>
                             </th>
                         }
-                        <th class="bg-light fw-bold">ĐTB</th>
-                        <th class="bg-light">Xếp Loại</th>
+                        <th class="bg-primary-subtle fw-bold">ĐTB</th>
+                        <th class="bg-primary-subtle">Xếp Loại</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -67,18 +79,21 @@
                         <tr>
                             <td>@(i + 1)</td>
                             <td class="text-start">@row.HolyName @row.FullName</td>
-                            <td class="bg-info-subtle fw-bold">
-                                @(row.Semester == 0 ? "Cả năm" : $"Học kỳ {row.Semester}")
+                            <td class="bg-light fw-semibold">
+                                @(row.Semester == 0 ? "Cả năm" : $"HK {row.Semester}")
                             </td>
                             @foreach (var col in Model.Columns)
                             {
                                 <td>
                                     <input type="number" step="0.1" min="0" max="10"
-                                           class="form-control form-control-sm text-center score-input"
+                                           class="form-control form-control-sm text-center score-input @(col.IsAttendanceBased ? "bg-light" : "")"
+                                           data-class="@Model.ClassId"
+                                           data-year="@Model.AcademicYear"
                                            data-student="@row.StudentId"
                                            data-column="@col.Id"
                                            data-semester="@Model.Semester"
-                                           value="@(row.ScoresByCode.ContainsKey(col.ColumnCode) ? row.ScoresByCode[col.ColumnCode] : "")" />
+                                           readonly="@(col.IsAttendanceBased ? "readonly" : null)"
+                                           value="@(row.ScoresByCode.TryGetValue(col.ColumnCode, out var sc) ? sc : null)" />
                                 </td>
                             }
                             <td class="fw-bold text-primary">@row.SemesterAverage</td>
@@ -91,93 +106,120 @@
     </div>
 </div>
 
-<!-- Modal Thêm Cột Điểm -->
-<div class="modal fade" id="modalAddColumn" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Tạo Thêm Cột Điểm</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-2">
-                    <label class="form-label">Tên hiển thị</label>
-                    <input type="text" id="colName" class="form-control" placeholder="Ví dụ: Kiểm tra 15 phút" />
+@if (isAdmin)
+{
+    <!-- Modal Thêm Cột Điểm -->
+    <div class="modal fade" id="modalAddColumn" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tạo Thêm Cột Điểm</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="mb-2">
-                    <label class="form-label">Mã viết tắt (dùng cho công thức)</label>
-                    <input type="text" id="colCode" class="form-control" placeholder="KT_15P" />
-                </div>
-                <div class="row">
-                    <div class="col mb-2">
-                        <label class="form-label">Học kỳ</label>
-                        <select id="colSemester" class="form-select">
-                            <option value="1">Học kỳ 1</option>
-                            <option value="2">Học kỳ 2</option>
-                            <option value="0">Cả năm</option>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label">Phạm vi áp dụng</label>
+                        <select id="colScope" class="form-select">
+                            <option value="@Model.ClassId">Chỉ áp dụng cho Lớp hiện tại (ID: @Model.ClassId)</option>
+                            <option value="">Áp dụng mặc định toàn xứ (Tất cả lớp)</option>
                         </select>
                     </div>
-                    <div class="col mb-2">
-                        <label class="form-label">Hệ số</label>
-                        <input type="number" step="0.5" id="colCoef" class="form-control" value="1.0" />
+                    <div class="mb-2">
+                        <label class="form-label">Tên hiển thị</label>
+                        <input type="text" id="colName" class="form-control" placeholder="Ví dụ: Kiểm tra 15 phút" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Mã viết tắt (dùng cho công thức)</label>
+                        <input type="text" id="colCode" class="form-control" placeholder="KT_15P" />
+                    </div>
+                    <div class="row">
+                        <div class="col mb-2">
+                            <label class="form-label">Học kỳ</label>
+                            <select id="colSemester" class="form-select">
+                                <option value="1" selected="@(Model.Semester == 1)">Học kỳ 1</option>
+                                <option value="2" selected="@(Model.Semester == 2)">Học kỳ 2</option>
+                                <option value="0" selected="@(Model.Semester == 0)">Cả năm</option>
+                            </select>
+                        </div>
+                        <div class="col mb-2">
+                            <label class="form-label">Hệ số</label>
+                            <input type="number" step="0.5" id="colCoef" class="form-control" value="1.0" />
+                        </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="colIsAtt" />
+                        <label class="form-check-label" for="colIsAtt">Tự động tính từ điểm danh (Chuyên cần)</label>
                     </div>
                 </div>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" id="colIsAtt" />
-                    <label class="form-check-label" for="colIsAtt">Tự động tính từ điểm danh (Chuyên cần)</label>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-primary" onclick="submitAddColumn()">Lưu cột</button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-primary" onclick="submitAddColumn()">Lưu cột</button>
-            </div>
         </div>
     </div>
-</div>
 
-<!-- Modal Cấu hình Công thức & Chuyên cần -->
-<div class="modal fade" id="modalFormula" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cấu Hình Công Thức Tính Điểm</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <label class="form-label">Biểu thức tính điểm trung bình</label>
-                <input type="text" id="formulaExpr" class="form-control font-monospace"
-                       placeholder="(CC * 2 + KT_15P * 1 + THI * 3) / 6" />
-                <div class="form-text">Nhập chính xác mã các cột viết tắt trong ngoặc hoặc phép nhân chia cộng trừ thông thường.</div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" onclick="submitFormula()">Lưu công thức</button>
+    <!-- Modal Cấu hình Công thức -->
+    <div class="modal fade" id="modalFormula" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cấu Hình Công Thức Tính Điểm</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label">Phạm vi áp dụng</label>
+                        <select id="formulaScope" class="form-select">
+                            <option value="@Model.ClassId">Chỉ áp dụng cho Lớp hiện tại (ID: @Model.ClassId)</option>
+                            <option value="">Áp dụng mặc định toàn xứ</option>
+                        </select>
+                    </div>
+                    <label class="form-label">Biểu thức tính điểm trung bình</label>
+                    <input type="text" id="formulaExpr" class="form-control font-monospace"
+                           placeholder="(CC * 2 + KT_15P * 1 + THI * 3) / 6" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="submitFormula()">Lưu công thức</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
+}
 
 <script>
-    // Tự động lưu điểm inline khi rời ô nhập (onblur)
-    document.querySelectorAll('.score-input').forEach(input => {
-        input.addEventListener('change', async function() {
+    document.querySelectorAll('.score-input:not([readonly])').forEach(input => {
+        input.addEventListener('change', async function () {
             const payload = {
+                classId: parseInt(this.dataset.class),
+                academicYear: this.dataset.year,
                 studentId: parseInt(this.dataset.student),
                 gradeColumnId: parseInt(this.dataset.column),
                 semester: parseInt(this.dataset.semester),
-                score: this.value ? parseFloat(this.value) : null
+                score: this.value !== "" ? parseFloat(this.value) : null
             };
 
-            await fetch('/Grades/SaveScoreInline', {
+            const res = await fetch('/Grades/SaveScoreInline', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
+            if (res.status === 403) {
+                alert('Bạn không có quyền sửa điểm của lớp này!');
+                location.reload();
+            } else if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.message || 'Lỗi khi lưu điểm.');
+            }
         });
     });
 
     async function submitAddColumn() {
+        const scopeVal = document.getElementById('colScope').value;
         const payload = {
-            academicYear: "2025-2026",
+            academicYear: "@Model.AcademicYear",
+            classId: scopeVal ? parseInt(scopeVal) : null,
             columnName: document.getElementById('colName').value,
             columnCode: document.getElementById('colCode').value,
             semester: parseInt(document.getElementById('colSemester').value),
@@ -194,9 +236,11 @@
     }
 
     async function submitFormula() {
+        const scopeVal = document.getElementById('formulaScope').value;
         const payload = {
-            academicYear: "2025-2026",
+            academicYear: "@Model.AcademicYear",
             semester: @Model.Semester,
+            classId: scopeVal ? parseInt(scopeVal) : null,
             formulaExpression: document.getElementById('formulaExpr').value,
             evaluationRules: JSON.stringify({ "Gioi": 8.0, "Kha": 6.5, "Dat": 5.0 })
         };

@@ -166,35 +166,37 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         public async Task<IActionResult> AddColumn([FromBody] GradeColumn model)
         {
-            var activeAcademicYear = await _db.AcademicYears.FirstOrDefaultAsync(a => a.IsCurrent);
+            if (!IsAdmin)
+                return Forbid("Chỉ quản trị viên mới có quyền thêm cột điểm.");
+            if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            // Kiểm tra quyền trên lớp mà học sinh đang theo học
-            var canEdit = await _permService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
-            if (!canEdit)
+            bool exists = await _db.GradeColumns.AnyAsync(c =>
+                c.AcademicYear == model.AcademicYear &&
+                c.Semester == model.Semester &&
+                c.ClassId == model.ClassId &&
+                c.ColumnCode == model.ColumnCode);
+
+            if (exists)
             {
-                return Forbid();
+                return BadRequest(new { message = "Mã cột điểm này đã tồn tại trong lớp/học kỳ hiện tại." });
             }
 
-            if (!ModelState.IsValid) return BadRequest(ModelState);
             _db.GradeColumns.Add(model);
             await _db.SaveChangesAsync();
             return Ok(new { success = true, id = model.Id });
         }
-
         [HttpPost]
         public async Task<IActionResult> SaveFormula([FromBody] GradingFormula model)
         {
-            var activeAcademicYear = await _db.AcademicYears.FirstOrDefaultAsync(a => a.IsCurrent);
+            if(!IsAdmin)
+                return Forbid("Chỉ quản trị viên mới có quyền thêm/cập nhật công thức tính điểm.");
+            if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            // Kiểm tra quyền trên lớp mà học sinh đang theo học
-            var canEdit = await _permService.CanManageClassAsync(CurrentUserId, model.ClassId ?? 0, activeAcademicYear?.Name ?? "2025-2026", IsAdmin);
-            if (!canEdit)
-            {
-                return Forbid();
-            }
-
-            var exist = await _db.GradingFormulas
-                .FirstOrDefaultAsync(f => f.AcademicYear == model.AcademicYear && f.Semester == model.Semester);
+            // Fix: Lọc chính xác theo cả AcademicYear, Semester và ClassId
+            var exist = await _db.GradingFormulas.FirstOrDefaultAsync(f =>
+                f.AcademicYear == model.AcademicYear &&
+                f.Semester == model.Semester &&
+                f.ClassId == model.ClassId);
 
             if (exist == null)
             {
@@ -203,7 +205,9 @@ namespace ManagerStudentCaltholic.Controllers
             else
             {
                 exist.FormulaExpression = model.FormulaExpression;
-                exist.EvaluationRules = model.EvaluationRules;
+                exist.EvaluationRules = string.IsNullOrWhiteSpace(model.EvaluationRules)
+                    ? "{\"Gioi\": 8.0, \"Kha\": 6.5, \"Dat\": 5.0}"
+                    : model.EvaluationRules;
             }
 
             await _db.SaveChangesAsync();
