@@ -5,7 +5,7 @@
 @Html.AntiForgeryToken()
 
 <div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <a href="/TraCuu" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
             <i class="bi bi-arrow-left me-1"></i> Tra cứu thiếu nhi khác
         </a>
@@ -25,7 +25,8 @@
                     <h3 class="fw-bold text-dark mb-1">@Model.ChristianName @Model.FullName</h3>
                     <p class="text-muted mb-2">
                         Mã thiếu nhi: <strong class="font-monospace text-dark">@Model.StudentCode</strong> |
-                        Ngày sinh: <strong>@Model.DateOfBirth.ToString("dd/MM/yyyy")</strong>
+                        Ngày sinh: <strong>@Model.DateOfBirth.ToString("dd/MM/yyyy")</strong> |
+                        Giới tính: <strong>@Model.Gender</strong>
                     </p>
                     <div class="d-flex flex-wrap gap-2 mt-2">
                         <span class="badge bg-light text-dark border px-3 py-2">
@@ -37,7 +38,7 @@
                         @if (Model.Teachers.Any())
                         {
                             <span class="badge bg-light text-dark border px-3 py-2">
-                                <i class="bi bi-person-Vcard me-1 text-success"></i> GLV: <strong>@string.Join(", ", Model.Teachers)</strong>
+                                <i class="bi bi-person-badge me-1 text-success"></i> GLV: <strong>@string.Join(", ", Model.Teachers)</strong>
                             </span>
                         }
                     </div>
@@ -52,32 +53,86 @@
         </div>
     </div>
 
-    <!-- Thống kê Chuyên cần & Tổng kết -->
+    <!-- 4 Thẻ Thống Kê: Lễ Chúa Nhật - Lễ Thứ Năm - Học Giáo Lý - ĐTB Cả Năm -->
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body text-center">
-                    <h6 class="text-muted small text-uppercase fw-bold">Chuyên Cần Thánh Lễ</h6>
-                    <h2 class="fw-bold text-success mb-1">@Model.MassAttendanceRate%</h2>
-                    <small class="text-muted">Tham dự @Model.AttendedMassCount / @Model.TotalMassSessions buổi</small>
+        <!-- 1. THÁNH LỄ CHÚA NHẬT -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100 border-top border-4 border-success">
+                <div class="card-body text-center p-3">
+                    <div class="text-success small fw-bold text-uppercase mb-1">
+                        <i class="bi bi-bell-fill me-1"></i>Thánh Lễ Chúa Nhật
+                    </div>
+                    <h2 class="fw-bold text-success mb-1">@Model.SunMassAttendanceRate%</h2>
+                    <div class="small text-muted mb-2">
+                        Tham dự: <strong>@Model.AttendedSunMassCount / @Model.TotalSunMassSessions</strong> buổi
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-1 pt-2 border-top">
+                        <span class="badge bg-purple-subtle text-dark border" title="Xếp hàng đầu giờ">XH: @Model.SunMassLinedUpCount</span>
+                        <span class="badge bg-success-subtle text-success border">Đúng giờ: @Model.SunMassPresentCount</span>
+                        <span class="badge bg-warning-subtle text-dark border">Trễ: @Model.SunMassLateCount</span>
+                        <span class="badge bg-danger-subtle text-danger border">Vắng: @Model.SunMassAbsentCount</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-body text-center">
-                    <h6 class="text-muted small text-uppercase fw-bold">Chuyên Cần Học Giáo Lý</h6>
+
+        <!-- 2. THÁNH LỄ THỨ NĂM -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100 border-top border-4 border-info">
+                <div class="card-body text-center p-3">
+                    <div class="text-info-emphasis small fw-bold text-uppercase mb-1">
+                        <i class="bi bi-calendar2-heart-fill me-1"></i>Thánh Lễ Thứ Năm
+                    </div>
+                    <h2 class="fw-bold text-info-emphasis mb-1">@Model.ThuMassAttendanceRate%</h2>
+                    <div class="small text-muted mb-2">
+                        Tham dự: <strong>@Model.AttendedThuMassCount / @Model.TotalThuMassSessions</strong> buổi
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 pt-2 border-top">
+                        <span class="badge bg-success-subtle text-success border px-2">Có mặt: @Model.AttendedThuMassCount</span>
+                        <span class="badge bg-danger-subtle text-danger border px-2">Vắng: @Model.ThuMassAbsentCount</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. GIỜ HỌC GIÁO LÝ (CHÚA NHẬT) -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100 border-top border-4 border-primary">
+                <div class="card-body text-center p-3">
+                    <div class="text-primary small fw-bold text-uppercase mb-1">
+                        <i class="bi bi-book-half me-1"></i>Học Giáo Lý Chúa Nhật
+                    </div>
                     <h2 class="fw-bold text-primary mb-1">@Model.ClassAttendanceRate%</h2>
-                    <small class="text-muted">Hiện diện @Model.AttendedClassCount / @Model.TotalClassSessions buổi</small>
+                    <div class="small text-muted mb-2">
+                        Hiện diện: <strong>@Model.AttendedClassCount / @Model.TotalClassSessions</strong> buổi
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-1 pt-2 border-top">
+                        <span class="badge bg-primary-subtle text-primary border">Đúng giờ: @(Math.Max(0, Model.AttendedClassCount - Model.ClassLateCount))</span>
+                        <span class="badge bg-warning-subtle text-dark border">Trễ: @Model.ClassLateCount</span>
+                        <span class="badge bg-danger-subtle text-danger border">Vắng: @Model.ClassAbsentCount</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-4 h-100 bg-warning-subtle">
-                <div class="card-body text-center">
-                    <h6 class="text-dark small text-uppercase fw-bold">ĐTB Cả Năm & Xếp Loại</h6>
-                    <h2 class="fw-bold text-dark mb-1">@(Model.YearAverage.HasValue? Model.YearAverage.Value.ToString("0.00") : "--")</h2>
-                    <span class="badge bg-dark px-3 py-1 rounded-pill">@Model.OverallRank</span>
+
+        <!-- 4. ĐTB CẢ NĂM & XẾP LOẠI -->
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-warning-subtle border-top border-4 border-warning">
+                <div class="card-body text-center p-3">
+                    <div class="text-dark small fw-bold text-uppercase mb-1">
+                        <i class="bi bi-award-fill me-1"></i>Tổng Kết Cả Năm
+                    </div>
+                    <h2 class="fw-bold text-dark mb-1">
+                        @(Model.YearAverage.HasValue? Model.YearAverage.Value.ToString("0.00") : "--")
+                    </h2>
+                    <div class="mb-2">
+                        <span class="badge bg-dark px-3 py-1 rounded-pill">@Model.OverallRank</span>
+                    </div>
+                    <div class="pt-2 border-top border-warning-subtle small">
+                        <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-2">
+                            Xét Bí Tích: Chưa xét
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -90,8 +145,10 @@
             <div class="col-md-6">
                 <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
-                        <h6 class="fw-bold mb-0 text-primary">BẢNG ĐIỂM HỌC KỲ @sem.Semester</h6>
-                        <span class="badge bg-primary-subtle text-primary">
+                        <h6 class="fw-bold mb-0 text-primary">
+                            <i class="bi bi-journal-check me-1"></i>BẢNG ĐIỂM HỌC KỲ @sem.Semester
+                        </h6>
+                        <span class="badge bg-primary-subtle text-primary px-3 py-1">
                             ĐTB HK@(sem.Semester): @(sem.SemesterAverage.HasValue? sem.SemesterAverage.Value.ToString("0.00") : "--") (@sem.Rank)
                         </span>
                     </div>
@@ -111,7 +168,9 @@
                                     {
                                         <tr>
                                             <td class="ps-3">@item.DisplayName</td>
-                                            <td class="text-center"><span class="badge bg-light text-dark border">x@(item.WeightFactor)</span></td>
+                                            <td class="text-center">
+                                                <span class="badge bg-light text-dark border">x@(item.WeightFactor)</span>
+                                            </td>
                                             <td class="text-end pe-3 fw-bold text-primary">
                                                 @(item.Score.HasValue? item.Score.Value.ToString("0.0") : "--")
                                             </td>
@@ -121,7 +180,9 @@
                                 else
                                 {
                                     <tr>
-                                        <td colspan="3" class="text-center py-4 text-muted small">Chưa có cấu hình cột điểm.</td>
+                                        <td colspan="3" class="text-center py-4 text-muted small">
+                                            Chưa có cấu hình cột điểm cho Học kỳ @sem.Semester.
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
@@ -138,7 +199,9 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 border-0 shadow">
             <div class="modal-header border-0">
-                <h5 class="modal-title fw-bold"><i class="bi bi-envelope-paper text-danger me-2"></i>Đơn Xin Phép Nghỉ Học / Nghỉ Lễ</h5>
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-envelope-paper text-danger me-2"></i>Đơn Xin Phép Nghỉ Học / Nghỉ Lễ
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -150,7 +213,7 @@
                     <label class="form-label fw-semibold">Buổi xin nghỉ</label>
                     <select id="absSession" class="form-select">
                         <option value="ALL">Cả Thánh Lễ & Giờ Học Giáo Lý</option>
-                        <option value="MASS">Chỉ xin nghỉ Thánh Lễ</option>
+                        <option value="MASS">Chỉ xin nghỉ Thánh Lễ (Thứ 5 / Chúa Nhật)</option>
                         <option value="CLASS">Chỉ xin nghỉ Giờ Học Giáo Lý</option>
                     </select>
                 </div>

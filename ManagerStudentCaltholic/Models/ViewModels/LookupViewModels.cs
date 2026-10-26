@@ -35,21 +35,39 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? RoomNumber { get; set; }
         public List<string> Teachers { get; set; } = new();
 
-        // Tình hình chuyên cần (Epic 4)
+        // 1. Chuyên cần Thánh Lễ Chúa Nhật
+        public int TotalSunMassSessions { get; set; }
+        public int AttendedSunMassCount { get; set; }
+        public int SunMassLinedUpCount { get; set; }
+        public int SunMassPresentCount { get; set; }
+        public int SunMassLateCount { get; set; }
+        public int SunMassAbsentCount { get; set; }
+        public double SunMassAttendanceRate { get; set; }
+
+        // 2. Chuyên cần Thánh Lễ Thứ Năm
+        public int TotalThuMassSessions { get; set; }
+        public int AttendedThuMassCount { get; set; }
+        public int ThuMassAbsentCount { get; set; }
+        public double ThuMassAttendanceRate { get; set; }
+
+        // 3. Chuyên cần Giờ Học Giáo Lý (Chúa Nhật)
+        public int TotalClassSessions { get; set; }
+        public int AttendedClassCount { get; set; }
+        public int ClassLateCount { get; set; }
+        public int ClassAbsentCount { get; set; }
+        public double ClassAttendanceRate { get; set; }
+
+        // Thuộc tính tổng hợp chung (giữ tương thích)
         public int TotalMassSessions { get; set; }
         public int AttendedMassCount { get; set; }
         public double MassAttendanceRate { get; set; }
-
-        public int TotalClassSessions { get; set; }
-        public int AttendedClassCount { get; set; }
-        public double ClassAttendanceRate { get; set; }
 
         // Bảng điểm chi tiết từng học kỳ
         public SemesterGradeDetail HK1 { get; set; } = new();
         public SemesterGradeDetail HK2 { get; set; } = new();
         public decimal? YearAverage { get; set; }
         public string OverallRank { get; set; } = "Chưa hoàn tất";
-        public bool IsEligibleForSacrament { get; set; }
+        public bool IsEligibleForSacrament { get; set; } = false;
 
         // Dữ liệu hình ảnh mã QR (Base64)
         public string? QrCodeBase64 { get; set; }
