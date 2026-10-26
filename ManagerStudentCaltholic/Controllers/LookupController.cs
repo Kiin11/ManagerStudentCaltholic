@@ -48,45 +48,62 @@ namespace ManagerStudentCaltholic.Controllers
                 return View("Index", model);
             }
 
-            // 1. RATE LIMITING: Tối đa 5 lần sai / 15 phút trên mỗi IP
+            var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
+            var cleanLast4 = model.PhoneLast4Digits.Trim();
             var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
-            var rateLimitKey = $"Lookup_FailedAttempts_{clientIp}";
 
-            if (_cache.TryGetValue(rateLimitKey, out int failedCount) && failedCount >= 5)
+            // 1. RATE LIMITING KÉP: Khóa theo IP VÀ khóa theo từng Mã Thiếu Nhi
+            var ipRateKey = $"Lookup_Failed_IP_{clientIp}";
+            var studentRateKey = $"Lookup_Failed_Code_{cleanCode}";
+
+            if ((_cache.TryGetValue(ipRateKey, out int ipFailed) && ipFailed >= 5) ||
+                (_cache.TryGetValue(studentRateKey, out int codeFailed) && codeFailed >= 5))
             {
-                ModelState.AddModelError(string.Empty, "Bạn đã nhập sai thông tin quá 5 lần liên tiếp. Để đảm bảo an toàn, vui lòng thử lại sau 15 phút!");
+                ModelState.AddModelError(string.Empty, "Hồ sơ hoặc thiết bị này đã nhập sai quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!");
                 return View("Index", model);
             }
 
-            var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
-
-            // Chuẩn hóa khoảng thời gian ngày sinh theo UTC để tương thích tuyệt đối với PostgreSQL
             var startDob = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
             var endDob = startDob.AddDays(1);
 
-            // 2. Tìm kiếm học sinh khớp Mã Thiếu Nhi và Ngày Sinh
+            // 2. Tìm kiếm học sinh khớp Mã HS và Ngày Sinh
             var student = await _context.Students
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode &&
                                           s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
                                           s.IsActive);
 
-            if (student == null)
+            // 3. Kiểm tra khớp 4 số cuối SĐT Phụ huynh
+            bool isPhoneValid = false;
+            if (student != null && !string.IsNullOrWhiteSpace(student.ParentPhone))
             {
-                failedCount++;
-                _cache.Set(rateLimitKey, failedCount, TimeSpan.FromMinutes(15));
+                var digitsOnly = new string(student.ParentPhone.Where(char.IsDigit).ToArray());
+                if (digitsOnly.Length >= 4 && digitsOnly.EndsWith(cleanLast4))
+                {
+                    isPhoneValid = true;
+                }
+            }
 
-                ModelState.AddModelError(string.Empty, "Không tìm thấy hồ sơ! Vui lòng kiểm tra lại chính xác Mã Thiếu Nhi và Ngày Sinh.");
+            if (student == null || !isPhoneValid)
+            {
+                // Tăng bộ đếm lỗi trên cả IP và Mã thiếu nhi
+                _cache.Set(ipRateKey, ipFailed + 1, TimeSpan.FromMinutes(15));
+                _cache.Set(studentRateKey, codeFailed + 1, TimeSpan.FromMinutes(30));
+
+                _logger.LogWarning("Tra cứu thất bại cho mã {Code} từ IP {IP}", cleanCode, clientIp);
+                ModelState.AddModelError(string.Empty, "Thông tin Mã Thiếu Nhi, Ngày Sinh hoặc 4 số cuối SĐT Phụ Huynh không chính xác!");
                 return View("Index", model);
             }
 
-            _cache.Remove(rateLimitKey);
+            // Xóa bộ đếm lỗi khi xác thực thành công
+            _cache.Remove(ipRateKey);
+            _cache.Remove(studentRateKey);
 
             // 3. Lấy niên khóa hiện hành
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent)
                            ?? await _context.AcademicYears.OrderByDescending(y => y.StartDate).FirstOrDefaultAsync();
 
-            // 4. Lấy lớp học hiện tại của thiếu nhi
+            // 4. Lấy lớp học hiện tại của học sinh
             var enrollment = await _context.Enrollments
                 .Include(e => e.ClassRoom)
                     .ThenInclude(c => c.ClassTeachers)
@@ -96,9 +113,10 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
 
-            // 5. Thống kê Chuyên cần Lễ & Học
-            int totalMass = 0, attendedMass = 0;
-            int totalClass = 0, attendedClass = 0;
+            // 5. Thống kê Chuyên cần tách riêng: Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý
+            int totalSunMass = 0, attendedSunMass = 0, sunLinedUp = 0, sunPresent = 0, sunLate = 0, sunAbsent = 0;
+            int totalThuMass = 0, attendedThuMass = 0, thuAbsent = 0;
+            int totalClass = 0, attendedClass = 0, classLate = 0, classAbsent = 0;
 
             if (enrollment != null)
             {
@@ -107,18 +125,45 @@ namespace ManagerStudentCaltholic.Controllers
                     .AsNoTracking()
                     .ToListAsync();
 
-                totalMass = attendances.Count(a => a.DayOfWeek == DayOfWeek.Thursday || a.DayOfWeek == DayOfWeek.Sunday);
-                attendedMass = attendances.Count(a => a.AttendedMass);
+                // 5.1. Thánh Lễ Chúa Nhật
+                var sunRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Sunday).ToList();
+                totalSunMass = sunRecords.Count;
+                attendedSunMass = sunRecords.Count(a => a.AttendedMass);
+                sunLinedUp = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp);
+                sunPresent = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present);
+                sunLate = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
+                sunAbsent = totalSunMass - attendedSunMass;
 
-                totalClass = attendances.Count(a => a.DayOfWeek == DayOfWeek.Sunday);
-                attendedClass = attendances.Count(a => a.ClassAttended);
+                // 5.2. Thánh Lễ Thứ Năm
+                var thuRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Thursday).ToList();
+                totalThuMass = thuRecords.Count;
+                attendedThuMass = thuRecords.Count(a => a.AttendedMass);
+                thuAbsent = totalThuMass - attendedThuMass;
+
+                // 5.3. Giờ Học Giáo Lý (Chúa Nhật)
+                totalClass = sunRecords.Count;
+                attendedClass = sunRecords.Count(a => a.ClassAttended);
+                classLate = sunRecords.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
+                classAbsent = totalClass - attendedClass;
             }
 
-            var massRate = totalMass > 0 ? Math.Round((attendedMass / (double)totalMass) * 100, 1) : 100.0;
-            var classRate = totalClass > 0 ? Math.Round((attendedClass / (double)totalClass) * 100, 1) : 100.0;
-            var combinedAttendanceRate = Math.Round((massRate + classRate) / 2.0, 1);
+            // Tính tỷ lệ % (Đi trễ tính hệ số 0.8 đồng bộ với AttendanceController.Statistics)
+            var sunMassRate = totalSunMass > 0
+                ? Math.Min(100.0, Math.Round(((sunLinedUp + sunPresent + sunLate * 0.8) / (double)totalSunMass) * 100, 1))
+                : 100.0;
 
-            // 6. Xử lý Bảng điểm HK1 & HK2 (Lọc đúng cột chung + cột riêng của lớp đang học)
+            var thuMassRate = totalThuMass > 0
+                ? Math.Min(100.0, Math.Round((attendedThuMass / (double)totalThuMass) * 100, 1))
+                : 0.0;
+
+            var classPresentOnTime = Math.Max(0, attendedClass - classLate);
+            var classRate = totalClass > 0
+                ? Math.Min(100.0, Math.Round(((classPresentOnTime + classLate * 0.8) / (double)totalClass) * 100, 1))
+                : 100.0;
+
+            var combinedAttendanceRate = Math.Round((sunMassRate + classRate) / 2.0, 1);
+
+            // 6. Xử lý Bảng điểm HK1 & HK2
             var hk1Detail = new SemesterGradeDetail { Semester = 1 };
             var hk2Detail = new SemesterGradeDetail { Semester = 2 };
 
@@ -184,7 +229,8 @@ namespace ManagerStudentCaltholic.Controllers
                 FullName = $"{student.FirstName} {student.LastName}".Trim(),
                 Gender = student.Gender ?? "Nam",
                 DateOfBirth = student.DateOfBirth,
-                ParentPhone = student.ParentPhone,
+
+                MaskedParentPhone = MaskPhoneNumber(student.ParentPhone),
 
                 ClassName = enrollment?.ClassRoom?.Name ?? "Chưa xếp lớp",
                 GradeLevel = enrollment?.ClassRoom?.GradeLevel ?? "Chưa có",
@@ -192,19 +238,38 @@ namespace ManagerStudentCaltholic.Controllers
                 RoomNumber = enrollment?.ClassRoom?.RoomName ?? "Chưa xếp phòng",
                 Teachers = enrollment?.ClassRoom?.ClassTeachers?.Select(t => t.TeacherName).ToList() ?? new List<string>(),
 
-                TotalMassSessions = totalMass,
-                AttendedMassCount = attendedMass,
-                MassAttendanceRate = massRate,
+                // Lễ Chúa Nhật
+                TotalSunMassSessions = totalSunMass,
+                AttendedSunMassCount = attendedSunMass,
+                SunMassLinedUpCount = sunLinedUp,
+                SunMassPresentCount = sunPresent,
+                SunMassLateCount = sunLate,
+                SunMassAbsentCount = sunAbsent,
+                SunMassAttendanceRate = sunMassRate,
 
+                // Lễ Thứ Năm
+                TotalThuMassSessions = totalThuMass,
+                AttendedThuMassCount = attendedThuMass,
+                ThuMassAbsentCount = thuAbsent,
+                ThuMassAttendanceRate = thuMassRate,
+
+                // Học Giáo Lý
                 TotalClassSessions = totalClass,
                 AttendedClassCount = attendedClass,
+                ClassLateCount = classLate,
+                ClassAbsentCount = classAbsent,
                 ClassAttendanceRate = classRate,
+
+                // Tổng hợp chung
+                TotalMassSessions = totalSunMass + totalThuMass,
+                AttendedMassCount = attendedSunMass + attendedThuMass,
+                MassAttendanceRate = sunMassRate,
 
                 HK1 = hk1Detail,
                 HK2 = hk2Detail,
                 YearAverage = yearAverage,
                 OverallRank = overallRank,
-                IsEligibleForSacrament = false, // Tạm khóa theo yêu cầu cho tới khi có quy tắc Bí tích chính thức
+                IsEligibleForSacrament = false, // Tạm để false theo yêu cầu
                 QrCodeBase64 = qrBase64
             };
 
@@ -225,6 +290,14 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 return string.Empty;
             }
+        }
+
+        private static string MaskPhoneNumber(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return "Chưa cập nhật";
+            var clean = phone.Trim();
+            if (clean.Length <= 6) return "******";
+            return $"{clean[..3]}****{clean[^3..]}"; // Ví dụ: 091****678
         }
     }
 }

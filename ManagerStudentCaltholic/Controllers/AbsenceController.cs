@@ -27,20 +27,27 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitRequest([FromBody] SubmitAbsenceRequestDto dto)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Reason))
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Reason) || string.IsNullOrWhiteSpace(dto.ParentPhone))
             {
-                return Json(new { success = false, message = "Vui lòng cung cấp lý do xin phép nghỉ." });
+                return Json(new { success = false, message = "Vui lòng nhập đầy đủ Số điện thoại Phụ huynh và Lý do xin phép nghỉ." });
             }
 
             var cleanCode = dto.StudentCode.Trim().ToUpperInvariant();
-            var targetDob = dto.DateOfBirth.Date;
+            var startDob = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc);
+            var endDob = startDob.AddDays(1);
 
             var student = await _context.Students
-                .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode && s.DateOfBirth.Date == targetDob && s.IsActive);
+                .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode &&
+                                          s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
+                                          s.IsActive);
 
-            if (student == null)
+            // Kiểm tra đối chiếu SĐT Phụ huynh gửi lên với SĐT trong hồ sơ
+            var inputPhoneDigits = new string(dto.ParentPhone.Where(char.IsDigit).ToArray());
+            var recordPhoneDigits = new string((student?.ParentPhone ?? "").Where(char.IsDigit).ToArray());
+
+            if (student == null || string.IsNullOrEmpty(recordPhoneDigits) || inputPhoneDigits != recordPhoneDigits)
             {
-                return Json(new { success = false, message = "Thông tin Mã thiếu nhi hoặc Ngày sinh không chính xác!" });
+                return Json(new { success = false, message = "Số điện thoại Phụ huynh không khớp với hồ sơ đã đăng ký của thiếu nhi!" });
             }
 
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
