@@ -113,10 +113,10 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
 
-            // 5. Thống kê Chuyên cần tách riêng: Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý
+            // 5. Thống kê số buổi Đi Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý (Bỏ tính %)
             int totalSunMass = 0, attendedSunMass = 0, sunLinedUp = 0, sunPresent = 0, sunLate = 0, sunAbsent = 0;
             int totalThuMass = 0, attendedThuMass = 0, thuAbsent = 0;
-            int totalClass = 0, attendedClass = 0, classLate = 0, classAbsent = 0;
+            int totalClass = 0, attendedClass = 0, classPresent = 0, classLate = 0, classAbsent = 0;
 
             if (enrollment != null)
             {
@@ -130,38 +130,24 @@ namespace ManagerStudentCaltholic.Controllers
                 totalSunMass = sunRecords.Count;
                 attendedSunMass = sunRecords.Count(a => a.AttendedMass);
                 sunLinedUp = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp);
-                sunPresent = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present);
                 sunLate = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
-                sunAbsent = totalSunMass - attendedSunMass;
+                // Đảm bảo mọi buổi có AttendedMass = true (ngoài XH và Trễ) đều được tính vào Có mặt
+                sunPresent = Math.Max(0, attendedSunMass - sunLinedUp - sunLate);
+                sunAbsent = Math.Max(0, totalSunMass - attendedSunMass);
 
                 // 5.2. Thánh Lễ Thứ Năm
                 var thuRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Thursday).ToList();
                 totalThuMass = thuRecords.Count;
                 attendedThuMass = thuRecords.Count(a => a.AttendedMass);
-                thuAbsent = totalThuMass - attendedThuMass;
+                thuAbsent = Math.Max(0, totalThuMass - attendedThuMass);
 
                 // 5.3. Giờ Học Giáo Lý (Chúa Nhật)
                 totalClass = sunRecords.Count;
                 attendedClass = sunRecords.Count(a => a.ClassAttended);
                 classLate = sunRecords.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
-                classAbsent = totalClass - attendedClass;
+                classPresent = Math.Max(0, attendedClass - classLate);
+                classAbsent = Math.Max(0, totalClass - attendedClass);
             }
-
-            // Tính tỷ lệ % (Đi trễ tính hệ số 0.8 đồng bộ với AttendanceController.Statistics)
-            var sunMassRate = totalSunMass > 0
-                ? Math.Min(100.0, Math.Round(((sunLinedUp + sunPresent + sunLate * 0.8) / (double)totalSunMass) * 100, 1))
-                : 100.0;
-
-            var thuMassRate = totalThuMass > 0
-                ? Math.Min(100.0, Math.Round((attendedThuMass / (double)totalThuMass) * 100, 1))
-                : 0.0;
-
-            var classPresentOnTime = Math.Max(0, attendedClass - classLate);
-            var classRate = totalClass > 0
-                ? Math.Min(100.0, Math.Round(((classPresentOnTime + classLate * 0.8) / (double)totalClass) * 100, 1))
-                : 100.0;
-
-            var combinedAttendanceRate = Math.Round((sunMassRate + classRate) / 2.0, 1);
 
             // 6. Xử lý Bảng điểm HK1 & HK2
             var hk1Detail = new SemesterGradeDetail { Semester = 1 };
