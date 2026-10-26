@@ -218,8 +218,9 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">Số điện thoại Phụ huynh</label>
-                    <input type="text" id="absPhone" class="form-control" value="@Model.ParentPhone" placeholder="Nhập SĐT liên hệ..." />
+                    <label class="form-label fw-semibold">Số điện thoại Phụ huynh xác nhận (*)</label>
+                    <input type="tel" id="absPhone" class="form-control"
+                           placeholder="Nhập đầy đủ SĐT (@Model.MaskedParentPhone) để xác nhận..." required />
                 </div>
                 <div class="mb-2">
                     <label class="form-label fw-semibold">Lý do xin phép nghỉ (*)</label>

@@ -2,7 +2,6 @@
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
-    // Form nhập liệu tra cứu công khai
     public class StudentLookupRequestDto
     {
         [Required(ErrorMessage = "Vui lòng nhập Mã Thiếu Nhi (hoặc mã in trên thẻ QR)")]
@@ -14,21 +13,25 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [DataType(DataType.Date)]
         [Display(Name = "Ngày Sinh")]
         public DateTime DateOfBirth { get; set; } = DateTime.Today.AddYears(-10);
+
+        [Required(ErrorMessage = "Vui lòng nhập 4 số cuối SĐT Phụ huynh đã đăng ký")]
+        [RegularExpression(@"^\d{4}$", ErrorMessage = "Vui lòng nhập đúng 4 chữ số cuối của SĐT Phụ huynh")]
+        [Display(Name = "4 Số Cuối SĐT Phụ Huynh")]
+        public string PhoneLast4Digits { get; set; } = string.Empty;
     }
 
-    // Kết quả chi tiết trả về cho Phụ Huynh
     public class StudentLookupResultViewModel
     {
-        // Thông tin cá nhân
         public long StudentId { get; set; }
         public string StudentCode { get; set; } = string.Empty;
         public string ChristianName { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Gender { get; set; } = "Nam";
         public DateTime DateOfBirth { get; set; }
-        public string? ParentPhone { get; set; }
 
-        // Thông tin Lớp & Niên khóa hiện tại
+        // Chỉ lưu SĐT đã che (VD: 0912***678) để không bị leak PII trên HTML
+        public string MaskedParentPhone { get; set; } = string.Empty;
+
         public string ClassName { get; set; } = string.Empty;
         public string GradeLevel { get; set; } = string.Empty;
         public string AcademicYearName { get; set; } = string.Empty;
@@ -50,26 +53,23 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ThuMassAbsentCount { get; set; }
         public double ThuMassAttendanceRate { get; set; }
 
-        // 3. Chuyên cần Giờ Học Giáo Lý (Chúa Nhật)
+        // 3. Chuyên cần Giờ Học Giáo Lý
         public int TotalClassSessions { get; set; }
         public int AttendedClassCount { get; set; }
         public int ClassLateCount { get; set; }
         public int ClassAbsentCount { get; set; }
         public double ClassAttendanceRate { get; set; }
 
-        // Thuộc tính tổng hợp chung (giữ tương thích)
+        // Thuộc tính tổng hợp
         public int TotalMassSessions { get; set; }
         public int AttendedMassCount { get; set; }
         public double MassAttendanceRate { get; set; }
 
-        // Bảng điểm chi tiết từng học kỳ
         public SemesterGradeDetail HK1 { get; set; } = new();
         public SemesterGradeDetail HK2 { get; set; } = new();
         public decimal? YearAverage { get; set; }
         public string OverallRank { get; set; } = "Chưa hoàn tất";
         public bool IsEligibleForSacrament { get; set; } = false;
-
-        // Dữ liệu hình ảnh mã QR (Base64)
         public string? QrCodeBase64 { get; set; }
     }
 

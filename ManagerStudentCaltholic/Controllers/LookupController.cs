@@ -48,17 +48,21 @@ namespace ManagerStudentCaltholic.Controllers
                 return View("Index", model);
             }
 
-            // 1. RATE LIMITING: Chống Brute-force (Tối đa 5 lần sai / 15 phút trên mỗi IP)
+            var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
+            var cleanLast4 = model.PhoneLast4Digits.Trim();
             var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
-            var rateLimitKey = $"Lookup_FailedAttempts_{clientIp}";
 
-            if (_cache.TryGetValue(rateLimitKey, out int failedCount) && failedCount >= 5)
+            // 1. RATE LIMITING KÉP: Khóa theo IP VÀ khóa theo từng Mã Thiếu Nhi
+            var ipRateKey = $"Lookup_Failed_IP_{clientIp}";
+            var studentRateKey = $"Lookup_Failed_Code_{cleanCode}";
+
+            if ((_cache.TryGetValue(ipRateKey, out int ipFailed) && ipFailed >= 5) ||
+                (_cache.TryGetValue(studentRateKey, out int codeFailed) && codeFailed >= 5))
             {
-                ModelState.AddModelError(string.Empty, "Bạn đã nhập sai thông tin quá 5 lần liên tiếp. Để đảm bảo an toàn, vui lòng thử lại sau 15 phút!");
+                ModelState.AddModelError(string.Empty, "Hồ sơ hoặc thiết bị này đã nhập sai quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!");
                 return View("Index", model);
             }
 
-            var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
             var startDob = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
             var endDob = startDob.AddDays(1);
 
@@ -69,16 +73,31 @@ namespace ManagerStudentCaltholic.Controllers
                                           s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
                                           s.IsActive);
 
-            if (student == null)
+            // 3. Kiểm tra khớp 4 số cuối SĐT Phụ huynh
+            bool isPhoneValid = false;
+            if (student != null && !string.IsNullOrWhiteSpace(student.ParentPhone))
             {
-                failedCount++;
-                _cache.Set(rateLimitKey, failedCount, TimeSpan.FromMinutes(15));
+                var digitsOnly = new string(student.ParentPhone.Where(char.IsDigit).ToArray());
+                if (digitsOnly.Length >= 4 && digitsOnly.EndsWith(cleanLast4))
+                {
+                    isPhoneValid = true;
+                }
+            }
 
-                ModelState.AddModelError(string.Empty, "Không tìm thấy hồ sơ! Vui lòng kiểm tra lại chính xác Mã Thiếu Nhi và Ngày Sinh.");
+            if (student == null || !isPhoneValid)
+            {
+                // Tăng bộ đếm lỗi trên cả IP và Mã thiếu nhi
+                _cache.Set(ipRateKey, ipFailed + 1, TimeSpan.FromMinutes(15));
+                _cache.Set(studentRateKey, codeFailed + 1, TimeSpan.FromMinutes(30));
+
+                _logger.LogWarning("Tra cứu thất bại cho mã {Code} từ IP {IP}", cleanCode, clientIp);
+                ModelState.AddModelError(string.Empty, "Thông tin Mã Thiếu Nhi, Ngày Sinh hoặc 4 số cuối SĐT Phụ Huynh không chính xác!");
                 return View("Index", model);
             }
 
-            _cache.Remove(rateLimitKey);
+            // Xóa bộ đếm lỗi khi xác thực thành công
+            _cache.Remove(ipRateKey);
+            _cache.Remove(studentRateKey);
 
             // 3. Lấy niên khóa hiện hành
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent)
@@ -210,7 +229,8 @@ namespace ManagerStudentCaltholic.Controllers
                 FullName = $"{student.FirstName} {student.LastName}".Trim(),
                 Gender = student.Gender ?? "Nam",
                 DateOfBirth = student.DateOfBirth,
-                ParentPhone = student.ParentPhone,
+
+                MaskedParentPhone = MaskPhoneNumber(student.ParentPhone),
 
                 ClassName = enrollment?.ClassRoom?.Name ?? "Chưa xếp lớp",
                 GradeLevel = enrollment?.ClassRoom?.GradeLevel ?? "Chưa có",
@@ -270,6 +290,14 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 return string.Empty;
             }
+        }
+
+        private static string MaskPhoneNumber(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return "Chưa cập nhật";
+            var clean = phone.Trim();
+            if (clean.Length <= 6) return "******";
+            return $"{clean[..3]}****{clean[^3..]}"; // Ví dụ: 091****678
         }
     }
 }

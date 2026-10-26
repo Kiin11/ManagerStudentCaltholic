@@ -35,6 +35,18 @@
                             <span asp-validation-for="DateOfBirth" class="text-danger small"></span>
                         </div>
 
+                        <div class="mb-4">
+                            <label asp-for="PhoneLast4Digits" class="form-label fw-bold text-dark"></label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-telephone-check"></i></span>
+                                <input asp-for="PhoneLast4Digits" type="password" inputmode="numeric" maxlength="4"
+                                       class="form-control fw-bold text-center" style="letter-spacing: 6px;"
+                                       placeholder="••••" required />
+                            </div>
+                            <small class="text-muted">Nhập 4 chữ số cuối của SĐT Phụ huynh đã đăng ký với Giáo xứ</small>
+                            <span asp-validation-for="PhoneLast4Digits" class="text-danger small d-block"></span>
+                        </div>
+
                         <button type="submit" class="btn btn-primary w-100 rounded-pill py-2 fw-bold shadow-sm">
                             <i class="bi bi-search me-1"></i> Tra Cứu Hồ Sơ
                         </button>
