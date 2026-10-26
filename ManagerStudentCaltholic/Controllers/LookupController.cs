@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +10,7 @@ using QRCoder;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    [AllowAnonymous] // Cho phép truy cập công khai không cần đăng nhập
+    [AllowAnonymous]
     [Route("TraCuu")]
     public class LookupController : Controller
     {
@@ -47,7 +48,7 @@ namespace ManagerStudentCaltholic.Controllers
                 return View("Index", model);
             }
 
-            // 1. RATE LIMITING: Chống Brute-force quét mã (Tối đa 5 lần sai / 15 phút trên mỗi IP)
+            // 1. RATE LIMITING: Tối đa 5 lần sai / 15 phút trên mỗi IP
             var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
             var rateLimitKey = $"Lookup_FailedAttempts_{clientIp}";
 
@@ -58,16 +59,20 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
-            var targetDob = model.DateOfBirth.Date;
 
-            // 2. Tìm kiếm học sinh khớp Mã HS và Ngày Sinh
+            // Chuẩn hóa khoảng thời gian ngày sinh theo UTC để tương thích tuyệt đối với PostgreSQL
+            var startDob = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
+            var endDob = startDob.AddDays(1);
+
+            // 2. Tìm kiếm học sinh khớp Mã Thiếu Nhi và Ngày Sinh
             var student = await _context.Students
                 .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode && s.DateOfBirth.Date == targetDob && s.IsActive);
+                .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode &&
+                                          s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
+                                          s.IsActive);
 
             if (student == null)
             {
-                // Tăng số lần thử sai
                 failedCount++;
                 _cache.Set(rateLimitKey, failedCount, TimeSpan.FromMinutes(15));
 
@@ -75,17 +80,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return View("Index", model);
             }
 
-            // Reset bộ đếm lỗi khi nhập đúng
             _cache.Remove(rateLimitKey);
 
             // 3. Lấy niên khóa hiện hành
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-            if (currentYear == null)
-            {
-                currentYear = await _context.AcademicYears.OrderByDescending(y => y.StartDate).FirstOrDefaultAsync();
-            }
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent)
+                           ?? await _context.AcademicYears.OrderByDescending(y => y.StartDate).FirstOrDefaultAsync();
 
-            // 4. Lấy lớp học hiện tại của học sinh
+            // 4. Lấy lớp học hiện tại của thiếu nhi
             var enrollment = await _context.Enrollments
                 .Include(e => e.ClassRoom)
                     .ThenInclude(c => c.ClassTeachers)
@@ -95,7 +96,7 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
 
-            // 5. Thống kê Chuyên cần Lễ & Học của em
+            // 5. Thống kê Chuyên cần Lễ & Học
             int totalMass = 0, attendedMass = 0;
             int totalClass = 0, attendedClass = 0;
 
@@ -117,7 +118,7 @@ namespace ManagerStudentCaltholic.Controllers
             var classRate = totalClass > 0 ? Math.Round((attendedClass / (double)totalClass) * 100, 1) : 100.0;
             var combinedAttendanceRate = Math.Round((massRate + classRate) / 2.0, 1);
 
-            // 6. Xử lý Bảng điểm HK1 & HK2
+            // 6. Xử lý Bảng điểm HK1 & HK2 (Lọc đúng cột chung + cột riêng của lớp đang học)
             var hk1Detail = new SemesterGradeDetail { Semester = 1 };
             var hk2Detail = new SemesterGradeDetail { Semester = 2 };
 
@@ -125,12 +126,13 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 var gradeConfigs = await _context.GradeConfigurations
                     .Where(g => g.AcademicYearId == currentYear.Id &&
-                                (g.GradeLevel == "ALL" || g.GradeLevel == enrollment.ClassRoom.GradeLevel))
+                                (g.GradeLevel == "ALL" || g.GradeLevel == enrollment.ClassRoom.GradeLevel) &&
+                                (g.ClassRoomId == null || g.ClassRoomId == enrollment.ClassRoomId))
                     .OrderBy(g => g.ColumnIndex)
                     .AsNoTracking()
                     .ToListAsync();
 
-                // Lọc điểm HK1
+                // Điểm HK1
                 var hk1Configs = gradeConfigs.Where(g => g.Semester == 1).ToList();
                 var hk1Scores = new Dictionary<int, decimal?>();
                 foreach (var cfg in hk1Configs)
@@ -149,7 +151,7 @@ namespace ManagerStudentCaltholic.Controllers
                 hk1Detail.SemesterAverage = _gradeService.CalculateSemesterAverage(hk1Scores, hk1Configs);
                 hk1Detail.Rank = _gradeService.EvaluateStudent(hk1Detail.SemesterAverage, combinedAttendanceRate, enrollment.ClassRoom.GradeLevel, 1).AcademicRank;
 
-                // Lọc điểm HK2
+                // Điểm HK2
                 var hk2Configs = gradeConfigs.Where(g => g.Semester == 2).ToList();
                 var hk2Scores = new Dictionary<int, decimal?>();
                 foreach (var cfg in hk2Configs)
@@ -170,9 +172,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var yearAverage = _gradeService.CalculateYearAverage(hk1Detail.SemesterAverage, hk2Detail.SemesterAverage);
-            var (overallRank, isEligible) = _gradeService.EvaluateStudent(yearAverage, combinedAttendanceRate, enrollment?.ClassRoom?.GradeLevel ?? "ALL", 2);
+            var (overallRank, _) = _gradeService.EvaluateStudent(yearAverage, combinedAttendanceRate, enrollment?.ClassRoom?.GradeLevel ?? "ALL", 0);
 
-            // 7. Tạo mã QR Code base64 của học sinh
             string qrBase64 = GenerateQrBase64(student.StudentCode);
 
             var result = new StudentLookupResultViewModel
@@ -203,14 +204,14 @@ namespace ManagerStudentCaltholic.Controllers
                 HK2 = hk2Detail,
                 YearAverage = yearAverage,
                 OverallRank = overallRank,
-                IsEligibleForSacrament = isEligible,
+                IsEligibleForSacrament = false, // Tạm khóa theo yêu cầu cho tới khi có quy tắc Bí tích chính thức
                 QrCodeBase64 = qrBase64
             };
 
             return View("Result", result);
         }
 
-        private string GenerateQrBase64(string studentCode)
+        private static string GenerateQrBase64(string studentCode)
         {
             try
             {
