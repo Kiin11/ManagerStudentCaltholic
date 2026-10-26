@@ -149,6 +149,22 @@ namespace ManagerStudentCaltholic.Controllers
                 classAbsent = Math.Max(0, totalClass - attendedClass);
             }
 
+            // Tính tỷ lệ % (Đi trễ tính hệ số 0.8 đồng bộ với AttendanceController.Statistics)
+            var sunMassRate = totalSunMass > 0
+                ? Math.Min(100.0, Math.Round(((sunLinedUp + sunPresent + sunLate * 0.8) / (double)totalSunMass) * 100, 1))
+                : 100.0;
+
+            var thuMassRate = totalThuMass > 0
+                ? Math.Min(100.0, Math.Round((attendedThuMass / (double)totalThuMass) * 100, 1))
+                : 0.0;
+
+            var classPresentOnTime = Math.Max(0, attendedClass - classLate);
+            var classRate = totalClass > 0
+                ? Math.Min(100.0, Math.Round(((classPresentOnTime + classLate * 0.8) / (double)totalClass) * 100, 1))
+                : 100.0;
+
+            var combinedAttendanceRate = Math.Round((sunMassRate + classRate) / 2.0, 1);
+
             // 6. Xử lý Bảng điểm HK1 & HK2
             var hk1Detail = new SemesterGradeDetail { Semester = 1 };
             var hk2Detail = new SemesterGradeDetail { Semester = 2 };
