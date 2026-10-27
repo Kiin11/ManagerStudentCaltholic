@@ -2,6 +2,12 @@
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
+    public static class PasswordPolicy
+    {
+        public const string ComplexityPattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$";
+        public const string ComplexityErrorMessage = "Mật khẩu phải từ 8 ký tự trở lên, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt.";
+    }
+
     public class LoginRequestDto
     {
         [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập")]
@@ -33,14 +39,17 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string Role { get; set; } = string.Empty;
         public string? Email { get; set; }
     }
+
     public class CreateUserRequestDto
     {
         [Required(ErrorMessage = "Tên đăng nhập không được rỗng")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username từ 3 đến 50 ký tự")]
         public string Username { get; set; } = string.Empty;
 
+        // SEC-NEW-10 FIX: Áp dụng chuẩn độ phức tạp mật khẩu đồng nhất
         [Required(ErrorMessage = "Mật khẩu không được để trống")]
         [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
+        [RegularExpression(PasswordPolicy.ComplexityPattern, ErrorMessage = PasswordPolicy.ComplexityErrorMessage)]
         public string Password { get; set; } = string.Empty;
 
         [StringLength(50)]
@@ -65,14 +74,15 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? ManagedGradeLevel { get; set; }
     }
 
-    // DTO Đặt lại mật khẩu
     public class ResetPasswordRequestDto
     {
         [Required]
         public long UserId { get; set; }
 
+        // SEC-NEW-10 FIX: Nâng từ 6 ký tự lên tối thiểu 8 ký tự kèm kiểm tra độ phức tạp
         [Required(ErrorMessage = "Mật khẩu mới không được rỗng")]
-        [MinLength(6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
+        [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
+        [RegularExpression(PasswordPolicy.ComplexityPattern, ErrorMessage = PasswordPolicy.ComplexityErrorMessage)]
         public string NewPassword { get; set; } = string.Empty;
     }
 }

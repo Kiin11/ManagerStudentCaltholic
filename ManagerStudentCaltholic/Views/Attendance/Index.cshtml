@@ -160,14 +160,18 @@
                                 <td>
                                     <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
                                             title="Điểm danh bù"
-                                            onclick="openMakeUpModal(@s.EnrollmentId, '@s.ChristianName @s.FullName')">
+                                            data-enrollment-id="@s.EnrollmentId"
+                                            data-student-name="@($"{s.ChristianName} {s.FullName}".Trim())"
+                                            onclick="openMakeUpModalFromBtn(this)">
                                         <i class="bi bi-arrow-repeat"></i> Bù
                                     </button>
                                 </td>
                                 <td>
                                     <button type="button" class="btn btn-sm btn-outline-info rounded-circle ms-1 p-1"
                                             title="Xem lịch sử điểm danh"
-                                            onclick="openAuditTimeline(@s.StudentId, '@s.FullName')">
+                                            data-student-id="@s.StudentId"
+                                            data-student-name="@s.FullName"
+                                            onclick="openAuditTimelineFromBtn(this)">
                                         <i class="bi bi-clock-history"></i>
                                     </button>
                                 </td>
@@ -438,11 +442,26 @@
             });
         }
 
+        // SEC-NEW-09 FIX 1: Hiển thị thông báo an toàn bằng textContent thay vì cộng chuỗi innerHTML
         function showAlert(msg, isSuccess = true) {
             const box = document.getElementById('attendanceAlert');
             box.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show shadow-sm border-0 mb-4`;
-            box.innerHTML = `<i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2"></i>${msg}
-                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            box.innerHTML = '';
+
+            const icon = document.createElement('i');
+            icon.className = `bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2`;
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = msg;
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close';
+            closeBtn.setAttribute('data-bs-dismiss', 'alert');
+
+            box.appendChild(icon);
+            box.appendChild(textSpan);
+            box.appendChild(closeBtn);
             box.classList.remove('d-none');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -656,6 +675,7 @@
             document.getElementById('ruleClassWeight').value = 100 - mass;
         }
 
+        // SEC-NEW-09 FIX 4: Dùng textContent khi gán tên lớp trong openAttendanceRuleModal
         async function openAttendanceRuleModal(classId) {
             document.getElementById('ruleClassId').value = classId;
             document.getElementById('ruleAlert').classList.add('d-none');
@@ -665,7 +685,10 @@
                 const data = await res.json();
                 if (data.success) {
                     const r = data.data;
-                    document.getElementById('ruleModalTitle').innerHTML = `<i class="bi bi-sliders me-2"></i>Quy Ước Lớp: ${r.className}`;
+                    const titleEl = document.getElementById('ruleModalTitle');
+                    titleEl.innerHTML = '<i class="bi bi-sliders me-2"></i>';
+                    titleEl.appendChild(document.createTextNode(`Quy Ước Lớp: ${r.className}`));
+
                     document.getElementById('ruleMassWeight').value = r.massWeightPercent;
                     document.getElementById('ruleClassWeight').value = r.classWeightPercent;
                     document.getElementById('ruleLateMultiplier').value = r.lateMultiplier.toFixed(2);
@@ -673,16 +696,10 @@
                     document.getElementById('ruleMinSacrament').value = r.minAttendanceRateForSacrament;
 
                     const btnSave = document.getElementById('btnSaveRule');
-                    if (!r.canEdit) {
-                        btnSave.disabled = true;
-                        btnSave.innerText = "Chỉ xem (Không có quyền sửa)";
-                    } else {
-                        btnSave.disabled = false;
-                        btnSave.innerText = "Lưu Quy Ước";
-                    }
+                    btnSave.disabled = !r.canEdit;
+                    btnSave.innerText = r.canEdit ? "Lưu Quy Ước" : "Chỉ xem (Không có quyền sửa)";
 
-                    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('attendanceRuleModal'));
-                    modal.show();
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('attendanceRuleModal')).show();
                 }
             } catch (err) {
                 alert("Lỗi tải quy ước: " + err);
@@ -818,6 +835,79 @@
                 alert('Không thể sao chép tự động: ' + err);
             });
         }
+
+        // SEC-NEW-09 FIX 2: Đọc dữ liệu từ data-* attribute
+        function openMakeUpModalFromBtn(btn) {
+            const enrollmentId = parseInt(btn.getAttribute('data-enrollment-id'));
+            const studentName = btn.getAttribute('data-student-name') || '';
+            openMakeUpModal(enrollmentId, studentName);
+        }
+
+        function openAuditTimelineFromBtn(btn) {
+            const studentId = parseInt(btn.getAttribute('data-student-id'));
+            const studentName = btn.getAttribute('data-student-name') || '';
+            openAuditTimeline(studentId, studentName);
+        }
+
+        // SEC-NEW-09 FIX 3: Dùng createElement + textContent trong openAuditTimeline
+        function openAuditTimeline(studentId, studentName) {
+            document.getElementById('auditStudentName').textContent = studentName;
+            const modal = new bootstrap.Modal(document.getElementById('auditTimelineModal'));
+            modal.show();
+
+            const loading = document.getElementById('timelineLoading');
+            const list = document.getElementById('timelineList');
+            loading.style.display = 'block';
+            list.style.display = 'none';
+            list.innerHTML = '';
+
+            const selectedDate = document.getElementById('attendanceDatePicker')?.value || new Date().toISOString().split('T')[0];
+
+            fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${selectedDate}`)
+                .then(res => res.json())
+                .then(response => {
+                    loading.style.display = 'none';
+                    list.style.display = 'block';
+
+                    if (!response.success || response.data.length === 0) {
+                        list.innerHTML = '<li class="text-muted small">Không tìm thấy thông tin kiểm toán.</li>';
+                        return;
+                    }
+
+                    response.data.forEach(item => {
+                        const li = document.createElement('li');
+                        li.className = 'timeline-item';
+
+                        const badge = document.createElement('span');
+                        badge.className = 'timeline-badge';
+
+                        const timeDiv = document.createElement('div');
+                        timeDiv.className = 'fw-semibold text-primary small';
+                        timeDiv.textContent = item.timeDisplay;
+
+                        const descDiv = document.createElement('div');
+                        descDiv.className = 'text-dark small';
+                        descDiv.textContent = item.description;
+
+                        const actorDiv = document.createElement('div');
+                        actorDiv.className = 'text-muted fst-italic';
+                        actorDiv.style.fontSize = '0.75rem';
+                        actorDiv.textContent = `Thực hiện bởi: ${item.performedBy}`;
+
+                        li.appendChild(badge);
+                        li.appendChild(timeDiv);
+                        li.appendChild(descDiv);
+                        li.appendChild(actorDiv);
+                        list.appendChild(li);
+                    });
+                })
+                .catch(() => {
+                    loading.style.display = 'none';
+                    list.style.display = 'block';
+                    list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
+                });
+        }
+
     </script>
 }
 

@@ -379,8 +379,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                var innerMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return Json(new { success = false, message = "Lỗi Database/Server: " + innerMsg });
+                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(AssignTeacher));
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu. Vui lòng thử lại sau." });
             }
         }
 
@@ -594,7 +594,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi khi lấy danh sách GLV: " + ex.Message });
+                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(AssignTeacher));
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu. Vui lòng thử lại sau." });
             }
         }
 
@@ -655,7 +656,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi khi lấy danh sách phòng: " + ex.Message });
+                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(AssignTeacher));
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu. Vui lòng thử lại sau." });
             }
         }
     }

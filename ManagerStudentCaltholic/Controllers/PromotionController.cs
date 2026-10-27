@@ -338,7 +338,7 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi thực thi kết chuyển niên khóa");
-                return Json(new { success = false, message = "Lỗi khi lưu kết chuyển: " + ex.Message });
+                return Json(new { success = false, message = "Đã xảy ra lỗi khi lưu dữ liệu kết chuyển niên khóa." });
             }
         }
     }

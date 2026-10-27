@@ -11,7 +11,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 using System.Text;
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 namespace ManagerStudentCaltholic.Extensions
 {
@@ -42,17 +44,26 @@ namespace ManagerStudentCaltholic.Extensions
         }
 
         /// <summary>
-        /// Config Nginx Reverse Proxy headers to get the correct client IP and protocol.
+        /// SEC-NEW-07 FIX: Chống giả mạo X-Forwarded-For bằng cách giới hạn ForwardLimit = 1
+        /// và chỉ tin cậy các dải IP Reverse Proxy nội bộ (Loopback & Private Docker Networks)
         /// </summary>
-        /// <param name="services"></param>
-        /// <returns></returns>
         public static IServiceCollection AddReverseProxyConfiguration(this IServiceCollection services)
         {
             services.Configure<ForwardedHeadersOptions>(options =>
             {
                 options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                options.KnownNetworks.Clear();
+                options.ForwardLimit = 1; // Chỉ đọc đúng 1 hop gần nhất do Nginx gắn vào
+                options.RequireHeaderSymmetry = false;
+
                 options.KnownProxies.Clear();
+                options.KnownNetworks.Clear();
+
+                // Chỉ tin tưởng Proxy nằm trong mạng Loopback hoặc mạng Private (Docker bridge / nội bộ)
+                options.KnownProxies.Add(IPAddress.Loopback);
+                options.KnownProxies.Add(IPAddress.IPv6Loopback);
+                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
             });
 
             return services;

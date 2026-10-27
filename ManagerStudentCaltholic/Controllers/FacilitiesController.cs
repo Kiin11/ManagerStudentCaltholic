@@ -152,7 +152,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi xử lý: " + (ex.InnerException?.Message ?? ex.Message) });
+                _logger.LogError(ex, "Lỗi hệ thống tại FacilitiesController");
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống trong quá trình xử lý phòng học." });
             }
         }
 
@@ -342,8 +343,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                var inner = ex.InnerException?.Message ?? ex.Message;
-                return Json(new { success = false, message = "Lỗi xử lý: " + inner });
+                _logger.LogError(ex, "Lỗi hệ thống tại FacilitiesController");
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống trong quá trình xử lý phòng học." });
             }
         }
 

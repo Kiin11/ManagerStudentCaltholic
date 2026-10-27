@@ -174,7 +174,7 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi xếp học sinh vào lớp ID: {ClassId}", request.ClassId);
-                return Json(new { success = false, message = "Có lỗi xảy ra trong quá trình xếp lớp: " + ex.Message });
+                return Json(new { success = false, message = "Có lỗi xảy ra trong quá trình xếp lớp. Vui lòng thử lại." });
             }
         }
 

@@ -393,12 +393,14 @@ namespace ManagerStudentCaltholic.Controllers
             var customDefaultPass = string.IsNullOrWhiteSpace(request.DefaultPassword) ? null : request.DefaultPassword.Trim();
 
             // Nếu có truyền mật khẩu chung thì kiểm tra độ dài tối thiểu 8 ký tự
-            if (customDefaultPass != null && customDefaultPass.Length < 8)
+            // SEC-NEW-10 FIX: Kiểm tra độ mạnh của mật khẩu khởi tạo chung khi tạo hàng loạt GLV
+            if (customDefaultPass != null &&
+                !System.Text.RegularExpressions.Regex.IsMatch(customDefaultPass, PasswordPolicy.ComplexityPattern))
             {
                 return Json(new BatchCreateTeachersResultDto
                 {
                     Success = false,
-                    Message = "Mật khẩu khởi tạo chung (nếu nhập) phải có tối thiểu 8 ký tự."
+                    Message = PasswordPolicy.ComplexityErrorMessage
                 });
             }
 
