@@ -81,8 +81,11 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [DataType(DataType.Password)]
         public string CurrentPassword { get; set; } = string.Empty;
 
+        // SEC-09 FIX: Yêu cầu tối thiểu 8 ký tự, gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt
         [Required(ErrorMessage = "Vui lòng nhập mật khẩu mới")]
-        [MinLength(6, ErrorMessage = "Mật khẩu mới tối thiểu 6 ký tự")]
+        [MinLength(8, ErrorMessage = "Mật khẩu mới phải có tối thiểu 8 ký tự")]
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$",
+            ErrorMessage = "Mật khẩu phải từ 8 ký tự trở lên, bao gồm chữ hoa, chữ thường, chữ số và ký tự đặc biệt")]
         [DataType(DataType.Password)]
         public string NewPassword { get; set; } = string.Empty;
 

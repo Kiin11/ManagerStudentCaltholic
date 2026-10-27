@@ -40,7 +40,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string Username { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Mật khẩu không được để trống")]
-        [MinLength(6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
+        [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
         public string Password { get; set; } = string.Empty;
 
         [StringLength(50)]

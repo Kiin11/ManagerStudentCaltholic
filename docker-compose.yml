@@ -11,6 +11,8 @@ services:
       # Chuỗi kết nối trực tiếp đến Azure Database for PostgreSQL Flexible Server
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;
       - JwtSettings__SecretKey=${JWT_SECRET_KEY}
+      - SeedSettings__AdminPassword=${SEED_ADMIN_PASSWORD}
+      - SeedSettings__SpiritualDirectorPassword=${SEED_DIRECTOR_PASSWORD}
     expose:
       - "8080"
     networks:

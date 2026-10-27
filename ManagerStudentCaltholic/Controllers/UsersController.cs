@@ -7,6 +7,7 @@ using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -281,13 +282,13 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 2. API BATCH IMPORT GLV TỪ FILE EXCEL (TASK-814)
+        /// 
         /// </summary>
         /// <param name="file"></param>
         /// <param name="defaultPassword"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> ImportTeachersFromExcel(IFormFile file, [FromForm] string? defaultPassword)
         {
@@ -296,10 +297,24 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Vui lòng chọn file Excel danh sách GLV." });
             }
 
+            // SEC-10 FIX 1: Giới hạn dung lượng tối đa 5MB và chỉ cho phép định dạng .xlsx
+            const long maxFileSize = 5 * 1024 * 1024; // 5 MB
+            if (file.Length > maxFileSize)
+            {
+                return Json(new { success = false, message = "Dung lượng file Excel vượt quá giới hạn cho phép (Tối đa 5MB)." });
+            }
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (ext != ".xlsx")
+            {
+                return Json(new { success = false, message = "Định dạng file không hợp lệ. Vui lòng sử dụng file mẫu Excel (.xlsx)." });
+            }
+
             var teachers = new List<BatchTeacherItemDto>();
 
-            using (var stream = new MemoryStream())
+            try
             {
+                using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
                 using var workbook = new XLWorkbook(stream);
                 var worksheet = workbook.Worksheets.FirstOrDefault();
@@ -314,7 +329,8 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "File Excel không có dữ liệu để nạp." });
                 }
 
-                foreach (var row in rows)
+                // Giới hạn số dòng mỗi lần import (tối đa 500 GLV/lần) để chống treo request
+                foreach (var row in rows.Take(500))
                 {
                     var christian = row.Cell(1).GetString().Trim();
                     var first = row.Cell(2).GetString().Trim();
@@ -337,10 +353,15 @@ namespace ManagerStudentCaltholic.Controllers
                     });
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi đọc file Excel ImportTeachersFromExcel do người dùng {User} tải lên.", User.Identity?.Name);
+                return Json(new { success = false, message = "Không thể đọc nội dung file Excel. Vui lòng kiểm tra lại định dạng file mẫu." });
+            }
 
             var request = new BatchCreateTeachersRequestDto
             {
-                DefaultPassword = string.IsNullOrWhiteSpace(defaultPassword) ? "GLV@2026!" : defaultPassword.Trim(),
+                DefaultPassword = string.IsNullOrWhiteSpace(defaultPassword) ? null : defaultPassword.Trim(),
                 Teachers = teachers
             };
 
@@ -369,8 +390,17 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var result = new BatchCreateTeachersResultDto();
-            var defaultPass = string.IsNullOrWhiteSpace(request.DefaultPassword) ? "GLV@2026!" : request.DefaultPassword.Trim();
-            var passwordHash = _passwordHasher.HashPassword(defaultPass);
+            var customDefaultPass = string.IsNullOrWhiteSpace(request.DefaultPassword) ? null : request.DefaultPassword.Trim();
+
+            // Nếu có truyền mật khẩu chung thì kiểm tra độ dài tối thiểu 8 ký tự
+            if (customDefaultPass != null && customDefaultPass.Length < 8)
+            {
+                return Json(new BatchCreateTeachersResultDto
+                {
+                    Success = false,
+                    Message = "Mật khẩu khởi tạo chung (nếu nhập) phải có tối thiểu 8 ký tự."
+                });
+            }
 
             // Lấy tập hợp usernames và phones đã tồn tại trong CSDL để chống trùng
             var existingUsernames = await _context.Users.Select(u => u.Username.ToLower()).ToListAsync();
@@ -380,6 +410,10 @@ namespace ManagerStudentCaltholic.Controllers
 
             foreach (var item in request.Teachers)
             {
+                // SEC-09 FIX: Mỗi GLV có một mật khẩu ngẫu nhiên riêng nếu không chỉ định DefaultPassword
+                var initialPass = customDefaultPass ?? GenerateSecureInitialPassword();
+                var passwordHash = _passwordHasher.HashPassword(initialPass);
+
                 if (string.IsNullOrWhiteSpace(item.FirstName) || string.IsNullOrWhiteSpace(item.LastName))
                 {
                     result.Errors.Add($"Bỏ qua dòng: Thiếu Họ hoặc Tên ({item.ChristianName} {item.FirstName} {item.LastName})");
@@ -427,7 +461,7 @@ namespace ManagerStudentCaltholic.Controllers
                     FullName = fullName,
                     ChristianName = item.ChristianName ?? "",
                     PhoneNumber = item.PhoneNumber ?? "",
-                    InitialPassword = defaultPass,
+                    InitialPassword = initialPass, // Trả về đúng mật khẩu vừa sinh của từng GLV
                     ManagedGradeLevel = item.ManagedGradeLevel
                 });
             }
@@ -457,10 +491,12 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
+                // SEC-10 FIX: Ghi log chi tiết ở Server, không trả ex.Message về Client
+                _logger.LogError(ex, "Lỗi khi lưu danh sách tài khoản GLV hàng loạt vào Database.");
                 return Json(new BatchCreateTeachersResultDto
                 {
                     Success = false,
-                    Message = "Lỗi khi lưu tài khoản vào Database: " + ex.Message
+                    Message = "Đã xảy ra lỗi hệ thống khi lưu danh sách tài khoản. Vui lòng thử lại hoặc liên hệ Quản trị viên."
                 });
             }
         }
@@ -518,7 +554,12 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi khi lấy danh sách GLV: " + ex.Message });
+                _logger.LogError(ex, "Lỗi khi truy vấn danh sách GLV chưa phân công lớp.");
+                return Json(new
+                {
+                    success = false,
+                    message = "Không thể tải danh sách Giáo lý viên lúc này. Vui lòng thử lại sau."
+                });
             }
         }
 
@@ -587,7 +628,11 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi xảy ra trong quá trình BatchDeactivateTeachers");
-                return Json(new { success = false, message = "Lỗi khi xử lý dữ liệu: " + ex.Message });
+                return Json(new
+                {
+                    success = false,
+                    message = "Đã xảy ra lỗi trong quá trình vô hiệu hóa tài khoản. Vui lòng thử lại sau."
+                });
             }
         }
         #endregion
@@ -604,6 +649,38 @@ namespace ManagerStudentCaltholic.Controllers
             return targetRole == UserRole.BranchHead ||
                    targetRole == UserRole.Teacher ||
                    targetRole == UserRole.Parent;
+        }
+
+        /// <summary>
+        /// SEC-09 FIX: Sinh mật khẩu khởi tạo ngẫu nhiên an toàn (10 ký tự, đủ chữ hoa, chữ thường, số và ký tự đặc biệt)
+        /// </summary>
+        private static string GenerateSecureInitialPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnopqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$!%*?&";
+            const string allChars = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (int i = 4; i < password.Length; i++)
+            {
+                password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
+            }
+
+            // Trộn ngẫu nhiên vị trí các ký tự (Fisher-Yates shuffle)
+            for (int i = password.Length - 1; i > 0; i--)
+            {
+                int j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
     }
 }

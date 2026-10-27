@@ -32,11 +32,26 @@ namespace ManagerStudentCaltholic.Extensions
                 if (!dbContext.Users.Any())
                 {
                     logger.LogInformation("Khởi tạo tài khoản mặc định ban đầu...");
+                    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+                    var adminInitPass = config["SeedSettings:AdminPassword"];
+                    if (string.IsNullOrWhiteSpace(adminInitPass))
+                    {
+                        adminInitPass = "Adm!" + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(9));
+                        logger.LogWarning("Đã sinh mật khẩu khởi tạo ngẫu nhiên lần đầu cho 'admin': {AdminPass} (Vui lòng đổi ngay sau khi đăng nhập!)", adminInitPass);
+                    }
+
+                    var directorInitPass = config["SeedSettings:SpiritualDirectorPassword"];
+                    if (string.IsNullOrWhiteSpace(directorInitPass))
+                    {
+                        directorInitPass = "Cha!" + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(9));
+                        logger.LogWarning("Đã sinh mật khẩu khởi tạo ngẫu nhiên lần đầu cho 'chaxu': {DirectorPass} (Vui lòng đổi ngay sau khi đăng nhập!)", directorInitPass);
+                    }
 
                     var adminUser = new User
                     {
                         Username = "admin",
-                        PasswordHash = passwordHasher.HashPassword("Password_Adm1n"),
+                        PasswordHash = passwordHasher.HashPassword(adminInitPass),
                         FirstName = "Quản Trị Viên Kỹ Thuật",
                         LastName = "Hệ Thống",
                         ChristianName = "",
@@ -48,13 +63,13 @@ namespace ManagerStudentCaltholic.Extensions
 
                     var spiritualDirector = new User
                     {
-                        Username = "chaxu",
-                        PasswordHash = passwordHasher.HashPassword("ChaTienUy@Ph4Trung"),
+                        Username = "chatienuy",
+                        PasswordHash = passwordHasher.HashPassword(directorInitPass),
                         FirstName = "Cha",
                         LastName = "Tuyên Úy",
                         ChristianName = "",
                         Role = UserRole.SpiritualDirector,
-                        Email = "chaxu@parish.local",
+                        Email = "chatienuy@parish.local",
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
