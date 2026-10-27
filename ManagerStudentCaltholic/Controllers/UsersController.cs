@@ -69,7 +69,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="model"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> Create([FromBody] CreateUserRequestDto model)
         {
@@ -245,7 +245,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="defaultPassword"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> ImportTeachersFromExcel(IFormFile file, [FromForm] string? defaultPassword)
         {
@@ -311,7 +311,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> BatchCreateTeachers([FromBody] BatchCreateTeachersRequestDto request)
         {
@@ -486,7 +486,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> BatchDeactivateTeachers([FromBody] BatchDeactivateTeachersRequestDto request)
         {

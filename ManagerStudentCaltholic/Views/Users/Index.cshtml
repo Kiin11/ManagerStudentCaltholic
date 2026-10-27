@@ -410,7 +410,8 @@
                 const res = await fetch('/Users/Create', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
                     },
                     body: JSON.stringify(payload)
                 });
@@ -436,6 +437,10 @@
             new bootstrap.Modal(document.getElementById("resetPasswordModal")).show();
         }
 
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
         async function submitResetPassword() {
             const userId = document.getElementById("resetUserId").value;
             const newPassword = document.getElementById("resetNewPassword").value;
@@ -451,7 +456,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'RequestVerificationToken': token
+                    'X-CSRF-TOKEN': getCsrfToken()
                 },
                 body: JSON.stringify({ userId: parseInt(userId), newPassword })
             });
@@ -517,6 +522,9 @@
                 try {
                     const res = await fetch('/Users/ImportTeachersFromExcel', {
                         method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': getCsrfToken()
+                        },
                         body: formData
                     });
                     const data = await res.json();
@@ -556,7 +564,10 @@
                 try {
                     const res = await fetch('/Users/BatchCreateTeachers', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': getCsrfToken()
+                        },
                         body: JSON.stringify({
                             defaultPassword: defaultPassword,
                             teachers: teachers
@@ -693,7 +704,10 @@
             try {
                 const res = await fetch('/Users/BatchDeactivateTeachers', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
                     body: JSON.stringify({
                         userIds: ids,
                         reason: reason
