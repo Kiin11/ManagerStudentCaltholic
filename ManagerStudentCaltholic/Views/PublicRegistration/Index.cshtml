@@ -1,0 +1,133 @@
+﻿@{
+    ViewData["Title"] = "Đăng Ký Thiếu Nhi Mới Online";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow rounded-4 overflow-hidden">
+                <div class="card-header bg-primary text-white text-center py-4">
+                    <h4 class="fw-bold mb-1">Cổng Đăng Ký Thiếu Nhi Mới</h4>
+                    <p class="mb-0 small text-white-50">Xứ đoàn Thiếu Nhi Thánh Thể - Tải ảnh giấy Rửa tội trực tuyến</p>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Khu vực thông báo trạng thái -->
+                    <div id="alertContainer"></div>
+
+                    <form id="registrationForm" enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">Tên Thánh (*)</label>
+                            <input type="text" name="christianName" class="form-control" placeholder="VD: Giuse, Maria..." required />
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold small">Họ và Tên Đệm (*)</label>
+                                <input type="text" name="firstName" class="form-control" placeholder="VD: Nguyễn Văn" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small">Tên (*)</label>
+                                <input type="text" name="lastName" class="form-control" placeholder="VD: An" required />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Giới Tính (*)</label>
+                                <select name="gender" class="form-select">
+                                    <option value="Nam">Nam</option>
+                                    <option value="Nữ">Nữ</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Ngày Sinh (*)</label>
+                                <input type="date" name="dateOfBirth" class="form-control" required />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">Ngày Rửa Tội (Nếu có)</label>
+                            <input type="date" name="baptismDate" class="form-control" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small">Số Điện Thoại Phụ Huynh Liên Hệ (*)</label>
+                            <input type="tel" name="parentPhone" class="form-control" placeholder="VD: 0912345678" required />
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold small text-primary">
+                                <i class="bi bi-file-earmark-arrow-up-fill me-1"></i> Tải ảnh chụp Giấy Chứng Nhận Rửa Tội (hoặc Sổ gia đình)
+                            </label>
+                            <input type="file" name="baptismCertificate" class="form-control" accept=".jpg, .jpeg, .png, .pdf" />
+                            <div class="form-text small text-muted">Hỗ trợ định dạng ảnh JPG, PNG hoặc PDF. Tối đa 5MB.</div>
+                        </div>
+
+                        <button type="submit" id="btnSubmit" class="btn btn-primary w-100 rounded-pill py-2 fw-bold shadow-sm">
+                            <i class="bi bi-send-fill me-1"></i> Gửi Hồ Sơ Đăng Ký
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const btnSubmit = document.getElementById('btnSubmit');
+            const alertContainer = document.getElementById('alertContainer');
+
+            // Khóa nút & hiển thị loading spinner
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang gửi hồ sơ lên hệ thống...`;
+            alertContainer.innerHTML = '';
+
+            const formData = new FormData(this);
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const response = await fetch('/PublicRegistration/Submit', {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    },
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-success alert-dismissible fade show small" role="alert">
+                            <i class="bi bi-check-circle-fill me-1"></i> ${result.message} Đang chuyển hướng...
+                        </div>`;
+                    setTimeout(() => {
+                        window.location.href = '/PublicRegistration/Success';
+                    }, 800);
+                } else {
+                    alertContainer.innerHTML = `
+                        <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> ${result.message}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>`;
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = `<i class="bi bi-send-fill me-1"></i> Gửi Hồ Sơ Đăng Ký`;
+                }
+            } catch (err) {
+                alertContainer.innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i> Lỗi kết nối máy chủ: ${err}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>`;
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = `<i class="bi bi-send-fill me-1"></i> Gửi Hồ Sơ Đăng Ký`;
+            }
+        });
+    </script>
+}
