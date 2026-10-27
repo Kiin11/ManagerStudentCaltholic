@@ -155,5 +155,25 @@ namespace ManagerStudentCaltholic.Services
             await _context.SaveChangesAsync();
             return true;
         }
+
+        public async Task<int> RevokeAllUserTokensAsync(long userId, string? ipAddress, string reason)
+        {
+            var activeTokens = await _context.RefreshTokens
+                .Where(r => r.UserId == userId && r.RevokedAt == null)
+                .ToListAsync();
+
+            if (!activeTokens.Any())
+                return 0;
+
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+                token.RevokedByIp = ipAddress;
+                token.ReplacedByToken = reason;
+            }
+
+            await _context.SaveChangesAsync();
+            return activeTokens.Count;
+        }
     }
 }

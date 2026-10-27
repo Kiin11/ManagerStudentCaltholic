@@ -15,6 +15,7 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly IPasswordHasherService _passwordHasher;
+        private readonly ITokenService _tokenService; // SEC-06 FIX: Bổ sung ITokenService
         private readonly ILogger<UsersController> _logger;
         private static readonly HashSet<string> ValidRoles = new()
         {
@@ -29,11 +30,13 @@ namespace ManagerStudentCaltholic.Controllers
         public UsersController(
             ParishDbContext context,
             IPasswordHasherService passwordHasher,
-            ILogger<UsersController> logger)
+            ILogger<UsersController> logger,
+            ITokenService tokenService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _logger = logger;
+            _tokenService = tokenService;
         }
 
 
@@ -170,6 +173,9 @@ namespace ManagerStudentCaltholic.Controllers
 
             await _context.SaveChangesAsync();
 
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _tokenService.RevokeAllUserTokensAsync(user.Id, clientIp, "REVOKED_ON_ADMIN_RESET_PASSWORD");
+
             _logger.LogInformation("Mật khẩu tài khoản ID {UserId} ({Username}) đã được đặt lại bởi {CurrentUser}",
                 user.Id, user.Username, User.Identity?.Name);
 
@@ -213,6 +219,13 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // SEC-06 FIX: Nếu khóa tài khoản thì thu hồi ngay toàn bộ Refresh Token đang hoạt động
+            if (!user.IsActive)
+            {
+                var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                await _tokenService.RevokeAllUserTokensAsync(user.Id, clientIp, "DEACTIVATED_BY_ADMIN");
+            }
 
             var statusStr = user.IsActive ? "kích hoạt" : "vô hiệu hóa";
             return Json(new { success = true, isActive = user.IsActive, message = $"Đã {statusStr} tài khoản {user.Username}!" });

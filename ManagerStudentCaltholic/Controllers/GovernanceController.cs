@@ -188,6 +188,29 @@ namespace ManagerStudentCaltholic.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+
+                if (currentYear != null && currentYear.Id == academicYearId)
+                {
+                    var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                    var affectedUserIds = new List<long> { newUserId };
+                    if (assignment != null && assignment.UserId != newUserId)
+                    {
+                        affectedUserIds.Add(assignment.UserId);
+                    }
+
+                    var activeTokens = await _context.RefreshTokens
+                        .Where(r => affectedUserIds.Contains(r.UserId) && r.RevokedAt == null)
+                        .ToListAsync();
+
+                    foreach (var t in activeTokens)
+                    {
+                        t.RevokedAt = DateTime.UtcNow;
+                        t.RevokedByIp = clientIp;
+                        t.ReplacedByToken = "REVOKED_ON_BRANCH_HEAD_CHANGE";
+                    }
+                    await _context.SaveChangesAsync();
+                }
+
                 return Json(new { success = true, message = $"Bổ nhiệm thành công Trưởng khối {gradeLevel} cho niên khóa!" });
             }
             catch (Exception ex)

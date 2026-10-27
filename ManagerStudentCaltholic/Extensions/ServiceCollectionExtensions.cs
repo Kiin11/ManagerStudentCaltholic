@@ -119,6 +119,49 @@ namespace ManagerStudentCaltholic.Extensions
                 options.Cookie.HttpOnly = true;             // Chống XSS đọc trộm Cookie
                 options.Cookie.SameSite = SameSiteMode.Lax; // Cho phép chuyển hướng an toàn
                 options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+
+                // SEC-06 FIX: Kiểm tra trạng thái hoạt động và vai trò thực tế của User trong DB
+                options.Events = new CookieAuthenticationEvents
+                {
+                    OnValidatePrincipal = async context =>
+                    {
+                        var userIdStr = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                        if (!long.TryParse(userIdStr, out var userId))
+                        {
+                            context.RejectPrincipal();
+                            await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
+                                context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
+                            return;
+                        }
+
+                        var dbContext = context.HttpContext.RequestServices.GetRequiredService<ParishDbContext>();
+                        var user = await dbContext.Users
+                            .AsNoTracking()
+                            .Select(u => new { u.Id, u.IsActive, u.Role, u.ManagedGradeLevel, u.LockoutEnd })
+                            .FirstOrDefaultAsync(u => u.Id == userId);
+
+                        // 1. Nếu tài khoản không tồn tại, bị khóa (IsActive = false) hoặc đang bị Lockout -> Hủy phiên ngay lập tức
+                        if (user == null || !user.IsActive || (user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow))
+                        {
+                            context.RejectPrincipal();
+                            await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
+                                context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
+                            return;
+                        }
+
+                        // 2. Nếu Vai trò (Role) hoặc Khối phụ trách (ManagedGradeLevel) trong Cookie lệch với DB -> Bắt đăng nhập lại hoặc cập nhật Claims
+                        var currentCookieRole = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                        var currentCookieGrade = context.Principal?.FindFirst("ManagedGradeLevel")?.Value ?? string.Empty;
+                        var dbGrade = user.ManagedGradeLevel ?? string.Empty;
+
+                        if (currentCookieRole != user.Role || currentCookieGrade != dbGrade)
+                        {
+                            context.RejectPrincipal();
+                            await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
+                                context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
+                        }
+                    }
+                };
             })
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
             {

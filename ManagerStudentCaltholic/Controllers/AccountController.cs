@@ -439,8 +439,6 @@ namespace ManagerStudentCaltholic.Controllers
         /// <summary>
         /// 8. POST: /Account/ChangePassword (Ajax) (TASK-616)
         /// </summary>
-        /// <param name="model"></param>
-        /// <returns></returns>
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
@@ -452,8 +450,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = string.Join("; ", errors) });
             }
 
-            var username = User.Identity?.Name;
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username!.ToLower());
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!long.TryParse(userIdStr, out var currentUserId))
+            {
+                return Json(new { success = false, message = "Phiên đăng nhập không hợp lệ." });
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
             if (user == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy người dùng." });
@@ -469,9 +472,18 @@ namespace ManagerStudentCaltholic.Controllers
             user.PasswordHash = _passwordHasher.HashPassword(model.NewPassword);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Người dùng {Username} đã đổi mật khẩu thành công.", user.Username);
+            // SEC-06 FIX: Thu hồi toàn bộ Refresh Token cũ trên mọi thiết bị và cấp lại Token mới cho thiết bị hiện tại
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _tokenService.RevokeAllUserTokensAsync(user.Id, clientIp, "REVOKED_ON_PASSWORD_CHANGE");
 
-            return Json(new { success = true, message = "Đổi mật khẩu thành công! Vui lòng ghi nhớ mật khẩu mới." });
+            var newRefreshToken = _tokenService.GenerateRefreshToken(user.Id, clientIp);
+            _context.RefreshTokens.Add(newRefreshToken);
+            await _context.SaveChangesAsync();
+            SetRefreshTokenCookie(newRefreshToken.Token, newRefreshToken.ExpiresAt);
+
+            _logger.LogInformation("Người dùng {Username} đã đổi mật khẩu và làm mới toàn bộ phiên đăng nhập.", user.Username);
+
+            return Json(new { success = true, message = "Đổi mật khẩu thành công! Các phiên đăng nhập trên thiết bị khác đã được đăng xuất." });
         }
     }
 }
