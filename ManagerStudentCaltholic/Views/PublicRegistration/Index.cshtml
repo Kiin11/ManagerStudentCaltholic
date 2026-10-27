@@ -95,7 +95,7 @@
                 const response = await fetch('/PublicRegistration/Submit', {
                     method: 'POST',
                     headers: {
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
                     },
                     body: formData
                 });

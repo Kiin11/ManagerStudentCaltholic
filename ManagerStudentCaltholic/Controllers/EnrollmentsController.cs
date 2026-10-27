@@ -102,7 +102,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> AssignStudents([FromBody] AssignStudentsRequest request)
         {
             if (request == null || !request.StudentIds.Any())
@@ -184,7 +184,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="enrollmentId"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveStudent(long enrollmentId)
         {
             var enrollment = await _context.Enrollments

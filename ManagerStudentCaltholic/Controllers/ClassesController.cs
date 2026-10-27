@@ -116,6 +116,18 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
             }
 
+            // SEC-NEW-05 FIX: Nếu là Trưởng khối (BranchHead), bắt buộc chỉ được tạo lớp thuộc khối mình phụ trách
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(classRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["ErrorMessage"] = $"Bạn chỉ có quyền tạo lớp thuộc khối '{managedGrade}'!";
+                    return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
+                }
+            }
+
             // 1. Đồng bộ ClassRoomLocationId và RoomName
             if (!string.IsNullOrWhiteSpace(classRoom.RoomName))
             {
@@ -227,7 +239,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="model"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> AssignTeacher([FromBody] AssignTeacherRequestDto request)
         {
@@ -378,14 +390,28 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> RemoveTeacher(long id)
         {
-            var item = await _context.ClassTeachers.FindAsync(id);
+            var item = await _context.ClassTeachers
+        .Include(ct => ct.ClassRoom)
+        .FirstOrDefaultAsync(ct => ct.Id == id);
+
             if (item == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy bản ghi phân công." });
+            }
+
+            // SEC-NEW-05 FIX: Chặn Trưởng khối hủy phân công GLV của khối khác
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(item.ClassRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new { success = false, message = $"Bạn chỉ có quyền hủy phân công GLV thuộc khối {managedGrade}!" });
+                }
             }
 
             _context.ClassTeachers.Remove(item);
@@ -407,6 +433,32 @@ namespace ManagerStudentCaltholic.Controllers
                 var targetClass = await _context.Classes.FindAsync(id);
                 if (targetClass == null) return NotFound();
 
+                // SEC-NEW-05 FIX: Kiểm tra phạm vi quyền hạn theo Khối / Lớp
+                bool isLeadership = User.IsInRole(UserRole.Admin) ||
+                                    User.IsInRole(UserRole.SpiritualDirector) ||
+                                    User.IsInRole(UserRole.ExecutiveBoard);
+
+                if (!isLeadership)
+                {
+                    if (User.IsInRole(UserRole.BranchHead))
+                    {
+                        var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                        if (string.IsNullOrWhiteSpace(managedGrade) ||
+                            !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return Forbid();
+                        }
+                    }
+                    else
+                    {
+                        var uidStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                        long.TryParse(uidStr, out var currentUserId);
+                        var isAssigned = await _context.ClassTeachers
+                            .AnyAsync(ct => ct.ClassRoomId == id && ct.UserId == currentUserId);
+                        if (!isAssigned) return Forbid();
+                    }
+                }
+
                 var bytes = await _excelService.ExportClassListToExcelAsync(id);
                 var fileName = $"Danh_Sach_Lop_{targetClass.Name.Replace(" ", "_")}.xlsx";
 
@@ -414,7 +466,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                TempData["ErrorMessage"] = "Lỗi khi xuất danh sách: " + ex.Message;
+                _logger.LogError(ex, "Lỗi khi xuất danh sách lớp ID {ClassId}", id);
+                TempData["ErrorMessage"] = "Không thể xuất danh sách lớp lúc này.";
                 return RedirectToAction(nameof(Index));
             }
         }

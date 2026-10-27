@@ -247,7 +247,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token,
+                        'X-CSRF-TOKEN': token, // SEC-NEW-03 FIX
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: JSON.stringify({
@@ -280,7 +280,7 @@
                 const res = await fetch('/Enrollments/RemoveStudent', {
                     method: 'POST',
                     headers: {
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX
                     },
                     body: formData
                 });

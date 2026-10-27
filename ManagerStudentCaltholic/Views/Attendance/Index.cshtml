@@ -488,7 +488,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
                     },
                     body: JSON.stringify({
                         classId: classId,
@@ -567,7 +567,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
                     },
                     body: JSON.stringify({
                         enrollmentId: enrollmentId,
@@ -591,7 +591,7 @@
                 alert('Lỗi kết nối máy chủ: ' + err);
             }
         }
-                function openAuditTimeline(studentId, studentName) {
+        function openAuditTimeline(studentId, studentName) {
             document.getElementById('auditStudentName').innerText = studentName;
             const modal = new bootstrap.Modal(document.getElementById('auditTimelineModal'));
             modal.show();
@@ -712,7 +712,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
                     },
                     body: JSON.stringify(payload)
                 });
