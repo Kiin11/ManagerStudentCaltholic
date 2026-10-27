@@ -227,6 +227,11 @@
             bootstrap.Modal.getOrCreateInstance(document.getElementById('assignGradeModal')).show();
         }
 
+
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
         // Mở Modal Bổ nhiệm BĐH mới (sửa lỗi openPromoteModal is not defined)
         function openPromoteModal() {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('promoteExecutiveModal')).show();
@@ -257,7 +262,7 @@
                     method: 'POST',
                     headers: {
                         'RequestVerificationToken': token,
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-CSRF-TOKEN': getCsrfToken()
                     },
                     body: formData
                 });
@@ -305,7 +310,7 @@
                     method: 'POST',
                     headers: {
                         'RequestVerificationToken': token,
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'X-CSRF-TOKEN': getCsrfToken()
                     },
                     body: formData
                 });
@@ -339,7 +344,7 @@
                 method: 'POST',
                 headers: {
                     'RequestVerificationToken': token,
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-CSRF-TOKEN': getCsrfToken()
                 },
                 body: formData
             });

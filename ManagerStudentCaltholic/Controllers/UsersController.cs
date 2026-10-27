@@ -16,6 +16,15 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly IPasswordHasherService _passwordHasher;
         private readonly ILogger<UsersController> _logger;
+        private static readonly HashSet<string> ValidRoles = new()
+        {
+            UserRole.Admin,
+            UserRole.SpiritualDirector,
+            UserRole.ExecutiveBoard,
+            UserRole.BranchHead,
+            UserRole.Teacher,
+            UserRole.Parent
+        };
 
         public UsersController(
             ParishDbContext context,
@@ -92,10 +101,14 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = $"Tên đăng nhập '{model.Username}' đã tồn tại." });
             }
 
-            // Chỉ Admin mới được quyền cấp tài khoản vai trò Admin hoặc Cha Tuyên Úy
-            if ((model.Role == UserRole.Admin || model.Role == UserRole.SpiritualDirector) && !User.IsInRole(UserRole.Admin))
+            if (!ValidRoles.Contains(model.Role))
             {
-                return Json(new { success = false, message = "Chỉ Admin hệ thống mới có quyền tạo tài khoản Quản trị viên hoặc Cha Tuyên Úy." });
+                return Json(new { success = false, message = "Vai trò được chọn không hợp lệ." });
+            }
+
+            if (!CanManageTargetRole(model.Role))
+            {
+                return Json(new { success = false, message = "Chỉ Admin hoặc Cha Tuyên Úy (qua màn hình Điều hành) mới có quyền cấp tài khoản cấp cao (Admin, Cha Tuyên Úy, Ban Điều Hành)." });
             }
 
             var newUser = new User
@@ -132,15 +145,23 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto model)
         {
+            if (!ModelState.IsValid)
+            {
+                return Json(new { success = false, message = "Dữ liệu mật khẩu mới không hợp lệ." });
+            }
+
             var user = await _context.Users.FindAsync(model.UserId);
             if (user == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy tài khoản yêu cầu." });
             }
 
-            if (user.Role == UserRole.Admin && !User.IsInRole(UserRole.Admin))
+            // SEC-03 FIX: Chặn ExecutiveBoard đặt lại mật khẩu của Admin, Cha Tuyên Úy hoặc ExecutiveBoard khác
+            if (!CanManageTargetRole(user.Role) && user.Username.ToLower() != User.Identity?.Name?.ToLower())
             {
-                return Json(new { success = false, message = "Bạn không có quyền đổi mật khẩu của Admin." });
+                _logger.LogWarning("Cảnh báo bảo mật: {Operator} cố gắng đặt lại mật khẩu của tài khoản cấp cao {TargetUser} ({Role}).",
+                    User.Identity?.Name, user.Username, user.Role);
+                return Json(new { success = false, message = "Bạn không đủ thẩm quyền để đặt lại mật khẩu của tài khoản này." });
             }
 
             user.PasswordHash = _passwordHasher.HashPassword(model.NewPassword);
@@ -174,6 +195,14 @@ namespace ManagerStudentCaltholic.Controllers
             if (user.Username.ToLower() == User.Identity?.Name?.ToLower())
             {
                 return Json(new { success = false, message = "Bạn không thể tự vô hiệu hóa tài khoản của chính mình." });
+            }
+
+            // SEC-03 FIX: Chặn ExecutiveBoard vô hiệu hóa tài khoản Admin, Cha Tuyên Úy hoặc ExecutiveBoard khác
+            if (!CanManageTargetRole(user.Role))
+            {
+                _logger.LogWarning("Cảnh báo bảo mật: {Operator} cố gắng khóa/mở khóa tài khoản cấp cao {TargetUser} ({Role}).",
+                    User.Identity?.Name, user.Username, user.Role);
+                return Json(new { success = false, message = "Bạn không đủ thẩm quyền để thay đổi trạng thái của tài khoản cấp cao này." });
             }
 
             user.IsActive = !user.IsActive;
@@ -549,5 +578,19 @@ namespace ManagerStudentCaltholic.Controllers
             }
         }
         #endregion
+
+        // Kiểm tra xem người thao tác hiện tại có quyền tác động (Tạo / Đổi MK / Khóa) lên vai trò đích không
+        private bool CanManageTargetRole(string targetRole)
+        {
+            // Admin có toàn quyền
+            if (User.IsInRole(UserRole.Admin))
+                return true;
+
+            // Ban Điều Hành (ExecutiveBoard) chỉ được phép quản lý Trưởng khối (BranchHead), Giáo lý viên (Teacher) và Phụ huynh (Parent)
+            // Không được phép tạo/sửa/khóa Admin, Cha Tuyên Úy (SpiritualDirector) hoặc thành viên Ban Điều Hành khác
+            return targetRole == UserRole.BranchHead ||
+                   targetRole == UserRole.Teacher ||
+                   targetRole == UserRole.Parent;
+        }
     }
 }

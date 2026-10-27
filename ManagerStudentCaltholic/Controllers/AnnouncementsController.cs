@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    // SEC-04 FIX: Bắt buộc đăng nhập với quyền nhân sự giáo xứ ở cấp Controller
+    [Authorize(Policy = "RequireStaff")]
     public class AnnouncementsController : Controller
     {
         private readonly ParishDbContext _context;
@@ -71,10 +73,12 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Policy = "RequireExecutiveBoard")]
-        public async Task<IActionResult> Create(Announcement model)
+        public async Task<IActionResult> Create(// SEC-04 FIX: Chỉ cho phép bind đúng các trường dữ liệu người dùng được phép nhập
+            [Bind("Title,Content,Scope,TargetGradeLevel,TargetClassRoomId,Priority,IsPinned,ExpireAt")] Announcement model)
         {
             if (ModelState.IsValid)
             {
+                model.IsActive = true;
                 model.CreatedBy = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Ban Quản Trị";
                 model.CreatedAt = DateTime.UtcNow;
 

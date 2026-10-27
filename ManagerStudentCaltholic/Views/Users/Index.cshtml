@@ -476,7 +476,7 @@
             const res = await fetch(`/Users/ToggleStatus/${userId}`, {
                 method: 'POST',
                 headers: {
-                    'RequestVerificationToken': token
+                    'X-CSRF-TOKEN': getCsrfToken()
                 }
             });
 

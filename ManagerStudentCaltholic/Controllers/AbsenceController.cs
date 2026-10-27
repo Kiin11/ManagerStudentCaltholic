@@ -1,13 +1,17 @@
-﻿using System.Security.Claims;
-using ManagerStudentCaltholic.Data;
+﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
 {
+    // SEC-04 FIX 1: Mặc định yêu cầu quyền RequireStaff ở cấp Controller
+    [Authorize(Policy = "RequireStaff")]
     public class AbsenceController : Controller
     {
         private readonly ParishDbContext _context;
@@ -25,6 +29,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)] // SEC-04 FIX 2: Chặn spam & brute-force SĐT
         public async Task<IActionResult> SubmitRequest([FromBody] SubmitAbsenceRequestDto dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.Reason) || string.IsNullOrWhiteSpace(dto.ParentPhone))
@@ -86,13 +91,25 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> Manage(int? classId)
         {
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-            var classes = await _context.Classes
-                .Where(c => currentYear == null || c.AcademicYearId == currentYear.Id)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
-                .ToListAsync();
+            var yearId = currentYear?.Id ?? 0;
 
-            ViewBag.Classes = classes;
-            var selectedClassId = classId ?? classes.FirstOrDefault()?.Id ?? 0;
+            // SEC-04 FIX 3: Chỉ lấy danh sách lớp nằm trong phạm vi quyền hạn
+            var authorizedClasses = await GetAuthorizedClassesAsync(yearId);
+            ViewBag.Classes = authorizedClasses;
+
+            if (!authorizedClasses.Any())
+            {
+                ViewBag.SelectedClassId = 0;
+                return View(new List<AbsenceRequest>());
+            }
+
+            // Chặn xem chéo lớp nếu tự truyền classId qua URL
+            if (classId.HasValue && !authorizedClasses.Any(c => c.Id == classId.Value))
+            {
+                return Forbid();
+            }
+
+            var selectedClassId = classId ?? authorizedClasses.First().Id;
             ViewBag.SelectedClassId = selectedClassId;
 
             var requests = await _context.AbsenceRequests
@@ -100,8 +117,9 @@ namespace ManagerStudentCaltholic.Controllers
                     .ThenInclude(e => e.Student)
                 .Include(r => r.Enrollment)
                     .ThenInclude(e => e.ClassRoom)
-                .Where(r => selectedClassId == 0 || r.Enrollment.ClassRoomId == selectedClassId)
+                .Where(r => r.Enrollment.ClassRoomId == selectedClassId)
                 .OrderByDescending(r => r.CreatedAt)
+                .AsNoTracking()
                 .ToListAsync();
 
             return View(requests);
@@ -119,9 +137,19 @@ namespace ManagerStudentCaltholic.Controllers
         {
             var req = await _context.AbsenceRequests
                 .Include(r => r.Enrollment)
+                    .ThenInclude(e => e.ClassRoom)
                 .FirstOrDefaultAsync(r => r.Id == dto.RequestId);
 
-            if (req == null) return Json(new { success = false, message = "Không tìm thấy đơn." });
+            if (req == null)
+                return Json(new { success = false, message = "Không tìm thấy đơn." });
+
+            // SEC-04 FIX 4: Kiểm tra người duyệt có quyền trên lớp của học sinh này không
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var authorizedClasses = await GetAuthorizedClassesAsync(currentYear?.Id ?? 0);
+            if (!authorizedClasses.Any(c => c.Id == req.Enrollment.ClassRoomId))
+            {
+                return Json(new { success = false, message = "Bạn không có thẩm quyền duyệt đơn xin phép của lớp này!" });
+            }
 
             req.Status = dto.IsApproved ? "APPROVED" : "REJECTED";
             req.ReviewNote = dto.Note;
@@ -161,6 +189,43 @@ namespace ManagerStudentCaltholic.Controllers
 
             await _context.SaveChangesAsync();
             return Json(new { success = true, message = dto.IsApproved ? "Đã duyệt đơn và ghi nhận vắng có phép!" : "Đã từ chối đơn." });
+        }
+
+        /// <summary>
+        /// SEC - 04 FIX 2: Hàm phụ trợ lấy danh sách lớp học mà người dùng hiện tại được phép quản lý đơn nghỉ phép
+        /// </summary>
+        private async Task<List<ClassRoom>> GetAuthorizedClassesAsync(int currentYearId)
+        {
+            var classesQuery = _context.Classes
+                .Where(c => currentYearId == 0 || c.AcademicYearId == currentYearId);
+
+            // Nếu là Trưởng khối: Chỉ lấy các lớp thuộc khối mình phụ trách
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                }
+            }
+            // Nếu là Giáo lý viên: Chỉ lấy các lớp được phân công đứng lớp
+            else if (User.IsInRole(UserRole.Teacher))
+            {
+                var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                long.TryParse(userIdStr, out var currentUserId);
+
+                var assignedClassIds = await _context.ClassTeachers
+                    .Where(ct => ct.UserId == currentUserId && (currentYearId == 0 || ct.AcademicYearId == currentYearId))
+                    .Select(ct => ct.ClassRoomId)
+                    .ToListAsync();
+
+                classesQuery = classesQuery.Where(c => assignedClassIds.Contains(c.Id));
+            }
+
+            return await classesQuery
+                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
+                .AsNoTracking()
+                .ToListAsync();
         }
     }
 }

@@ -96,10 +96,17 @@ namespace ManagerStudentCaltholic.Controllers
                 var operatorIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 long.TryParse(operatorIdStr, out var operatorUserId);
 
+                // 1. Trong AssignBranchHead: Chặn gán nhầm Admin, Cha Tuyên Úy hoặc BĐH làm Trưởng khối
                 var targetUser = await _context.Users.FindAsync(newUserId);
-                if (targetUser == null)
+                if (targetUser == null || !targetUser.IsActive)
                 {
-                    return Json(new { success = false, message = "Không tìm thấy người dùng được chỉ định." });
+                    return Json(new { success = false, message = "Không tìm thấy người dùng hợp lệ được chỉ định." });
+                }
+
+                // SEC-03 FIX: Chỉ cho phép bổ nhiệm Trưởng khối từ tài khoản Teacher hoặc BranchHead
+                if (targetUser.Role != UserRole.Teacher && targetUser.Role != UserRole.BranchHead)
+                {
+                    return Json(new { success = false, message = "Chỉ có thể bổ nhiệm Trưởng khối đối với các tài khoản đang có vai trò Giáo lý viên hoặc Trưởng khối." });
                 }
 
                 var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
@@ -204,10 +211,33 @@ namespace ManagerStudentCaltholic.Controllers
             var operatorIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             long.TryParse(operatorIdStr, out var operatorUserId);
 
+            // SEC-03 FIX 1: Chỉ cho phép chuyển đổi giữa đúng 2 vai trò: ExecutiveBoard <-> Teacher
+            // Tuyệt đối chặn truyền targetRole = "Admin" hoặc "SpiritualDirector"
+            if (targetRole != UserRole.ExecutiveBoard && targetRole != UserRole.Teacher)
+            {
+                _logger.LogWarning("Cảnh báo bảo mật: User ID {OperatorId} truyền targetRole không hợp lệ ({TargetRole}).",
+                    operatorUserId, targetRole);
+                return Json(new { success = false, message = "Vai trò bàn giao không hợp lệ. Chỉ cho phép bổ nhiệm Ban Điều Hành hoặc mãn nhiệm về Giáo Lý Viên." });
+            }
+
             var targetUser = await _context.Users.FindAsync(userId);
             if (targetUser == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy tài khoản người dùng." });
+            }
+
+            // SEC-03 FIX 2: Không bao giờ cho phép tác động lên tài khoản Admin hoặc Cha Tuyên Úy
+            if (targetUser.Role == UserRole.Admin || targetUser.Role == UserRole.SpiritualDirector)
+            {
+                _logger.LogWarning("Cảnh báo bảo mật: User ID {OperatorId} cố gắng thay đổi vai trò của {TargetUser} ({Role}).",
+                    operatorUserId, targetUser.Username, targetUser.Role);
+                return Json(new { success = false, message = "Không được phép thay đổi vai trò của Quản trị viên hệ thống hoặc Cha Tuyên Úy." });
+            }
+
+            // SEC-03 FIX 3: Không cho phép tự mãn nhiệm hoặc tự thay đổi vai trò của chính mình
+            if (targetUser.Id == operatorUserId)
+            {
+                return Json(new { success = false, message = "Bạn không thể tự thay đổi vai trò của chính mình." });
             }
 
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
@@ -226,8 +256,12 @@ namespace ManagerStudentCaltholic.Controllers
             });
 
             targetUser.Role = targetRole;
+            if (targetRole == UserRole.ExecutiveBoard || targetRole == UserRole.Teacher)
+            {
+                targetUser.ManagedGradeLevel = null;
+            }
 
-            // Khi thay đổi vai trò (nâng cấp BĐH hoặc mãn nhiệm về Teacher): Thu hồi toàn bộ Refresh Token cũ
+            // Khi thay đổi vai trò: Thu hồi toàn bộ Refresh Token cũ
             var tokens = await _context.RefreshTokens
                 .Where(r => r.UserId == userId && r.RevokedAt == null)
                 .ToListAsync();
@@ -236,10 +270,12 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 t.RevokedAt = DateTime.UtcNow;
                 t.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+                t.ReplacedByToken = "REVOKED_ON_ROLE_CHANGE";
             }
 
             await _context.SaveChangesAsync();
-            _logger.LogInformation("Bàn giao vai trò User ID {UserId} từ {OldRole} -> {NewRole}", userId, oldRole, targetRole);
+            _logger.LogInformation("Bàn giao vai trò User ID {UserId} từ {OldRole} -> {NewRole} bởi Operator ID {OperatorId}",
+                userId, oldRole, targetRole, operatorUserId);
 
             return Json(new { success = true, message = $"Đã cập nhật vai trò người dùng sang {targetRole} thành công!" });
         }

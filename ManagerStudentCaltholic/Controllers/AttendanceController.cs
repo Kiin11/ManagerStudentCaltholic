@@ -682,6 +682,17 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
 
+            // 1. Trong ExportStatisticsExcel(int classId) và ExportMonthlySummaryExcel(int classId, int? month, int? year):
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade) &&
+                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
+                }
+            }
+
             var enrollments = targetClass.Enrollments
                 .Where(e => e.Student.IsActive)
                 .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
@@ -953,6 +964,21 @@ namespace ManagerStudentCaltholic.Controllers
             var classes = await classesQuery.OrderBy(c => c.Name).ToListAsync();
             ViewBag.Classes = classes;
 
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade))
+                {
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                }
+            }
+
+            // Và nếu truyền classId không nằm trong danh sách classes của khối mình thì trả về Forbid():
+            if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
+            {
+                return Forbid();
+            }
+
             var selectedClass = classId.HasValue
                 ? classes.FirstOrDefault(c => c.Id == classId.Value)
                 : classes.FirstOrDefault();
@@ -1207,6 +1233,16 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrEmpty(managedGrade) &&
+                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
+                }
+            }
 
             var targetMonth = month ?? DateTime.Today.Month;
             var targetYear = year ?? DateTime.Today.Year;
