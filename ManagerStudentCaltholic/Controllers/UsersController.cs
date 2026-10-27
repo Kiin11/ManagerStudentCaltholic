@@ -282,13 +282,13 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 2. API BATCH IMPORT GLV TỪ FILE EXCEL (TASK-814)
+        /// 
         /// </summary>
         /// <param name="file"></param>
         /// <param name="defaultPassword"></param>
         /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken] // SEC-02 FIX: Thay thế [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> ImportTeachersFromExcel(IFormFile file, [FromForm] string? defaultPassword)
         {
@@ -297,10 +297,24 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Vui lòng chọn file Excel danh sách GLV." });
             }
 
+            // SEC-10 FIX 1: Giới hạn dung lượng tối đa 5MB và chỉ cho phép định dạng .xlsx
+            const long maxFileSize = 5 * 1024 * 1024; // 5 MB
+            if (file.Length > maxFileSize)
+            {
+                return Json(new { success = false, message = "Dung lượng file Excel vượt quá giới hạn cho phép (Tối đa 5MB)." });
+            }
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (ext != ".xlsx")
+            {
+                return Json(new { success = false, message = "Định dạng file không hợp lệ. Vui lòng sử dụng file mẫu Excel (.xlsx)." });
+            }
+
             var teachers = new List<BatchTeacherItemDto>();
 
-            using (var stream = new MemoryStream())
+            try
             {
+                using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
                 using var workbook = new XLWorkbook(stream);
                 var worksheet = workbook.Worksheets.FirstOrDefault();
@@ -315,7 +329,8 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "File Excel không có dữ liệu để nạp." });
                 }
 
-                foreach (var row in rows)
+                // Giới hạn số dòng mỗi lần import (tối đa 500 GLV/lần) để chống treo request
+                foreach (var row in rows.Take(500))
                 {
                     var christian = row.Cell(1).GetString().Trim();
                     var first = row.Cell(2).GetString().Trim();
@@ -338,10 +353,14 @@ namespace ManagerStudentCaltholic.Controllers
                     });
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi đọc file Excel ImportTeachersFromExcel do người dùng {User} tải lên.", User.Identity?.Name);
+                return Json(new { success = false, message = "Không thể đọc nội dung file Excel. Vui lòng kiểm tra lại định dạng file mẫu." });
+            }
 
             var request = new BatchCreateTeachersRequestDto
             {
-                // SEC-09 FIX: Nếu không truyền mật khẩu riêng thì để null để ExecuteBatchCreate tự sinh mật khẩu ngẫu nhiên cho từng GLV
                 DefaultPassword = string.IsNullOrWhiteSpace(defaultPassword) ? null : defaultPassword.Trim(),
                 Teachers = teachers
             };
@@ -472,10 +491,12 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
+                // SEC-10 FIX: Ghi log chi tiết ở Server, không trả ex.Message về Client
+                _logger.LogError(ex, "Lỗi khi lưu danh sách tài khoản GLV hàng loạt vào Database.");
                 return Json(new BatchCreateTeachersResultDto
                 {
                     Success = false,
-                    Message = "Lỗi khi lưu tài khoản vào Database: " + ex.Message
+                    Message = "Đã xảy ra lỗi hệ thống khi lưu danh sách tài khoản. Vui lòng thử lại hoặc liên hệ Quản trị viên."
                 });
             }
         }
@@ -533,7 +554,12 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = "Lỗi khi lấy danh sách GLV: " + ex.Message });
+                _logger.LogError(ex, "Lỗi khi truy vấn danh sách GLV chưa phân công lớp.");
+                return Json(new
+                {
+                    success = false,
+                    message = "Không thể tải danh sách Giáo lý viên lúc này. Vui lòng thử lại sau."
+                });
             }
         }
 
@@ -602,7 +628,11 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi xảy ra trong quá trình BatchDeactivateTeachers");
-                return Json(new { success = false, message = "Lỗi khi xử lý dữ liệu: " + ex.Message });
+                return Json(new
+                {
+                    success = false,
+                    message = "Đã xảy ra lỗi trong quá trình vô hiệu hóa tài khoản. Vui lòng thử lại sau."
+                });
             }
         }
         #endregion
