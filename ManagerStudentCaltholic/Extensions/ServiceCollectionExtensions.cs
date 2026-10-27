@@ -90,7 +90,15 @@ namespace ManagerStudentCaltholic.Extensions
         public static IServiceCollection AddHybridAuthentication(this IServiceCollection services, IConfiguration configuration)
         {
             var jwtSettings = configuration.GetSection("JwtSettings");
-            var secretKey = jwtSettings["SecretKey"] ?? "ParishSecretKeyForAuthenticationToken2026!MustBeVeryLongAndSecureString";
+            var secretKey = jwtSettings["SecretKey"];
+
+            // SEC-01 FIX: Không dùng khóa fallback cứng, kiểm tra độ dài tối thiểu 32 ký tự (256-bit)
+            if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
+            {
+                throw new InvalidOperationException(
+                    "Lỗi cấu hình bảo mật: 'JwtSettings:SecretKey' chưa được thiết lập trong biến môi trường hoặc User Secrets, hoặc có độ dài nhỏ hơn 32 ký tự.");
+            }
+
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
             // Đăng ký cả Cookie (cho Razor) và JWT (cho API/Fetch)

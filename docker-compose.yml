@@ -10,6 +10,7 @@ services:
       - ASPNETCORE_HTTP_PORTS=8080
       # Chuỗi kết nối trực tiếp đến Azure Database for PostgreSQL Flexible Server
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;
+      - JwtSettings__SecretKey=${JWT_SECRET_KEY}
     expose:
       - "8080"
     networks:

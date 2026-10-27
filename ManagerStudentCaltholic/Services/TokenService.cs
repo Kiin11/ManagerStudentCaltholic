@@ -26,7 +26,14 @@ namespace ManagerStudentCaltholic.Services
         public string GenerateAccessToken(User user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
-            var secretKey = jwtSettings["SecretKey"] ?? "DefaultFallbackSecretKey12345678901234567890";
+            var secretKey = jwtSettings["SecretKey"];
+
+            // SEC-01 FIX: Bắt buộc phải lấy từ cấu hình môi trường, không dùng chuỗi mặc định
+            if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
+            {
+                throw new InvalidOperationException("Chưa cấu hình JwtSettings:SecretKey hợp lệ.");
+            }
+
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
