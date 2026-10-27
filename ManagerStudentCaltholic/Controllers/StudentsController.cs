@@ -76,7 +76,7 @@ namespace ManagerStudentCaltholic.Controllers
                     page = Math.Max(1, Math.Min(page, Math.Max(1, totalScopedPages)));
 
                     var scopedStudents = await scopedQuery
-                        .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
+                        .OrderBy(s => s.StudentCode).ThenBy(s => s.LastName)
                         .Skip((page - 1) * pageSize).Take(pageSize)
                         .ToListAsync();
 
@@ -119,8 +119,8 @@ namespace ManagerStudentCaltholic.Controllers
             page = Math.Max(1, Math.Min(page, Math.Max(1, totalPages)));
 
             var students = await query
-                .OrderBy(s => s.LastName)
-                .ThenBy(s => s.FirstName)
+                .OrderBy(s => s.StudentCode)
+                .ThenBy(s => s.LastName)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
