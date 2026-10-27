@@ -275,22 +275,26 @@ namespace ManagerStudentCaltholic.Controllers
         [Authorize]
         public async Task<IActionResult> Profile()
         {
-            var username = User.Identity?.Name;
-            if (string.IsNullOrEmpty(username)) return RedirectToAction(nameof(Login));
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!long.TryParse(userIdStr, out var currentUserId))
+            {
+                return RedirectToAction(nameof(Login));
+            }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username.ToLower());
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
+
             if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
 
-            // Lấy tất cả phân công giảng dạy của tài khoản này
+            // SEC-05 FIX: Chỉ lấy phân công giảng dạy khớp chính xác với khóa ngoại UserId của tài khoản
+            // Tuyệt đối không nối OR theo TeacherName hay PhoneNumber để chống mạo danh / trùng tên
             var allAssignments = await _context.ClassTeachers
                 .Include(ct => ct.ClassRoom)
                     .ThenInclude(c => c.AcademicYear)
                 .Include(ct => ct.ClassRoom)
                     .ThenInclude(c => c.Enrollments)
-                .Where(ct => ct.UserId == user.Id ||
-                             ct.TeacherName.ToLower() == user.Username.ToLower() ||
-                             ct.TeacherName.ToLower() == $"{user.FirstName} {user.LastName}".ToLower() ||
-                             (!string.IsNullOrEmpty(user.PhoneNumber) && ct.PhoneNumber == user.PhoneNumber))
+                .Where(ct => ct.UserId == user.Id)
                 .OrderByDescending(ct => ct.ClassRoom.AcademicYear.StartDate)
                 .ThenBy(ct => ct.ClassRoom.Name)
                 .Select(ct => new AssignedClassItemDto
@@ -356,16 +360,52 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateProfile(UserProfileViewModel model)
+        public async Task<IActionResult> UpdateProfile([Bind("ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address")] UserProfileViewModel model)
         {
-            var username = User.Identity?.Name;
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username!.ToLower());
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!long.TryParse(userIdStr, out var currentUserId))
+            {
+                return RedirectToAction(nameof(Login));
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
             if (user == null) return NotFound();
+
+            // Bỏ qua kiểm tra ModelState đối với các trường chỉ hiển thị không gửi lên từ Form
+            ModelState.Remove(nameof(UserProfileViewModel.Username));
+            ModelState.Remove(nameof(UserProfileViewModel.Role));
 
             if (!ModelState.IsValid)
             {
                 TempData["ErrorMessage"] = "Dữ liệu nhập chưa hợp lệ, vui lòng kiểm tra lại.";
                 return RedirectToAction(nameof(Profile));
+            }
+
+            var cleanPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
+            var cleanEmail = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email.Trim().ToLowerInvariant();
+
+            // SEC-05 FIX 1: Chặn nhập Số điện thoại trùng với tài khoản khác trong hệ thống
+            if (!string.IsNullOrEmpty(cleanPhone))
+            {
+                var phoneExists = await _context.Users
+                    .AnyAsync(u => u.Id != user.Id && u.PhoneNumber == cleanPhone);
+                if (phoneExists)
+                {
+                    TempData["ErrorMessage"] = "Số điện thoại này đã được sử dụng bởi một tài khoản khác.";
+                    return RedirectToAction(nameof(Profile));
+                }
+            }
+
+            // SEC-05 FIX 2: Chặn nhập Email trùng với tài khoản khác trong hệ thống
+            if (!string.IsNullOrEmpty(cleanEmail))
+            {
+                var emailExists = await _context.Users
+                    .AnyAsync(u => u.Id != user.Id && u.Email != null && u.Email.ToLower() == cleanEmail);
+                if (emailExists)
+                {
+                    TempData["ErrorMessage"] = "Địa chỉ Email này đã được sử dụng bởi một tài khoản khác.";
+                    return RedirectToAction(nameof(Profile));
+                }
             }
 
             user.ChristianName = model.ChristianName?.Trim();
@@ -374,9 +414,21 @@ namespace ManagerStudentCaltholic.Controllers
             user.DateOfBirth = model.DateOfBirth.HasValue
                 ? DateTime.SpecifyKind(model.DateOfBirth.Value.Date, DateTimeKind.Utc)
                 : null;
-            user.Email = model.Email?.Trim();
-            user.PhoneNumber = model.PhoneNumber?.Trim();
+            user.Email = cleanEmail;
+            user.PhoneNumber = cleanPhone;
             user.Address = model.Address?.Trim();
+
+            // SEC-05 FIX 3: Đồng bộ lại tên và SĐT hiển thị trên các lớp mà GLV này được gán qua đúng UserId
+            var assignedRecords = await _context.ClassTeachers
+                .Where(ct => ct.UserId == user.Id)
+                .ToListAsync();
+
+            var updatedDisplayName = $"{user.ChristianName} {user.FirstName} {user.LastName}".Trim();
+            foreach (var ct in assignedRecords)
+            {
+                ct.TeacherName = updatedDisplayName;
+                ct.PhoneNumber = user.PhoneNumber;
+            }
 
             await _context.SaveChangesAsync();
 
@@ -387,8 +439,6 @@ namespace ManagerStudentCaltholic.Controllers
         /// <summary>
         /// 8. POST: /Account/ChangePassword (Ajax) (TASK-616)
         /// </summary>
-        /// <param name="model"></param>
-        /// <returns></returns>
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
@@ -400,8 +450,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = string.Join("; ", errors) });
             }
 
-            var username = User.Identity?.Name;
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == username!.ToLower());
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!long.TryParse(userIdStr, out var currentUserId))
+            {
+                return Json(new { success = false, message = "Phiên đăng nhập không hợp lệ." });
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
             if (user == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy người dùng." });
@@ -417,9 +472,18 @@ namespace ManagerStudentCaltholic.Controllers
             user.PasswordHash = _passwordHasher.HashPassword(model.NewPassword);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Người dùng {Username} đã đổi mật khẩu thành công.", user.Username);
+            // SEC-06 FIX: Thu hồi toàn bộ Refresh Token cũ trên mọi thiết bị và cấp lại Token mới cho thiết bị hiện tại
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _tokenService.RevokeAllUserTokensAsync(user.Id, clientIp, "REVOKED_ON_PASSWORD_CHANGE");
 
-            return Json(new { success = true, message = "Đổi mật khẩu thành công! Vui lòng ghi nhớ mật khẩu mới." });
+            var newRefreshToken = _tokenService.GenerateRefreshToken(user.Id, clientIp);
+            _context.RefreshTokens.Add(newRefreshToken);
+            await _context.SaveChangesAsync();
+            SetRefreshTokenCookie(newRefreshToken.Token, newRefreshToken.ExpiresAt);
+
+            _logger.LogInformation("Người dùng {Username} đã đổi mật khẩu và làm mới toàn bộ phiên đăng nhập.", user.Username);
+
+            return Json(new { success = true, message = "Đổi mật khẩu thành công! Các phiên đăng nhập trên thiết bị khác đã được đăng xuất." });
         }
     }
 }

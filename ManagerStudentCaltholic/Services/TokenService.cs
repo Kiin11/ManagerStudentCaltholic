@@ -28,7 +28,6 @@ namespace ManagerStudentCaltholic.Services
             var jwtSettings = _configuration.GetSection("JwtSettings");
             var secretKey = jwtSettings["SecretKey"];
 
-            // SEC-01 FIX: Bắt buộc phải lấy từ cấu hình môi trường, không dùng chuỗi mặc định
             if (string.IsNullOrWhiteSpace(secretKey) || secretKey.Length < 32)
             {
                 throw new InvalidOperationException("Chưa cấu hình JwtSettings:SecretKey hợp lệ.");
@@ -43,13 +42,19 @@ namespace ManagerStudentCaltholic.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim("FullName", $"{user.FirstName} {user.LastName}"),
+                new Claim("FullName", $"{user.FirstName} {user.LastName}".Trim()),
                 new Claim(ClaimTypes.Role, user.Role)
             };
 
             if (!string.IsNullOrWhiteSpace(user.Email))
             {
                 claims.Add(new Claim(ClaimTypes.Email, user.Email));
+            }
+
+            // SEC-08 FIX: Nạp đầy đủ ManagedGradeLevel vào JWT Token cho Trưởng khối (BranchHead)
+            if (!string.IsNullOrWhiteSpace(user.ManagedGradeLevel))
+            {
+                claims.Add(new Claim("ManagedGradeLevel", user.ManagedGradeLevel));
             }
 
             var expireMinutes = int.TryParse(jwtSettings["AccessTokenExpirationMinutes"], out int exp) ? exp : 30;
@@ -154,6 +159,26 @@ namespace ManagerStudentCaltholic.Services
             existingToken.RevokedByIp = ipAddress;
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<int> RevokeAllUserTokensAsync(long userId, string? ipAddress, string reason)
+        {
+            var activeTokens = await _context.RefreshTokens
+                .Where(r => r.UserId == userId && r.RevokedAt == null)
+                .ToListAsync();
+
+            if (!activeTokens.Any())
+                return 0;
+
+            foreach (var token in activeTokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+                token.RevokedByIp = ipAddress;
+                token.ReplacedByToken = reason;
+            }
+
+            await _context.SaveChangesAsync();
+            return activeTokens.Count;
         }
     }
 }

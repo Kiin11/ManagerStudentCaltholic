@@ -203,7 +203,12 @@ namespace ManagerStudentCaltholic.Controllers
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade))
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    // SEC-08 FIX: Trưởng khối chưa được phân công khối nào thì không trả về dữ liệu toàn trường
+                    classesQuery = classesQuery.Where(_ => false);
+                }
+                else
                 {
                     classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
                 }

@@ -352,8 +352,10 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Số điện thoại Phụ huynh xác nhận (*)</label>
+                    <!-- SEC-07 FIX: Không gán value="@Model. ParentPhone", chỉ hiển thị SĐT đã che ở placeholder -->
                     <input type="tel" id="absPhone" class="form-control"
                            placeholder="Nhập đầy đủ SĐT (@Model.MaskedParentPhone) để xác nhận..." required />
+                    <small class="text-muted">Vui lòng nhập đầy đủ số điện thoại đã đăng ký với Giáo xứ để xác thực đơn xin phép.</small>
                 </div>
                 <div class="mb-2">
                     <label class="form-label fw-semibold">Lý do xin phép nghỉ (*)</label>
@@ -371,7 +373,12 @@
 @section Scripts {
     <script>
         async function submitAbsence() {
+            const phone = document.getElementById('absPhone').value.trim();
             const reason = document.getElementById('absReason').value.trim();
+            if (!phone) {
+                alert('Vui lòng nhập số điện thoại Phụ huynh đã đăng ký để xác thực!');
+                return;
+            }
             if (!reason) {
                 alert('Vui lòng nhập lý do xin phép nghỉ!');
                 return;
