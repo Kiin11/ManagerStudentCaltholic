@@ -1,9 +1,11 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting; // SEC-07 FIX: Thêm RateLimiting
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using QRCoder;
@@ -41,6 +43,7 @@ namespace ManagerStudentCaltholic.Controllers
         // POST: /TraCuu/Search
         [HttpPost("Search")]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)] // SEC-07 FIX: Giới hạn tối đa 10 request/phút/IP cho cả tra cứu đúng và sai
         public async Task<IActionResult> Search([FromForm] StudentLookupRequestDto model)
         {
             if (!ModelState.IsValid)
