@@ -52,9 +52,8 @@ namespace ManagerStudentCaltholic.Controllers
         /// <returns></returns>
         [HttpPost]
         [AllowAnonymous]
-        [ValidateAntiForgeryToken]
+        [ValidateAntiForgeryToken] // SEC-02 FIX: Bật lại kiểm tra Anti-CSRF (đã xóa [IgnoreAntiforgeryToken])
         [EnableRateLimiting(SecurityExtensions.PolicyAuth)] // Chặn spam đăng nhập
-        [IgnoreAntiforgeryToken] // Bỏ qua kiểm tra Anti-CSRF riêng cho form đăng nhập ban đầu
         public async Task<IActionResult> Login(LoginRequestDto model)
         {
             if (!ModelState.IsValid)
@@ -251,7 +250,8 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 HttpOnly = true,
                 Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Lax,
+                SameSite = SameSiteMode.Strict, // SEC-02 FIX: Chặn gửi Cookie chéo trang (Cross-Site)
+                Path = "/Account",              // SEC-02 FIX: Chỉ gửi Cookie này khi gọi các đường dẫn thuộc /Account
                 Expires = expires
             };
             Response.Cookies.Append("refreshToken", token, cookieOptions);

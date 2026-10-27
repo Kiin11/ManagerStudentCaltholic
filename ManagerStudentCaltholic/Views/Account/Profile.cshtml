@@ -263,7 +263,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': token
+                        'X-CSRF-TOKEN': token // SEC-02 FIX: Đổi từ 'RequestVerificationToken' sang 'X-CSRF-TOKEN'
                     },
                     body: JSON.stringify({
                         currentPassword: currentPassword,
