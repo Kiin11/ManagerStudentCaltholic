@@ -145,7 +145,7 @@ namespace ManagerStudentCaltholic.Controllers
                 .Include(e => e.Student)
                 .Include(e => e.GradeRecords)
                 .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
+                .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
                 .AsNoTracking()
                 .ToListAsync();
 
