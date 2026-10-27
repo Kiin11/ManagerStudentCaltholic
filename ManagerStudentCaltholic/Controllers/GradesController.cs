@@ -80,9 +80,17 @@ namespace ManagerStudentCaltholic.Controllers
             else if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade))
+                var uid = CurrentUserId;
+
+                // SEC-08 FIX (Fail-Closed): Nếu có ManagedGradeLevel thì lấy theo khối,
+                // nếu chưa gán khối thì chỉ lấy lớp đứng dạy trực tiếp, tuyệt đối không mở toang toàn bộ lớp!
+                if (!string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == uid));
+                }
+                else
+                {
+                    classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
                 }
             }
             else
