@@ -1,8 +1,8 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using System.Security.Claims;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
-using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,8 +18,12 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IStudentExcelService _excelService;
         private readonly IQrCodeService _qrService;
 
-        public StudentsController(ParishDbContext context, IStudentCodeGenerator codeGenerator, 
-            ILogger<StudentsController> logger, IStudentExcelService excelService, IQrCodeService qrCodeService)
+        public StudentsController(
+            ParishDbContext context,
+            IStudentCodeGenerator codeGenerator,
+            ILogger<StudentsController> logger,
+            IStudentExcelService excelService,
+            IQrCodeService qrCodeService)
         {
             _context = context;
             _codeGenerator = codeGenerator;
@@ -28,70 +32,114 @@ namespace ManagerStudentCaltholic.Controllers
             _qrService = qrCodeService;
         }
 
+        private long CurrentUserId =>
+            long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+        private bool IsLeadership =>
+            User.IsInRole(UserRole.Admin) ||
+            User.IsInRole(UserRole.SpiritualDirector) ||
+            User.IsInRole(UserRole.ExecutiveBoard);
+
         /// <summary>
-        /// 1. GET: /Students (Tìm kiếm & Phân trang)
+        /// SEC-NEW-04 FIX: Kiểm tra quyền truy cập của GLV / Trưởng khối đối với một Lớp học
         /// </summary>
-        /// <param name="searchKeyword"></param>
-        /// <param name="gender"></param>
-        /// <param name="isActive"></param>
-        /// <param name="page"></param>
-        /// <returns></returns>
+        private async Task<bool> CanAccessClassAsync(ClassRoom targetClass)
+        {
+            if (IsLeadership) return true;
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade) &&
+                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
+        }
+
+        /// <summary>
+        /// SEC-NEW-04 FIX: Kiểm tra quyền truy cập của GLV / Trưởng khối đối với một Thiếu nhi cụ thể
+        /// </summary>
+        private async Task<bool> CanAccessStudentAsync(long studentId)
+        {
+            if (IsLeadership) return true;
+
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade)) return false; // Fail-closed
+
+                return await _context.Enrollments
+                    .Include(e => e.ClassRoom)
+                    .AnyAsync(e => e.StudentId == studentId &&
+                                   (yearId == 0 || e.ClassRoom.AcademicYearId == yearId) &&
+                                   e.ClassRoom.GradeLevel == managedGrade);
+            }
+
+            // Nếu là Teacher: Chỉ được truy cập học sinh thuộc lớp mình dạy
+            var assignedClassIds = await _context.ClassTeachers
+                .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId))
+                .Select(ct => ct.ClassRoomId)
+                .ToListAsync();
+
+            return await _context.Enrollments
+                .AnyAsync(e => e.StudentId == studentId && assignedClassIds.Contains(e.ClassRoomId));
+        }
+
         [HttpGet]
         public async Task<IActionResult> Index(string? searchKeyword, string? gender, bool? isActive, int page = 1)
         {
             const int pageSize = 15;
+            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
 
-            // Nếu là Trưởng khối, chỉ cho phép tìm kiếm/xem hồ sơ của học sinh đang học trong khối của mình
-            if (User.IsInRole(UserRole.BranchHead))
+            IQueryable<Student> query = _context.Students.AsNoTracking();
+
+            // SEC-NEW-04 FIX: Phân tách phạm vi hiển thị (Fail-Closed cho BranchHead và Teacher)
+            if (!IsLeadership)
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade))
+                if (User.IsInRole(UserRole.BranchHead))
                 {
-                    var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-                    var yearId = currentYear?.Id ?? 0;
+                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                    if (string.IsNullOrWhiteSpace(managedGrade))
+                    {
+                        query = query.Where(_ => false);
+                    }
+                    else
+                    {
+                        var studentIdsInGrade = await _context.Enrollments
+                            .Include(e => e.ClassRoom)
+                            .Where(e => e.ClassRoom.AcademicYearId == yearId && e.ClassRoom.GradeLevel == managedGrade)
+                            .Select(e => e.StudentId)
+                            .Distinct()
+                            .ToListAsync();
 
-                    // Tìm danh sách ID học sinh đang học ở các lớp thuộc khối này
-                    var studentIdsInGrade = await _context.Enrollments
-                        .Include(e => e.ClassRoom)
-                        .Where(e => e.ClassRoom.AcademicYearId == yearId && e.ClassRoom.GradeLevel == managedGrade)
+                        query = query.Where(s => studentIdsInGrade.Contains(s.Id));
+                    }
+                }
+                else if (User.IsInRole(UserRole.Teacher))
+                {
+                    var assignedClassIds = await _context.ClassTeachers
+                        .Where(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId)
+                        .Select(ct => ct.ClassRoomId)
+                        .ToListAsync();
+
+                    var studentIdsInClasses = await _context.Enrollments
+                        .Where(e => assignedClassIds.Contains(e.ClassRoomId))
                         .Select(e => e.StudentId)
                         .Distinct()
                         .ToListAsync();
 
-                    var scopedQuery = _context.Students.AsNoTracking().Where(s => studentIdsInGrade.Contains(s.Id));
-
-                    if (!string.IsNullOrWhiteSpace(searchKeyword))
-                    {
-                        var term = searchKeyword.Trim().ToLower();
-                        scopedQuery = scopedQuery.Where(s =>
-                            s.FirstName.ToLower().Contains(term) ||
-                            s.LastName.ToLower().Contains(term) ||
-                            s.ChristianName.ToLower().Contains(term) ||
-                            s.StudentCode.ToLower().Contains(term) ||
-                            (s.ParentPhone != null && s.ParentPhone.Contains(term)));
-                    }
-
-                    var totalScopedCount = await scopedQuery.CountAsync();
-                    var totalScopedPages = (int)Math.Ceiling(totalScopedCount / (double)pageSize);
-                    page = Math.Max(1, Math.Min(page, Math.Max(1, totalScopedPages)));
-
-                    var scopedStudents = await scopedQuery
-                        .OrderBy(s => s.StudentCode).ThenBy(s => s.LastName)
-                        .Skip((page - 1) * pageSize).Take(pageSize)
-                        .ToListAsync();
-
-                    ViewBag.SearchKeyword = searchKeyword;
-                    ViewBag.Gender = gender ?? "ALL";
-                    ViewBag.IsActive = isActive;
-                    ViewBag.CurrentPage = page;
-                    ViewBag.TotalPages = totalScopedPages;
-                    ViewBag.TotalCount = totalScopedCount;
-
-                    return View(scopedStudents);
+                    query = query.Where(s => studentIdsInClasses.Contains(s.Id));
                 }
             }
-
-            var query = _context.Students.AsNoTracking().AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(searchKeyword))
             {
@@ -135,11 +183,6 @@ namespace ManagerStudentCaltholic.Controllers
             return View(students);
         }
 
-        /// <summary>
-        /// 2. POST: /Students/Create
-        /// </summary>
-        /// <param name="model"></param>
-        /// <returns></returns>
         [HttpPost]
         [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
@@ -161,7 +204,6 @@ namespace ManagerStudentCaltholic.Controllers
                     }
                 }
 
-                // Sử dụng đường dẫn namespace đầy đủ để không bị nhầm lẫn class:
                 var entity = new Student
                 {
                     StudentCode = model.StudentCode.Trim().ToUpper(),
@@ -170,12 +212,8 @@ namespace ManagerStudentCaltholic.Controllers
                     LastName = model.LastName.Trim(),
                     Gender = model.Gender,
                     DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth, DateTimeKind.Utc),
-                    BaptismDate = model.BaptismDate.HasValue
-                        ? DateTime.SpecifyKind(model.BaptismDate.Value, DateTimeKind.Utc)
-                        : null,
-                    ConfirmationDate = model.ConfirmationDate.HasValue
-                        ? DateTime.SpecifyKind(model.ConfirmationDate.Value, DateTimeKind.Utc)
-                        : null,
+                    BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value, DateTimeKind.Utc) : null,
+                    ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value, DateTimeKind.Utc) : null,
                     ParentPhone = model.ParentPhone?.Trim(),
                     IsActive = true
                 };
@@ -195,15 +233,18 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 3. GET: /Students/GetStudentAjax/{id}
+        /// 3. GET: /Students/GetStudentAjax/{id} (SEC-NEW-04 FIX: Chặn IDOR xem trộm SĐT phụ huynh lớp khác)
         /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> GetStudentAjax(long id)
         {
-            var student = await _context.Students.FindAsync(id);
+            var student = await _context.Students.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
             if (student == null) return NotFound();
+
+            if (!await CanAccessStudentAsync(id))
+            {
+                return Forbid();
+            }
 
             return Json(new
             {
@@ -222,7 +263,10 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
+        /// 4. POST: /Students/Edit (SEC-NEW-04 FIX: Chỉ Admin, BĐH hoặc Trưởng khối đúng phạm vi được sửa)
+        /// </summary>
         [HttpPost]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(StudentViewModel model)
         {
@@ -230,6 +274,11 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 var target = await _context.Students.FindAsync(model.Id);
                 if (target == null) return NotFound();
+
+                if (!await CanAccessStudentAsync(target.Id))
+                {
+                    return Forbid();
+                }
 
                 target.ChristianName = model.ChristianName.Trim();
                 target.FirstName = model.FirstName.Trim();
@@ -248,11 +297,10 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// POST: /Students/ToggleActive/{id}
+        /// 5. POST: /Students/ToggleActive/{id} (SEC-NEW-04 FIX: Chỉ Admin và BĐH được khóa/mở khóa hồ sơ gốc)
         /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ToggleActive(long id)
         {
@@ -266,11 +314,8 @@ namespace ManagerStudentCaltholic.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        /// <summary>
-        /// Tải file mẫu Excel
-        /// </summary>
-        /// <returns></returns>
         [HttpGet]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         public IActionResult DownloadTemplate()
         {
             var content = _excelService.GenerateTemplateFile();
@@ -278,17 +323,23 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// Upload và Import Excel hàng loạt
+        /// 6. POST: /Students/ImportExcel (SEC-NEW-04 FIX: Giới hạn quyền RequireExecutiveBoard + Kiểm tra định dạng & dung lượng)
         /// </summary>
-        /// <param name="excelFile"></param>
-        /// <returns></returns>
         [HttpPost]
+        [Authorize(Policy = "RequireExecutiveBoard")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ImportExcel(IFormFile excelFile)
         {
             if (excelFile == null || excelFile.Length == 0)
             {
                 TempData["ErrorMessage"] = "Vui lòng chọn 1 file Excel (.xlsx) hợp lệ.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            const long maxFileSize = 5 * 1024 * 1024; // 5MB
+            if (excelFile.Length > maxFileSize || Path.GetExtension(excelFile.FileName).ToLowerInvariant() != ".xlsx")
+            {
+                TempData["ErrorMessage"] = "Chỉ chấp nhận file định dạng .xlsx và dung lượng tối đa 5MB.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -310,17 +361,12 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi nạp file Excel");
-                TempData["ErrorMessage"] = "Lỗi khi xử lý file Excel: " + ex.Message;
+                TempData["ErrorMessage"] = "Không thể xử lý file Excel. Vui lòng kiểm tra lại đúng biểu mẫu.";
             }
 
             return RedirectToAction(nameof(Index));
         }
 
-        /// <summary>
-        /// GET: /Students/DownloadQr/{studentCode} (Tải ảnh PNG lẻ)
-        /// </summary>
-        /// <param name="studentCode"></param>
-        /// <returns></returns>
         [HttpGet]
         public IActionResult DownloadQr(string studentCode)
         {
@@ -335,10 +381,8 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// GET: /Students/PrintBadges?classId=... (Trang in thẻ học viên có QR)
+        /// 7. GET: /Students/PrintBadges (SEC-NEW-04 FIX: Kiểm tra quyền phụ trách lớp trước khi in thẻ)
         /// </summary>
-        /// <param name="classId"></param>
-        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> PrintBadges(int classId)
         {
@@ -352,6 +396,11 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 TempData["ErrorMessage"] = "Không tìm thấy lớp học yêu cầu.";
                 return RedirectToAction("Index", "Classes");
+            }
+
+            if (!await CanAccessClassAsync(targetClass))
+            {
+                return Forbid();
             }
 
             var activeStudents = targetClass.Enrollments

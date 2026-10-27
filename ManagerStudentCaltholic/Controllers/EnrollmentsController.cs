@@ -102,7 +102,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> AssignStudents([FromBody] AssignStudentsRequest request)
         {
             if (request == null || !request.StudentIds.Any())
@@ -174,7 +174,7 @@ namespace ManagerStudentCaltholic.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi xếp học sinh vào lớp ID: {ClassId}", request.ClassId);
-                return Json(new { success = false, message = "Có lỗi xảy ra trong quá trình xếp lớp: " + ex.Message });
+                return Json(new { success = false, message = "Có lỗi xảy ra trong quá trình xếp lớp. Vui lòng thử lại." });
             }
         }
 
@@ -184,7 +184,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="enrollmentId"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveStudent(long enrollmentId)
         {
             var enrollment = await _context.Enrollments

@@ -215,8 +215,8 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                var inner = ex.InnerException?.Message ?? ex.Message;
-                return Json(new { success = false, message = "Lỗi Database: " + inner });
+                _logger.LogError(ex, "Lỗi khi bổ nhiệm Trưởng khối {GradeLevel} cho niên khóa {YearId}", gradeLevel, academicYearId);
+                return Json(new { success = false, message = "Không thể lưu phân công Trưởng khối lúc này. Vui lòng kiểm tra lại dữ liệu." });
             }
         }
 

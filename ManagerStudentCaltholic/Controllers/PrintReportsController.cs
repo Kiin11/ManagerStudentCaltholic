@@ -27,6 +27,10 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> ReportCards(int classId)
         {
+            var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
+            if (targetClass == null) return NotFound();
+            if (!await HasAccessToClassAsync(targetClass)) return Forbid();
+
             var model = await BuildBatchPrintData(classId);
             if (model == null) return NotFound();
             return View(model);
@@ -38,6 +42,10 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> SacramentCertificates(int classId)
         {
+            var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
+            if (targetClass == null) return NotFound();
+            if (!await HasAccessToClassAsync(targetClass)) return Forbid();
+
             var model = await BuildBatchPrintData(classId);
             if (model == null) return NotFound();
             // Lọc các em đủ điều kiện
@@ -51,6 +59,10 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> CertificatesOfMerit(int classId)
         {
+            var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
+            if (targetClass == null) return NotFound();
+            if (!await HasAccessToClassAsync(targetClass)) return Forbid();
+
             var model = await BuildBatchPrintData(classId);
             if (model == null) return NotFound();
             // Lọc các em đạt danh hiệu Khá trở lên
@@ -131,6 +143,32 @@ namespace ManagerStudentCaltholic.Controllers
                 AcademicYearName = targetClass.AcademicYear.Name,
                 Students = studentItems
             };
+        }
+
+        private async Task<bool> HasAccessToClassAsync(ClassRoom targetClass)
+        {
+            if (User.IsInRole(UserRole.Admin) ||
+                User.IsInRole(UserRole.SpiritualDirector) ||
+                User.IsInRole(UserRole.ExecutiveBoard))
+            {
+                return true;
+            }
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade) &&
+                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!long.TryParse(userIdStr, out var uid)) return false;
+
+            return await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == uid);
         }
     }
 }

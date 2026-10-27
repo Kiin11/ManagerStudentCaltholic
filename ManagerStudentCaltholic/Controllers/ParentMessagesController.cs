@@ -41,15 +41,43 @@ namespace ManagerStudentCaltholic.Controllers
             var template = await _context.ParentMessageTemplates.FindAsync(templateId);
             if (template == null) return NotFound(new { success = false, message = "Không tìm thấy mẫu tin nhắn." });
 
-            var student = await _context.Students.FindAsync(studentId);
             var classRoom = await _context.Classes.FindAsync(classId);
+            if (classRoom == null)
+                return BadRequest(new { success = false, message = "Thông tin lớp không hợp lệ." });
 
-            if (student == null || classRoom == null)
-                return BadRequest(new { success = false, message = "Thông tin học viên hoặc lớp không hợp lệ." });
+            // SEC-NEW-05 FIX 1: Kiểm tra quyền của GLV / Trưởng khối trên lớp này
+            bool isLeadership = User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard);
+            if (!isLeadership)
+            {
+                if (User.IsInRole(UserRole.BranchHead))
+                {
+                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                    if (string.IsNullOrWhiteSpace(managedGrade) ||
+                        !string.Equals(classRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    var uidStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    long.TryParse(uidStr, out var uid);
+                    bool isAssigned = await _context.ClassTeachers.AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == uid);
+                    if (!isAssigned) return Forbid();
+                }
+            }
 
-            // Thay thế các biến động (Placeholder substitution)
+            // SEC-NEW-05 FIX 2: Đảm bảo thiếu nhi thực sự thuộc lớp đang chọn
+            var enrollment = await _context.Enrollments
+                .Include(e => e.Student)
+                .FirstOrDefaultAsync(e => e.ClassRoomId == classId && e.StudentId == studentId);
+
+            if (enrollment == null)
+                return BadRequest(new { success = false, message = "Học viên không thuộc lớp học đã chọn." });
+
+            var student = enrollment.Student;
             string message = template.ContentTemplate
-                .Replace("{TenThieuNhi}", $"{student.ChristianName} {student.FirstName} {student.LastName}")
+                .Replace("{TenThieuNhi}", $"{student.ChristianName} {student.FirstName} {student.LastName}".Trim())
                 .Replace("{TenLop}", classRoom.Name)
                 .Replace("{NgayVang}", DateTime.Now.ToString("dd/MM/yyyy"))
                 .Replace("{SDTLienHe}", "Văn phòng Giáo xứ");

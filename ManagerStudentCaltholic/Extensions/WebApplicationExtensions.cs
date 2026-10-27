@@ -1,20 +1,13 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using System.Security.Cryptography;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
-using ManagerStudentCaltholic.Services;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Extensions
 {
     public static class WebApplicationExtensions
     {
-        /// <summary>
-        /// Auto registry and run Migration to PostgreSQL database when the application starts. This is useful for development and testing environments. In production, it's recommended to manage migrations manually.
-        /// </summary>
-        /// <param name="app"></param>
-        /// <returns></returns>
         public static WebApplication ApplyDatabaseMigrations(this WebApplication app)
         {
             using var scope = app.Services.CreateScope();
@@ -28,24 +21,25 @@ namespace ManagerStudentCaltholic.Extensions
                 dbContext.Database.Migrate();
                 logger.LogInformation("Áp dụng Migrations thành công!");
 
-                // Seed tài khoản Quản trị viên hệ thống (Admin) và Cha Tuyên Úy nếu chưa có
                 if (!dbContext.Users.Any())
                 {
                     logger.LogInformation("Khởi tạo tài khoản mặc định ban đầu...");
                     var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
                     var adminInitPass = config["SeedSettings:AdminPassword"];
+                    bool isGeneratedAdminPass = false;
                     if (string.IsNullOrWhiteSpace(adminInitPass))
                     {
-                        adminInitPass = "Adm!" + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(9));
-                        logger.LogWarning("Đã sinh mật khẩu khởi tạo ngẫu nhiên lần đầu cho 'admin': {AdminPass} (Vui lòng đổi ngay sau khi đăng nhập!)", adminInitPass);
+                        adminInitPass = "Adm!" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(9));
+                        isGeneratedAdminPass = true;
                     }
 
                     var directorInitPass = config["SeedSettings:SpiritualDirectorPassword"];
+                    bool isGeneratedDirectorPass = false;
                     if (string.IsNullOrWhiteSpace(directorInitPass))
                     {
-                        directorInitPass = "Cha!" + Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(9));
-                        logger.LogWarning("Đã sinh mật khẩu khởi tạo ngẫu nhiên lần đầu cho 'chaxu': {DirectorPass} (Vui lòng đổi ngay sau khi đăng nhập!)", directorInitPass);
+                        directorInitPass = "Cha!" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(9));
+                        isGeneratedDirectorPass = true;
                     }
 
                     var adminUser = new User
@@ -76,7 +70,21 @@ namespace ManagerStudentCaltholic.Extensions
 
                     dbContext.Users.AddRange(adminUser, spiritualDirector);
                     dbContext.SaveChanges();
-                    logger.LogInformation("Đã tạo tài khoản mặc định: admin (Admin@123) và chaxu (ChaXu@123).");
+
+                    // SEC-NEW-12 FIX 2: Tuyệt đối không ghi mật khẩu cleartext vào Serilog (tránh lộ trên /Admin/Logs)
+                    // Chỉ in một lần duy nhất ra Standard Console nếu chưa cấu hình biến môi trường SeedSettings
+                    if (isGeneratedAdminPass || isGeneratedDirectorPass)
+                    {
+                        Console.WriteLine("==================================================================");
+                        Console.WriteLine("[INIT SEED] Tài khoản khởi tạo lần đầu (Vui lòng đổi mật khẩu ngay):");
+                        if (isGeneratedAdminPass)
+                            Console.WriteLine($"  - Username: admin      | Password: {adminInitPass}");
+                        if (isGeneratedDirectorPass)
+                            Console.WriteLine($"  - Username: chatienuy  | Password: {directorInitPass}");
+                        Console.WriteLine("==================================================================");
+                    }
+
+                    logger.LogInformation("Đã khởi tạo thành công 2 tài khoản hệ thống mặc định: 'admin' và 'chatienuy'.");
                 }
             }
             catch (Exception ex)
@@ -87,6 +95,5 @@ namespace ManagerStudentCaltholic.Extensions
 
             return app;
         }
-
     }
 }

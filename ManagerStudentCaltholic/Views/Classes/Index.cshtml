@@ -342,6 +342,9 @@
 
 @section Scripts {
     <script>
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
         let currentClassId = 0;
         let cachedAvailableTeachers = null;
 
@@ -432,7 +435,7 @@
             }
         }
 
-        // Gửi API gán GLV
+        // Gửi API gán GLV (SEC-NEW-02 & 03 FIX: Bổ sung X-CSRF-TOKEN)
         async function submitAssignTeacher() {
             const classId = document.getElementById('assignClassId').value;
             const userId = document.getElementById('selectTeacherAccount').value;
@@ -448,6 +451,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken(),
                         'X-Requested-With': 'XMLHttpRequest'
                     },
                     body: JSON.stringify({
@@ -457,20 +461,11 @@
                     })
                 });
 
-                const rawText = await res.text();
-                let json;
-                try {
-                    json = JSON.parse(rawText);
-                } catch (e) {
-                    console.error("Server HTML response:", rawText);
-                    alert(`Lỗi máy chủ (HTTP ${res.status}): Không thể xử lý phản hồi. Xem chi tiết tại tab Console F12.`);
-                    return;
-                }
-
+                const json = await res.json();
                 if (json.success) {
                     alert(json.message);
-                    await loadClassTeachers(classId); // Cập nhật lại danh sách trong modal
-                    location.reload(); // Làm mới trang để cập nhật tên lên thẻ card
+                    await loadClassTeachers(classId);
+                    location.reload();
                 } else {
                     alert("Lỗi: " + json.message);
                 }
@@ -479,13 +474,16 @@
             }
         }
 
-        // Hủy phân công GLV
+        // Hủy phân công GLV (SEC-NEW-02 & 03 FIX: Bổ sung X-CSRF-TOKEN)
         async function removeTeacher(teacherAssignmentId, classId) {
             if (!confirm("Bạn có chắc chắn muốn hủy phân công GLV này khỏi lớp?")) return;
 
             try {
                 const res = await fetch(`/Classes/RemoveTeacher?id=${teacherAssignmentId}`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    }
                 });
                 const json = await res.json();
                 if (json.success) {
@@ -498,7 +496,8 @@
                 alert("Lỗi kết nối máy chủ: " + e.message);
             }
         }
-                // Gọi API lấy danh sách phòng còn trống khi thay đổi Khối/Ngành hoặc mở modal
+        
+        // Gọi API lấy danh sách phòng còn trống khi thay đổi Khối/Ngành hoặc mở modal
         async function loadAvailableRoomsForModal() {
             const yearId = document.getElementById('modalAcademicYearId')?.value || @selectedYearId;
             const gradeLevel = document.getElementById('modalGradeLevelSelect')?.value || 'Khai Tâm';

@@ -255,6 +255,14 @@ namespace ManagerStudentCaltholic.Controllers
             if (config == null)
                 return Json(new { success = false, message = "Cột điểm không tồn tại." });
 
+            // SEC-NEW-05 FIX: Chặn truyền GradeConfigurationId của lớp khác hoặc niên khóa khác
+            if (config.AcademicYearId != enrollment.ClassRoom.AcademicYearId ||
+                (config.GradeLevel != "ALL" && config.GradeLevel != enrollment.ClassRoom.GradeLevel) ||
+                (config.ClassRoomId != null && config.ClassRoomId != enrollment.ClassRoomId))
+            {
+                return BadRequest(new { success = false, message = "Cột điểm không thuộc phạm vi lớp học này." });
+            }
+
             var record = await _context.GradeRecords
                 .FirstOrDefaultAsync(r => r.EnrollmentId == dto.EnrollmentId && r.GradeConfigurationId == dto.GradeConfigurationId);
 

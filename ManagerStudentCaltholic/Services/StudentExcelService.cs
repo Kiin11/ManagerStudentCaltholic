@@ -271,10 +271,10 @@ namespace ManagerStudentCaltholic.Services
             foreach (var s in students)
             {
                 worksheet.Cell(currRow, 1).Value = stt++;
-                worksheet.Cell(currRow, 2).Value = s.StudentCode;
-                worksheet.Cell(currRow, 3).Value = s.ChristianName;
-                worksheet.Cell(currRow, 4).Value = $"{s.FirstName} {s.LastName}".Trim();
-                worksheet.Cell(currRow, 5).Value = s.Gender;
+                worksheet.Cell(currRow, 2).Value = SanitizeExcelText(s.StudentCode);
+                worksheet.Cell(currRow, 3).Value = SanitizeExcelText(s.ChristianName);
+                worksheet.Cell(currRow, 4).Value = SanitizeExcelText($"{s.FirstName} {s.LastName}");
+                worksheet.Cell(currRow, 5).Value = SanitizeExcelText(s.Gender);
                 worksheet.Cell(currRow, 6).Value = s.DateOfBirth.ToString("dd/MM/yyyy");
                 worksheet.Cell(currRow, 7).Value = "";
 
@@ -328,6 +328,21 @@ namespace ManagerStudentCaltholic.Services
             string[] formats = { "dd/MM/yyyy", "d/M/yyyy", "d/MM/yyyy", "dd/M/yyyy", "yyyy-MM-dd" };
 
             return DateTime.TryParseExact(text, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out parsedDate);
+        }
+
+        /// <summary>
+        /// SEC-NEW-12 FIX 1: Chống Excel Formula / CSV Injection
+        /// Nếu chuỗi bắt đầu bằng =, +, -, @, \t, \r thì thêm dấu nháy đơn (') ở đầu
+        /// </summary>
+        private static string SanitizeExcelText(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            var trimmed = input.Trim();
+            if (trimmed.Length > 0 && (trimmed[0] == '=' || trimmed[0] == '+' || trimmed[0] == '-' || trimmed[0] == '@' || trimmed[0] == '\t' || trimmed[0] == '\r'))
+            {
+                return "'" + trimmed;
+            }
+            return trimmed;
         }
     }
 }
