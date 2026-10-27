@@ -7,6 +7,7 @@ using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -340,7 +341,8 @@ namespace ManagerStudentCaltholic.Controllers
 
             var request = new BatchCreateTeachersRequestDto
             {
-                DefaultPassword = string.IsNullOrWhiteSpace(defaultPassword) ? "GLV@2026!" : defaultPassword.Trim(),
+                // SEC-09 FIX: Nếu không truyền mật khẩu riêng thì để null để ExecuteBatchCreate tự sinh mật khẩu ngẫu nhiên cho từng GLV
+                DefaultPassword = string.IsNullOrWhiteSpace(defaultPassword) ? null : defaultPassword.Trim(),
                 Teachers = teachers
             };
 
@@ -369,8 +371,17 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var result = new BatchCreateTeachersResultDto();
-            var defaultPass = string.IsNullOrWhiteSpace(request.DefaultPassword) ? "GLV@2026!" : request.DefaultPassword.Trim();
-            var passwordHash = _passwordHasher.HashPassword(defaultPass);
+            var customDefaultPass = string.IsNullOrWhiteSpace(request.DefaultPassword) ? null : request.DefaultPassword.Trim();
+
+            // Nếu có truyền mật khẩu chung thì kiểm tra độ dài tối thiểu 8 ký tự
+            if (customDefaultPass != null && customDefaultPass.Length < 8)
+            {
+                return Json(new BatchCreateTeachersResultDto
+                {
+                    Success = false,
+                    Message = "Mật khẩu khởi tạo chung (nếu nhập) phải có tối thiểu 8 ký tự."
+                });
+            }
 
             // Lấy tập hợp usernames và phones đã tồn tại trong CSDL để chống trùng
             var existingUsernames = await _context.Users.Select(u => u.Username.ToLower()).ToListAsync();
@@ -380,6 +391,10 @@ namespace ManagerStudentCaltholic.Controllers
 
             foreach (var item in request.Teachers)
             {
+                // SEC-09 FIX: Mỗi GLV có một mật khẩu ngẫu nhiên riêng nếu không chỉ định DefaultPassword
+                var initialPass = customDefaultPass ?? GenerateSecureInitialPassword();
+                var passwordHash = _passwordHasher.HashPassword(initialPass);
+
                 if (string.IsNullOrWhiteSpace(item.FirstName) || string.IsNullOrWhiteSpace(item.LastName))
                 {
                     result.Errors.Add($"Bỏ qua dòng: Thiếu Họ hoặc Tên ({item.ChristianName} {item.FirstName} {item.LastName})");
@@ -427,7 +442,7 @@ namespace ManagerStudentCaltholic.Controllers
                     FullName = fullName,
                     ChristianName = item.ChristianName ?? "",
                     PhoneNumber = item.PhoneNumber ?? "",
-                    InitialPassword = defaultPass,
+                    InitialPassword = initialPass, // Trả về đúng mật khẩu vừa sinh của từng GLV
                     ManagedGradeLevel = item.ManagedGradeLevel
                 });
             }
@@ -604,6 +619,38 @@ namespace ManagerStudentCaltholic.Controllers
             return targetRole == UserRole.BranchHead ||
                    targetRole == UserRole.Teacher ||
                    targetRole == UserRole.Parent;
+        }
+
+        /// <summary>
+        /// SEC-09 FIX: Sinh mật khẩu khởi tạo ngẫu nhiên an toàn (10 ký tự, đủ chữ hoa, chữ thường, số và ký tự đặc biệt)
+        /// </summary>
+        private static string GenerateSecureInitialPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnopqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$!%*?&";
+            const string allChars = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (int i = 4; i < password.Length; i++)
+            {
+                password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
+            }
+
+            // Trộn ngẫu nhiên vị trí các ký tự (Fisher-Yates shuffle)
+            for (int i = password.Length - 1; i > 0; i--)
+            {
+                int j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
     }
 }
