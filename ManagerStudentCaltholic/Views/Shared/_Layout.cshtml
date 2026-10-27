@@ -301,6 +301,14 @@
                         <span class="sidebar-text">Tra Cứu Nhanh</span>
                     </a>
                 </li>
+                <!-- Cổng Đăng Ký Trực Tuyến Công Khai (Task-1201) -->
+                <li class="nav-item">
+                    <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "PublicRegistration" ? "active" : "")"
+                       asp-controller="PublicRegistration" asp-action="Index" target="_blank">
+                        <i class="bi bi-globe text-info"></i>
+                        <span class="sidebar-text">Cổng Đăng Ký Online</span>
+                    </a>
+                </li>
             </ul>
 
             <!-- NHÓM 2: CHUYÊN CẦN & CHECK-IN -->
@@ -384,6 +392,14 @@
                                asp-controller="Facilities" asp-action="Index">
                                 <i class="bi bi-building-gear"></i>
                                 <span class="sidebar-text">Cơ Sở Vật Chất</span>
+                            </a>
+                        </li>
+                        <!-- Quản Lý Mẫu Tin Nhắn Phụ Huynh & 1-Click Copy (Task-1202) -->
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ParentMessages" ? "active" : "")"
+                               asp-controller="ParentMessages" asp-action="Index">
+                                <i class="bi bi-chat-quote-fill text-warning"></i>
+                                <span class="sidebar-text">Mẫu Tin Nhắn Phụ Huynh</span>
                             </a>
                         </li>
                     </ul>

@@ -45,6 +45,8 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<GradingFormula> GradingFormulas => Set<GradingFormula>();
         public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>(); 
         public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
+        public DbSet<ParentMessageTemplate> ParentMessageTemplates => Set<ParentMessageTemplate>();
+        public DbSet<StudentRegistrationRequest> StudentRegistrationRequests => Set<StudentRegistrationRequest>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

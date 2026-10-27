@@ -1,0 +1,42 @@
+﻿@{
+    ViewData["Title"] = "Đăng Ký Thành Công";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-5">
+            <div class="card border-0 shadow-sm rounded-4 text-center p-5 bg-white">
+                <!-- Icon thành công -->
+                <div class="mb-4">
+                    <div class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center shadow-sm" style="width: 80px; height: 80px; font-size: 2.5rem;">
+                        <i class="bi bi-check-lg"></i>
+                    </div>
+                </div>
+
+                <h3 class="fw-bold text-dark mb-2">Đăng Ký Thành Công!</h3>
+
+                @if (TempData["SuccessMessage"] != null)
+                {
+                    <p class="text-muted mb-4">
+                        @TempData["SuccessMessage"]
+                    </p>
+                }
+                else
+                {
+                    <p class="text-muted mb-4">
+                        Hồ sơ đăng ký học viên mới và ảnh giấy tờ Rửa tội của bạn đã được gửi thành công đến Ban Điều Hành giáo xứ. Hệ thống sẽ xét duyệt và liên hệ lại với phụ huynh trong thời gian sớm nhất.
+                    </p>
+                }
+
+                <div class="d-grid gap-2">
+                    <a asp-action="Index" class="btn btn-primary rounded-pill py-2 fw-bold shadow-sm">
+                        <i class="bi bi-plus-circle me-1"></i> Đăng ký thêm thiếu nhi khác
+                    </a>
+                    <a href="~/" class="btn btn-outline-secondary rounded-pill py-2">
+                        <i class="bi bi-house-door me-1"></i> Về trang chủ giáo xứ
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

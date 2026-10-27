@@ -47,6 +47,10 @@
                     <button type="button" class="btn btn-primary px-4 shadow-sm" onclick="saveBatchAttendance()">
                         <i class="bi bi-floppy-fill me-1"></i>Lưu Điểm Danh
                     </button>
+                    <!-- Nút mở Popup Gửi Tin Nhắn Nhanh -->
+                    <button type="button" class="btn btn-primary px-3 shadow-sm" onclick="openMessagePopup()">
+                        <i class="bi bi-chat-text-fill me-1"></i> Mẫu Tin Nhắn Phụ Huynh
+                    </button>
                 </div>
             </div>
         </div>
@@ -182,6 +186,52 @@
                 
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- POPUP MODAL MẪU TIN NHẮN -->
+<div class="modal fade" id="parentMessageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3">
+                <h5 class="modal-title fw-bold">
+                    <i class="bi bi-chat-quote-fill me-2"></i>Trung Tâm Mẫu Tin Nhắn Phụ Huynh (1-Click Copy)
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Chọn học sinh cần gửi (hoặc lấy mặc định từ dòng đang chọn) -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary">Chọn Thiếu Nhi Cần Gửi Thông Báo:</label>
+                    <select id="modalStudentSelect" class="form-select form-select-sm" onchange="loadCompiledMessage()">
+                        <option value="">-- Chọn thiếu nhi trong lớp --</option>
+                        <!-- Dữ liệu học sinh sẽ được nạp bằng JS hoặc Razor -->
+                    </select>
+                </div>
+
+                <!-- Chọn Mẫu Thông Báo -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary">Chọn Mẫu Thông Báo Chuẩn:</label>
+                    <select id="modalTemplateSelect" class="form-select form-select-sm" onchange="loadCompiledMessage()">
+                        <option value="">-- Chọn mẫu tin nhắn chuẩn --</option>
+                        <!-- Danh sách template lấy từ bảng ParentMessageTemplates -->
+                    </select>
+                </div>
+
+                <!-- Nội dung tự động điền & thay thế biến -->
+                <div class="mb-2">
+                    <label class="form-label small fw-bold text-secondary">Nội Dung Hoàn Chỉnh (Đã điền thông tin thực tế):</label>
+                    <textarea id="modalCompiledContent" class="form-control font-monospace small" rows="5" readonly placeholder="Nội dung tin nhắn sẽ hiển thị tại đây..."></textarea>
+                    <div class="form-text small text-muted">Hệ thống đã tự động thay thế các biến như <code>{TenThieuNhi}</code>, <code>{TenLop}</code>, <code>{NgayVang}</code>.</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm px-3 rounded-pill" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-success btn-sm px-4 fw-bold rounded-pill shadow-sm" onclick="copyModalMessageToClipboard()">
+                    <i class="bi bi-clipboard-check me-1"></i> Sao Chép Tin Nhắn (Copy)
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -680,6 +730,93 @@
             } catch (err) {
                 alert("Lỗi lưu quy ước: " + err);
             }
+        }
+
+        let messageModalInstance = null;
+        const currentClassId = @Model.ClassId; // Lấy ID lớp hiện tại từ Model
+
+        // Mở Modal và nạp danh sách mẫu + học sinh của lớp
+        async function openMessagePopup() {
+            if (!messageModalInstance) {
+                messageModalInstance = new bootstrap.Modal(document.getElementById('parentMessageModal'));
+            }
+            messageModalInstance.show();
+
+            // 1. Nạp danh sách Template nếu chưa có
+            const templateSelect = document.getElementById('modalTemplateSelect');
+            if (templateSelect.options.length <= 1) {
+                try {
+                    const res = await fetch('/ParentMessages/GetTemplatesJson');
+                    const data = await res.json();
+                    if (data.success) {
+                        templateSelect.innerHTML = '<option value="">-- Chọn mẫu tin nhắn chuẩn --</option>';
+                        data.templates.forEach(t => {
+                            const opt = document.createElement('option');
+                            opt.value = t.id;
+                            opt.text = `[${t.category}] ${t.title}`;
+                            templateSelect.appendChild(opt);
+                        });
+                    }
+                } catch (e) {
+                    console.error("Lỗi tải mẫu tin nhắn:", e);
+                }
+            }
+
+            // 2. Nạp danh sách học sinh của lớp vào dropdown trong modal
+            const studentSelect = document.getElementById('modalStudentSelect');
+            studentSelect.innerHTML = '<option value="">-- Chọn thiếu nhi trong lớp --</option>';
+
+            document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]').forEach(row => {
+                const enrollmentId = row.getAttribute('data-enrollment-id');
+                const nameText = row.querySelector('td:nth-child(3) .fw-bold')?.innerText || 'Thiếu nhi';
+                const codeText = row.querySelector('td:nth-child(2) .badge')?.innerText || '';
+
+                const opt = document.createElement('option');
+                opt.value = enrollmentId;
+                opt.text = `${nameText} (${codeText})`;
+                studentSelect.appendChild(opt);
+            });
+        }
+
+        // Gọi API thay thế biến động và hiển thị nội dung vào Textarea
+        async function loadCompiledMessage() {
+            const templateId = document.getElementById('modalTemplateSelect').value;
+            const enrollmentId = document.getElementById('modalStudentSelect').value;
+            const txtArea = document.getElementById('modalCompiledContent');
+
+            if (!templateId || !enrollmentId) {
+                txtArea.value = '';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/ParentMessages/RenderTemplateByEnrollment?templateId=${templateId}&enrollmentId=${enrollmentId}`);
+                const data = await res.json();
+                if (data.success) {
+                    txtArea.value = data.compiledMessage;
+                } else {
+                    txtArea.value = 'Lỗi: ' + data.message;
+                }
+            } catch (err) {
+                txtArea.value = 'Lỗi kết nối máy chủ.';
+            }
+        }
+
+        // 1-Click Sao chép vào Clipboard
+        function copyModalMessageToClipboard() {
+            const txtArea = document.getElementById('modalCompiledContent');
+            if (!txtArea.value.trim()) {
+                alert('Chưa có nội dung tin nhắn để sao chép!');
+                return;
+            }
+
+            txtArea.select();
+            navigator.clipboard.writeText(txtArea.value).then(() => {
+                alert('Đã sao chép nội dung tin nhắn! Bạn có thể mở nhóm Zalo/Viber của lớp và bấm Dán (Paste) để gửi.');
+                messageModalInstance.hide();
+            }).catch(err => {
+                alert('Không thể sao chép tự động: ' + err);
+            });
         }
     </script>
 }
