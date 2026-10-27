@@ -1,4 +1,5 @@
 ﻿using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Http;
 
 namespace ManagerStudentCaltholic.Extensions
 {
@@ -6,6 +7,7 @@ namespace ManagerStudentCaltholic.Extensions
     {
         public const string PolicyGlobal = "PolicyGlobal";
         public const string PolicyAuth = "PolicyAuth";
+        public const string PolicyPublicLookup = "PolicyPublicLookup"; // Thêm hằng số này
 
         /// <summary>
         /// TASK-705: Đăng ký dịch vụ Rate Limiting
@@ -47,6 +49,19 @@ namespace ManagerStudentCaltholic.Extensions
                     {
                         PermitLimit = 5,
                         Window = TimeSpan.FromSeconds(15),
+                        QueueLimit = 0
+                    });
+                });
+
+                // 3. Policy cho Tra cứu công khai / Nộp đơn xin nghỉ (Chống spam SĐT / Brute-force): 10 lần / phút
+                options.AddPolicy(PolicyPublicLookup, httpContext =>
+                {
+                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 10,
+                        Window = TimeSpan.FromMinutes(1),
+                        SegmentsPerWindow = 2,
                         QueueLimit = 0
                     });
                 });

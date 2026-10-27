@@ -435,6 +435,11 @@
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
         }
 
+
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
         function onClassSelectChange() {
             const classSelect = document.getElementById('modalAssignClassId');
             const selectedOpt = classSelect.options[classSelect.selectedIndex];
@@ -464,6 +469,9 @@
             try {
                 const res = await fetch('/Facilities/AssignRoomToClass', {
                     method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
                     body: formData
                 });
                 const data = await res.json();
@@ -487,6 +495,9 @@
             try {
                 const res = await fetch('/Facilities/UnassignRoom', {
                     method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
                     body: formData
                 });
                 const data = await res.json();

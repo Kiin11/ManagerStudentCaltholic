@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "RequireStaff")] // SEC-04 FIX: Chặn tài khoản ngoài Ban Giáo Lý truy cập
     public class LessonPlansController : Controller
     {
         private readonly ParishDbContext _context;

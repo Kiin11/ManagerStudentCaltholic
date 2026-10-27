@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "RequireStaff")]
     public class FacilitiesController : Controller
     {
         private readonly ParishDbContext _context;
@@ -117,7 +117,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="description"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken] // Tránh lỗi 400 Bad Request khi Fetch API
+        [ValidateAntiForgeryToken] 
         public async Task<IActionResult> ReportIncident([FromForm] int locationId, [FromForm] string deviceType, [FromForm] string? severity, [FromForm] string description)
         {
             try
@@ -163,7 +163,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="notes"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> ResolveIncident([FromForm] long reportId, [FromForm] string? notes)
         {
@@ -187,7 +187,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="displayOrder"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> CreateZone([FromForm] string zoneName, [FromForm] string? zoneCode, [FromForm] string? description, [FromForm] int displayOrder)
         {
@@ -220,7 +220,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="equipmentNotes"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> CreateRoom([FromForm] int buildingZoneId, [FromForm] string roomName, [FromForm] int floorNumber, [FromForm] int capacity, [FromForm] string? equipmentNotes)
         {
@@ -250,7 +250,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// API Gán phòng học cho lớp - Cho phép 1 phòng có 1 lớp Sáng và 1 lớp Chiều
         /// </summary>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> AssignRoomToClass([FromForm] int classId, [FromForm] int locationId)
         {
@@ -351,7 +351,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// Hủy gán phòng học cho lớp
         /// </summary>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> UnassignRoom([FromForm] int classId)
         {
