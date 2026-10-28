@@ -1,0 +1,175 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.BatchPrintViewModel
+@{ 
+    Layout = null; 
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Chứng Chỉ Bí Tích - Lớp @Model.ClassName</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body { 
+            background: #525659; 
+            font-family: 'Times New Roman', serif; 
+        }
+        
+        .toolbar { 
+            background: #2b3a4a; 
+            color: white; 
+            padding: 12px 24px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .cert-card {
+            width: 297mm; 
+            height: 210mm; 
+            margin: 15mm auto;
+            background: #fff; 
+            position: relative; 
+            padding: 12mm;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 20px rgba(0,0,0,0.4);
+            box-sizing: border-box;
+        }
+
+        /* Khung viền đôi mạ vàng chuẩn chứng chỉ */
+        .cert-border {
+            border: 6px double #b8860b;
+            outline: 2px solid #b8860b;
+            outline-offset: 4px;
+            height: 100%;
+            padding: 10mm;
+            text-align: center;
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        .cert-bg-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.05;
+            width: 400px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .cert-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .sacrament-name {
+            font-size: 2.8rem; 
+            letter-spacing: 2px; 
+            color: #d32f2f;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .student-name {
+            font-size: 2.5rem; 
+            font-family: 'Monotype Corsiva', 'Times New Roman', cursive;
+            color: #1565c0;
+        }
+
+        /* Cấu hình máy in / xuất PDF */
+        @@media print {
+            body { background: #fff; margin: 0; }
+            .no-print { display: none !important; }
+            .cert-card { 
+                margin: 0; 
+                box-shadow: none; 
+                border: none;
+                page-break-after: always; 
+            }
+            @@page { 
+                size: A4 landscape; 
+                margin: 0; 
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print toolbar d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0 fw-bold"><i class="bi bi-file-pdf text-danger me-2"></i>Hệ thống Quản lý Giáo lý - Xuất Chứng Chỉ Bí Tích</h5>
+            <small class="text-light opacity-75">Sử dụng phím tắt Ctrl+P để lưu file PDF hoặc gửi trực tiếp tới máy in.</small>
+        </div>
+        <button class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" onclick="window.print()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-printer-fill me-2" viewBox="0 0 16 16">
+                <path d="M5 1a2 2 0 0 0-2 2v1h10V3a2 2 0 0 0-2-2H5zm6 8H5a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1z"/>
+                <path d="M0 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1v-2a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2H2a2 2 0 0 1-2-2V7zm2.5 1a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+            </svg>
+            In Ấn / Lưu PDF
+        </button>
+    </div>
+
+    @if (!Model.Students.Any())
+    {
+        <div class="container mt-5 text-center text-white">
+            <div class="alert alert-warning d-inline-block text-dark fw-bold">
+                Lớp này chưa có em nào đủ điều kiện xét duyệt lãnh nhận Bí tích.
+            </div>
+        </div>
+    }
+
+    @foreach (var s in Model.Students)
+    {
+        // Tự động suy luận tên Bí tích dựa trên cấp khối học
+        string sacramentName = "CHỨNG CHỈ BÍ TÍCH";
+        if (Model.GradeLevel.Contains("Rước Lễ", StringComparison.OrdinalIgnoreCase)) 
+            sacramentName = "CHỨNG CHỈ XƯNG TỘI VÀ RƯỚC LỄ LẦN ĐẦU";
+        else if (Model.GradeLevel.Contains("Thêm Sức", StringComparison.OrdinalIgnoreCase)) 
+            sacramentName = "CHỨNG CHỈ LÃNH NHẬN BÍ TÍCH THÊM SỨC";
+        else if (Model.GradeLevel.Contains("Bao Đồng", StringComparison.OrdinalIgnoreCase)) 
+            sacramentName = "CHỨNG CHỈ TUYÊN XƯNG ĐỨC TIN";
+
+        <div class="cert-card">
+            <div class="cert-border">
+                <div class="cert-content">
+                    <h5 class="text-uppercase fw-bold text-dark mb-1">GIÁO PHẬN SÀI GÒN</h5>
+                    <h6 class="text-uppercase fw-bold mb-4 text-muted">GIÁO XỨ TRUNG BẮC</h6>
+
+                    <h1 class="fw-bold sacrament-name my-4">@sacramentName</h1>
+
+                    <div class="fs-4 mt-5">
+                        Chứng nhận em: <strong class="student-name ms-2">@s.ChristianName @s.FullName</strong>
+                    </div>
+
+                    <div class="row fs-5 mt-4 justify-content-center text-dark">
+                        <div class="col-5 text-start">
+                            <span class="text-muted">Ngày sinh:</span> <strong class="ms-1">@s.DateOfBirth.ToString("dd/MM/yyyy")</strong>
+                        </div>
+                        <div class="col-4 text-start">
+                            <span class="text-muted">Học viên Lớp:</span> <strong class="ms-1">@Model.ClassName</strong>
+                        </div>
+                    </div>
+
+                    <div class="fs-5 mt-4 px-5 text-dark" style="line-height: 1.6;">
+                        Đã hoàn tất xuất sắc chương trình Giáo Lý <strong>@Model.GradeLevel</strong> niên khóa @Model.AcademicYearName. Đủ điều kiện và được Ban Điều Hành cùng Cha Xứ xét duyệt lãnh nhận Bí Tích theo Quy chế Giáo phận.
+                    </div>
+
+                    <div class="row text-center mt-5 pt-4">
+                        <div class="col-6">
+                            <h5 class="fw-bold">TRƯỞNG BAN GIÁO LÝ</h5>
+                            <div style="height: 100px;"></div>
+                            <div class="text-muted">(Ký và ghi rõ họ tên)</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="fst-italic mb-2 text-dark">Giáo xứ Trung Bắc, ngày ... tháng ... năm 20...</div>
+                            <h5 class="fw-bold">LINH MỤC CHÁNH XỨ</h5>
+                            <div style="height: 80px;"></div>
+                            <div class="text-muted">(Ký tên & Đóng dấu)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</body>
+</html>
