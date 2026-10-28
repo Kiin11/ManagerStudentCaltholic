@@ -87,6 +87,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<ILessonPlanImportService, LessonPlanImportService>();
             services.AddScoped<IGradeCalculationService, GradeCalculationService>();
             services.AddScoped<IGradePermissionService, GradePermissionService>();
+            services.AddScoped<IStudentPlacementService, StudentPlacementService>();
+            services.AddScoped<IPromotionEvaluationService, PromotionEvaluationService>();
 
             return services;
         }

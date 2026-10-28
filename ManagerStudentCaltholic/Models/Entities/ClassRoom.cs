@@ -24,6 +24,8 @@ namespace ManagerStudentCaltholic.Models.Entities
         // Thêm danh sách ClassTeachers vào ClassRoom
         [ValidateNever]
         public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>(); 
+
+        public ICollection<ClassRoomLocation> ClassRoomLocations { get; set; } = new List<ClassRoomLocation>();
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
         public int? ClassRoomLocationId { get; set; }

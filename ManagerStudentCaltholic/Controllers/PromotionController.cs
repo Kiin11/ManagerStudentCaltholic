@@ -1,4 +1,5 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using System.Security.Claims;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
@@ -13,202 +14,155 @@ namespace ManagerStudentCaltholic.Controllers
     public class PromotionController : Controller
     {
         private readonly ParishDbContext _context;
-        private readonly IGradeCalculationService _gradeService;
+        private readonly IPromotionEvaluationService _evalService;
+        private readonly IStudentPlacementService _placementService;
         private readonly ILogger<PromotionController> _logger;
 
         public PromotionController(
             ParishDbContext context,
-            IGradeCalculationService gradeService,
+            IPromotionEvaluationService evalService,
+            IStudentPlacementService placementService,
             ILogger<PromotionController> logger)
         {
             _context = context;
-            _gradeService = gradeService;
+            _evalService = evalService;
+            _placementService = placementService;
             _logger = logger;
         }
 
         /// <summary>
-        /// 1. GET: /Promotion/Index (Màn hình Xét lên lớp & Kết chuyển Niên khóa - Epic 11)
+        /// 1. GET: /Promotion/Index (Màn hình điều khiển xét duyệt & kết chuyển niên khóa)
         /// </summary>
         [HttpGet]
-        public async Task<IActionResult> Index(
-            int? sourceYearId,
-            int? sourceClassId,
-            int? targetYearId,
-            decimal minAvg = 5.0m,
-            double minAtt = 60.0)
+        public async Task<IActionResult> Index(int? sourceYearId, int? classId, int? targetYearId)
         {
             var allYears = await _context.AcademicYears
                 .OrderByDescending(y => y.StartDate)
+                .ThenByDescending(y => y.Id)
                 .AsNoTracking()
                 .ToListAsync();
 
             if (!allYears.Any())
             {
-                TempData["ErrorMessage"] = "Chưa có niên khóa nào trong hệ thống.";
+                TempData["ErrorMessage"] = "Chưa có dữ liệu niên khóa. Vui lòng tạo niên khóa trước.";
                 return RedirectToAction("Index", "AcademicYears");
             }
 
-            // Mặc định Niên khóa nguồn là niên khóa đang Active (hoặc niên khóa liền trước)
             var currentYear = allYears.FirstOrDefault(y => y.IsCurrent) ?? allYears.First();
             int selectedSourceYearId = sourceYearId ?? currentYear.Id;
-            var sourceYear = allYears.FirstOrDefault(y => y.Id == selectedSourceYearId) ?? currentYear;
 
-            // Mặc định Niên khóa đích là niên khóa mới nhất khác niên khóa nguồn
-            var defaultTargetYear = allYears.FirstOrDefault(y => y.Id != sourceYear.Id && y.StartDate >= sourceYear.StartDate)
-                                 ?? allYears.FirstOrDefault(y => y.Id != sourceYear.Id)
-                                 ?? sourceYear;
-            int selectedTargetYearId = targetYearId ?? defaultTargetYear.Id;
-            var targetYear = allYears.FirstOrDefault(y => y.Id == selectedTargetYearId) ?? defaultTargetYear;
+            var targetYear = allYears.FirstOrDefault(y => y.Id == targetYearId)
+                ?? allYears.FirstOrDefault(y => y.Id != selectedSourceYearId && y.StartDate > currentYear.StartDate)
+                ?? allYears.FirstOrDefault(y => y.Id != selectedSourceYearId)
+                ?? currentYear;
 
-            ViewBag.AllYears = allYears;
+            int selectedTargetYearId = targetYear.Id;
 
-            // Danh sách lớp của niên khóa nguồn
             var sourceClasses = await _context.Classes
-                .Where(c => c.AcademicYearId == sourceYear.Id)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
+                .Where(c => c.AcademicYearId == selectedSourceYearId)
+                .OrderBy(c => c.GradeLevel)
+                .ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
 
-            ViewBag.SourceClasses = sourceClasses;
+            int selectedClassId = classId ?? sourceClasses.FirstOrDefault()?.Id ?? 0;
+            var selectedClass = sourceClasses.FirstOrDefault(c => c.Id == selectedClassId);
 
-            // Danh sách lớp của niên khóa đích
-            var targetClasses = await _context.Classes
-                .Where(c => c.AcademicYearId == targetYear.Id)
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
-                .AsNoTracking()
-                .ToListAsync();
-
-            if (!sourceClasses.Any())
+            var vm = new PromotionIndexViewModel
             {
-                return View(new PromotionPreviewViewModel
-                {
-                    SourceYearId = sourceYear.Id,
-                    SourceYearName = sourceYear.Name,
-                    TargetYearId = targetYear.Id,
-                    TargetYearName = targetYear.Name,
-                    MinYearAverage = minAvg,
-                    MinAttendanceRate = minAtt,
-                    TargetYearClasses = targetClasses
-                });
-            }
-
-            var selectedSourceClass = sourceClassId.HasValue
-                ? sourceClasses.FirstOrDefault(c => c.Id == sourceClassId.Value) ?? sourceClasses.First()
-                : sourceClasses.First();
-
-            // Lấy cấu hình điểm của lớp nguồn
-            var configs = await _context.GradeConfigurations
-                .Where(g => g.AcademicYearId == sourceYear.Id &&
-                            (g.GradeLevel == "ALL" || g.GradeLevel == selectedSourceClass.GradeLevel) &&
-                            (g.ClassRoomId == null || g.ClassRoomId == selectedSourceClass.Id))
-                .AsNoTracking()
-                .ToListAsync();
-
-            var hk1Configs = configs.Where(c => c.Semester == 1).ToList();
-            var hk2Configs = configs.Where(c => c.Semester == 2).ToList();
-
-            // Lấy học sinh trong lớp nguồn
-            var enrollments = await _context.Enrollments
-                .Include(e => e.Student)
-                .Include(e => e.GradeRecords)
-                .Where(e => e.ClassRoomId == selectedSourceClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.LastName).ThenBy(e => e.Student.FirstName)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var enrollmentIds = enrollments.Select(e => e.Id).ToList();
-            var attendances = await _context.Attendances
-                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
-                .AsNoTracking()
-                .ToListAsync();
-
-            var totalSessions = Math.Max(1, attendances.Select(a => a.AttendanceDate).Distinct().Count());
-
-            // Kiểm tra những học sinh nào đã được xếp lớp ở niên khóa đích rồi
-            var studentIds = enrollments.Select(e => e.StudentId).ToList();
-            var targetEnrollments = await _context.Enrollments
-                .Include(e => e.ClassRoom)
-                .Where(e => e.ClassRoom.AcademicYearId == targetYear.Id && studentIds.Contains(e.StudentId))
-                .AsNoTracking()
-                .ToDictionaryAsync(e => e.StudentId, e => e.ClassRoom.Name);
-
-            var rows = enrollments.Select(e =>
-            {
-                var hk1Dict = e.GradeRecords
-                    .Where(r => hk1Configs.Select(c => c.Id).Contains(r.GradeConfigurationId))
-                    .ToDictionary(r => r.GradeConfigurationId, r => r.Score);
-
-                var hk2Dict = e.GradeRecords
-                    .Where(r => hk2Configs.Select(c => c.Id).Contains(r.GradeConfigurationId))
-                    .ToDictionary(r => r.GradeConfigurationId, r => r.Score);
-
-                var sem1Avg = _gradeService.CalculateSemesterAverage(hk1Dict, hk1Configs);
-                var sem2Avg = _gradeService.CalculateSemesterAverage(hk2Dict, hk2Configs);
-                var yearAvg = _gradeService.CalculateYearAverage(sem1Avg, sem2Avg);
-
-                var attList = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
-                var presentCount = attList.Count(a => a.ClassAttended && (a.ClassStatus == "PRESENT" || a.ClassStatus == "LATE"));
-                var attRate = attendances.Any()
-                    ? Math.Round((presentCount / (double)totalSessions) * 100, 1)
-                    : 100.0;
-
-                var (rank, _) = _gradeService.EvaluateStudent(yearAvg, attRate, selectedSourceClass.GradeLevel, 0);
-
-                // Xét điều kiện Lên lớp dựa theo ngưỡng cấu hình
-                bool isPromoted = (yearAvg ?? 0m) >= minAvg && attRate >= minAtt;
-                string note = isPromoted
-                    ? "Đủ điều kiện lên lớp"
-                    : ((yearAvg ?? 0m) < minAvg ? $"ĐTB Năm < {minAvg:0.0}" : $"Chuyên cần < {minAtt}%");
-
-                targetEnrollments.TryGetValue(e.StudentId, out var existingTargetClass);
-
-                return new StudentPromotionRowDto
-                {
-                    EnrollmentId = e.Id,
-                    StudentId = e.StudentId,
-                    StudentCode = e.Student.StudentCode,
-                    ChristianName = e.Student.ChristianName,
-                    FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
-                    DateOfBirth = e.Student.DateOfBirth,
-                    HK1Average = sem1Avg,
-                    HK2Average = sem2Avg,
-                    YearAverage = yearAvg,
-                    AttendanceRate = attRate,
-                    AcademicRank = rank,
-                    IsEligibleForSacrament = false, // Tạm khóa theo yêu cầu
-                    IsPromoted = isPromoted,
-                    PromotionNote = note,
-                    AlreadyEnrolledInTargetYear = existingTargetClass != null,
-                    ExistingTargetClassName = existingTargetClass
-                };
-            }).ToList();
-
-            // Tự động gợi ý lớp ở lại (cùng tên ở niên khóa mới)
-            var suggestedRetain = targetClasses.FirstOrDefault(c =>
-                c.Name.Equals(selectedSourceClass.Name, StringComparison.OrdinalIgnoreCase));
-
-            var vm = new PromotionPreviewViewModel
-            {
-                SourceYearId = sourceYear.Id,
-                SourceYearName = sourceYear.Name,
-                SourceClassId = selectedSourceClass.Id,
-                SourceClassName = selectedSourceClass.Name,
-                SourceGradeLevel = selectedSourceClass.GradeLevel,
-                TargetYearId = targetYear.Id,
-                TargetYearName = targetYear.Name,
-                MinYearAverage = minAvg,
-                MinAttendanceRate = minAtt,
-                EnableSacramentEvaluation = false,
-                TargetYearClasses = targetClasses,
-                SuggestedRetainClassId = suggestedRetain?.Id,
-                Students = rows
+                SourceYearId = selectedSourceYearId,
+                SourceYearName = allYears.FirstOrDefault(y => y.Id == selectedSourceYearId)?.Name ?? "",
+                TargetYearId = selectedTargetYearId,
+                TargetYearName = allYears.FirstOrDefault(y => y.Id == selectedTargetYearId)?.Name ?? "",
+                SelectedClassId = selectedClass?.Id ?? 0,
+                SelectedClassName = selectedClass?.Name ?? "",
+                CurrentGradeLevel = selectedClass?.GradeLevel ?? "",
+                AcademicYears = allYears,
+                SourceClasses = sourceClasses
             };
+
+            if (selectedClass != null)
+            {
+                vm.AppliedRule = await _evalService.GetEffectiveRuleAsync(selectedSourceYearId, selectedClass.GradeLevel);
+                var (nextGrade, _, _) = _evalService.ResolveProgressionTarget(
+                    selectedClass.Name, selectedClass.GradeLevel, vm.AppliedRule.NextGradeLevel);
+                vm.SuggestedNextGradeLevel = nextGrade;
+
+                var targetClasses = await _context.Classes
+                    .Where(c => c.AcademicYearId == selectedTargetYearId)
+                    .OrderBy(c => c.GradeLevel)
+                    .ThenBy(c => c.Name)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                vm.TargetPromoteClasses = targetClasses
+                    .Where(c => c.GradeLevel == nextGrade || c.GradeLevel == selectedClass.GradeLevel)
+                    .ToList();
+
+                vm.TargetRetainClasses = targetClasses
+                    .Where(c => c.GradeLevel == selectedClass.GradeLevel)
+                    .ToList();
+
+                vm.Students = await _evalService.EvaluateClassEligibilityAsync(selectedClass.Id, selectedTargetYearId);
+            }
 
             return View(vm);
         }
 
         /// <summary>
-        /// 2. POST: /Promotion/CloneClassesToNewYear (Tự động sao chép danh mục Lớp từ năm cũ sang năm mới)
+        /// 2. POST: /Promotion/SavePromotionRule (Lưu cấu hình điều kiện lên lớp cho Khối/Toàn xứ)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SavePromotionRule([FromBody] SavePromotionRuleDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { success = false, message = "Dữ liệu quy tắc xét duyệt không hợp lệ." });
+            }
+
+            var existing = await _context.PromotionRuleConfigs
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(r => r.AcademicYearId == dto.AcademicYearId && r.GradeLevel == dto.GradeLevel);
+
+            if (existing == null)
+            {
+                existing = new PromotionRuleConfig
+                {
+                    AcademicYearId = dto.AcademicYearId,
+                    GradeLevel = dto.GradeLevel.Trim(),
+                    MinYearAverage = dto.MinYearAverage,
+                    MinAttendanceRate = dto.MinAttendanceRate,
+                    RequireSacramentPassed = dto.RequireSacramentPassed,
+                    MinSacramentScore = dto.MinSacramentScore,
+                    NextGradeLevel = string.IsNullOrWhiteSpace(dto.NextGradeLevel) ? null : dto.NextGradeLevel.Trim(),
+                    CreatedAt = DateTime.UtcNow,
+                    IsDeleted = false
+                };
+                _context.PromotionRuleConfigs.Add(existing);
+            }
+            else
+            {
+                existing.MinYearAverage = dto.MinYearAverage;
+                existing.MinAttendanceRate = dto.MinAttendanceRate;
+                existing.RequireSacramentPassed = dto.RequireSacramentPassed;
+                existing.MinSacramentScore = dto.MinSacramentScore;
+                existing.NextGradeLevel = string.IsNullOrWhiteSpace(dto.NextGradeLevel) ? null : dto.NextGradeLevel.Trim();
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("AUDIT: User {User} updated PromotionRuleConfig for YearId={YearId}, Grade={Grade}",
+                User.Identity?.Name, dto.AcademicYearId, dto.GradeLevel);
+
+            return Json(new { success = true, message = "Đã lưu cấu hình quy tắc xét lên lớp thành công!" });
+        }
+
+        /// <summary>
+        /// 3. POST: /Promotion/CloneClassesToNewYear (Sao chép danh mục lớp từ niên khóa cũ sang niên khóa mới)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -216,7 +170,7 @@ namespace ManagerStudentCaltholic.Controllers
         {
             if (sourceYearId == targetYearId)
             {
-                return Json(new { success = false, message = "Niên khóa nguồn và niên khóa đích phải khác nhau!" });
+                return BadRequest(new { success = false, message = "Niên khóa đích phải khác niên khóa nguồn." });
             }
 
             var sourceClasses = await _context.Classes
@@ -224,121 +178,223 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
+            if (!sourceClasses.Any())
+            {
+                return BadRequest(new { success = false, message = "Niên khóa nguồn chưa có danh mục lớp nào để sao chép." });
+            }
+
             var existingTargetNames = await _context.Classes
                 .Where(c => c.AcademicYearId == targetYearId)
                 .Select(c => c.Name.ToLower())
                 .ToListAsync();
 
-            var toCreate = sourceClasses
-                .Where(sc => !existingTargetNames.Contains(sc.Name.ToLower()))
-                .Select(sc => new ClassRoom
-                {
-                    AcademicYearId = targetYearId,
-                    Name = sc.Name,
-                    GradeLevel = sc.GradeLevel,
-                    RoomName = sc.RoomName,
-                    ClassRoomLocationId = sc.ClassRoomLocationId,
-                    Shift = sc.Shift,
-                    IsGradeLocked = false
-                })
-                .ToList();
-
-            if (!toCreate.Any())
+            int clonedCount = 0;
+            foreach (var src in sourceClasses)
             {
-                return Json(new { success = false, message = "Tất cả các lớp của niên khóa nguồn đều đã tồn tại ở niên khóa đích." });
+                if (!existingTargetNames.Contains(src.Name.ToLower()))
+                {
+                    _context.Classes.Add(new ClassRoom
+                    {
+                        Name = src.Name,
+                        GradeLevel = src.GradeLevel,
+                        AcademicYearId = targetYearId,
+                        ClassRoomLocationId = src.ClassRoomLocationId,
+                        IsGradeLocked = false
+                    });
+                    clonedCount++;
+                }
             }
 
-            await _context.Classes.AddRangeAsync(toCreate);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Đã sao chép {Count} lớp từ Year {Source} sang Year {Target}", toCreate.Count, sourceYearId, targetYearId);
-            return Json(new { success = true, message = $"Đã khởi tạo tự động {toCreate.Count} lớp học cho niên khóa mới!" });
+            _logger.LogInformation("AUDIT: User {User} cloned {Count} classes from Year {Src} to Year {Dst}",
+                User.Identity?.Name, clonedCount, sourceYearId, targetYearId);
+
+            return Json(new
+            {
+                success = true,
+                clonedCount,
+                message = clonedCount > 0
+                    ? $"Đã sao chép thành công {clonedCount} lớp học sang niên khóa mới!"
+                    : "Tất cả các lớp đã tồn tại ở niên khóa đích."
+            });
         }
 
         /// <summary>
-        /// 3. POST: /Promotion/ExecuteRollover (Thực thi Kết chuyển Học sinh hàng loạt sang Niên khóa mới)
+        /// 4. POST: /Promotion/ExecuteRollover (Giao dịch ACID kết chuyển học sinh hàng loạt sang niên khóa mới - TASK-P3-01.4)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ExecuteRollover([FromBody] ExecuteRolloverRequestDto request)
         {
-            if (request == null || !request.Decisions.Any())
+            if (request == null || request.Decisions == null || !request.Decisions.Any())
             {
-                return Json(new { success = false, message = "Không có danh sách học sinh nào để kết chuyển." });
+                return BadRequest(new { success = false, message = "Không có dữ liệu học sinh để kết chuyển." });
             }
 
-            // Lấy các học sinh đã có lớp ở niên khóa đích để chống trùng lặp
-            var studentIds = request.Decisions.Select(d => d.StudentId).ToList();
-            var alreadyEnrolledIds = await _context.Enrollments
-                .Include(e => e.ClassRoom)
-                .Where(e => e.ClassRoom.AcademicYearId == request.TargetYearId && studentIds.Contains(e.StudentId))
-                .Select(e => e.StudentId)
-                .ToListAsync();
+            if (request.SourceAcademicYearId == request.TargetAcademicYearId)
+            {
+                return BadRequest(new { success = false, message = "Niên khóa mới phải khác niên khóa xét duyệt hiện tại." });
+            }
 
-            var newEnrollments = new List<Enrollment>();
+            // 1. Kiểm tra chống IDOR: Xác thực lớp nguồn thuộc đúng niên khóa nguồn
+            var sourceClass = await _context.Classes
+                .FirstOrDefaultAsync(c => c.Id == request.SourceClassId && c.AcademicYearId == request.SourceAcademicYearId);
+
+            if (sourceClass == null)
+            {
+                return BadRequest(new { success = false, message = "Lớp nguồn không hợp lệ hoặc không thuộc niên khóa đã chọn." });
+            }
+
+            var targetYear = await _context.AcademicYears.FindAsync(request.TargetAcademicYearId);
+            if (targetYear == null)
+            {
+                return BadRequest(new { success = false, message = "Niên khóa đích không tồn tại." });
+            }
+
+            // Lấy toàn bộ lớp hợp lệ thuộc niên khóa đích
+            var validTargetClasses = await _context.Classes
+                .Where(c => c.AcademicYearId == request.TargetAcademicYearId)
+                .ToDictionaryAsync(c => c.Id, c => c);
+
+            // Lấy các Enrollment hợp lệ thuộc lớp nguồn
+            var sourceEnrollments = await _context.Enrollments
+                .Include(e => e.Student)
+                .Where(e => e.ClassRoomId == request.SourceClassId)
+                .ToDictionaryAsync(e => e.Id, e => e);
+
+            // Nếu bật Smart Balancing cho các em PROMOTE chưa chọn TargetClassId cụ thể
+            var rule = await _evalService.GetEffectiveRuleAsync(sourceClass.AcademicYearId, sourceClass.GradeLevel);
+            var (nextGrade, nextPrefix, _) = _evalService.ResolveProgressionTarget(
+                sourceClass.Name, sourceClass.GradeLevel, rule.NextGradeLevel);
+
+            var unassignedPromoteStudentIds = request.Decisions
+                .Where(d => d.Action == "PROMOTE" && (!d.TargetClassId.HasValue || d.TargetClassId == 0))
+                .Select(d => d.StudentId)
+                .ToList();
+
+            var autoBalancedMap = new Dictionary<long, int>();
+            if (unassignedPromoteStudentIds.Any() && request.UseSmartBalancing)
+            {
+                autoBalancedMap = await _placementService.BatchAssignToTargetClassesAsync(
+                    unassignedPromoteStudentIds, request.TargetAcademicYearId, nextGrade, nextPrefix);
+            }
+
             int promotedCount = 0;
             int retainedCount = 0;
+            int skippedCount = 0;
+            int graduatedCount = 0;
 
-            foreach (var item in request.Decisions)
-            {
-                if (item.Skip || alreadyEnrolledIds.Contains(item.StudentId))
-                    continue;
-
-                if (item.IsPromoted && request.PromoteToClassId.HasValue && request.PromoteToClassId.Value > 0)
-                {
-                    newEnrollments.Add(new Enrollment
-                    {
-                        StudentId = item.StudentId,
-                        ClassRoomId = request.PromoteToClassId.Value,
-                        EnrolledAt = DateTime.UtcNow
-                    });
-                    promotedCount++;
-                }
-                else if (!item.IsPromoted && request.RetainInClassId.HasValue && request.RetainInClassId.Value > 0)
-                {
-                    newEnrollments.Add(new Enrollment
-                    {
-                        StudentId = item.StudentId,
-                        ClassRoomId = request.RetainInClassId.Value,
-                        EnrolledAt = DateTime.UtcNow
-                    });
-                    retainedCount++;
-                }
-            }
-
-            if (!newEnrollments.Any())
-            {
-                return Json(new
-                {
-                    success = false,
-                    message = "Chưa chọn Lớp Đích hợp lệ hoặc tất cả học sinh trong danh sách đã được xếp lớp ở niên khóa mới!"
-                });
-            }
-
-            var strategy = _context.Database.CreateExecutionStrategy();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                await strategy.ExecuteAsync(async () =>
+                foreach (var decision in request.Decisions)
                 {
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-                    await _context.Enrollments.AddRangeAsync(newEnrollments);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                });
+                    // Chặn IDOR: Đảm bảo EnrollmentId thực sự thuộc lớp nguồn và khớp StudentId
+                    if (!sourceEnrollments.TryGetValue(decision.EnrollmentId, out var srcEnrollment) ||
+                        srcEnrollment.StudentId != decision.StudentId)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            success = false,
+                            message = $"Phát hiện dữ liệu không hợp lệ đối với học sinh ID #{decision.StudentId}."
+                        });
+                    }
 
-                _logger.LogInformation("Kết chuyển niên khóa thành công: {Promoted} em lên lớp, {Retained} em ở lại lớp.",
-                    promotedCount, retainedCount);
+                    string action = (decision.Action ?? "PROMOTE").Trim().ToUpperInvariant();
+
+                    if (action == "SKIP")
+                    {
+                        // Nghỉ học / Chuyển xứ -> Ngừng kích hoạt hồ sơ học sinh
+                        srcEnrollment.Student.IsActive = false;
+                        skippedCount++;
+                        continue;
+                    }
+
+                    if (action == "GRADUATE")
+                    {
+                        // Hoàn thành chương trình Bao Đồng năm cuối
+                        graduatedCount++;
+                        continue;
+                    }
+
+                    // Xác định lớp đích cho PROMOTE hoặc RETAIN
+                    int? targetClassId = decision.TargetClassId;
+                    if ((!targetClassId.HasValue || targetClassId == 0) && action == "PROMOTE")
+                    {
+                        if (autoBalancedMap.TryGetValue(decision.StudentId, out var autoId))
+                        {
+                            targetClassId = autoId;
+                        }
+                    }
+
+                    if (!targetClassId.HasValue || !validTargetClasses.ContainsKey(targetClassId.Value))
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            success = false,
+                            message = $"Chưa chọn lớp đích hợp lệ tại niên khóa mới cho thiếu nhi {srcEnrollment.Student.FirstName} {srcEnrollment.Student.LastName}."
+                        });
+                    }
+
+                    // Kiểm tra xem học sinh đã có Enrollment ở niên khóa đích chưa (kể cả bản ghi Soft-Deleted)
+                    var existingTargetEnrollment = await _context.Enrollments
+                        .IgnoreQueryFilters()
+                        .Include(e => e.ClassRoom)
+                        .FirstOrDefaultAsync(e => e.StudentId == decision.StudentId &&
+                                                  e.ClassRoom.AcademicYearId == request.TargetAcademicYearId);
+
+                    if (existingTargetEnrollment != null)
+                    {
+                        // Nếu bản ghi cũ từng bị xóa mềm (IsDeleted = true), khôi phục và cập nhật lớp đích
+                        existingTargetEnrollment.ClassRoomId = targetClassId.Value;
+                        existingTargetEnrollment.IsDeleted = false;
+                        existingTargetEnrollment.DeletedAt = null;
+                    }
+                    else
+                    {
+                        _context.Enrollments.Add(new Enrollment
+                        {
+                            StudentId = decision.StudentId,
+                            ClassRoomId = targetClassId.Value,
+                            IsDeleted = false
+                        });
+                    }
+
+                    if (action == "PROMOTE") promotedCount++;
+                    else if (action == "RETAIN") retainedCount++;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                var actor = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Unknown";
+                _logger.LogInformation(
+                    "AUDIT ROLLOVER: User={Actor} executed rollover from Class={SourceClassId} (Year={SrcYear}) to Year={TargetYear}. Promoted={Promoted}, Retained={Retained}, Graduated={Graduated}, Skipped={Skipped}",
+                    actor, request.SourceClassId, request.SourceAcademicYearId, request.TargetAcademicYearId,
+                    promotedCount, retainedCount, graduatedCount, skippedCount);
 
                 return Json(new
                 {
                     success = true,
-                    message = $"Kết chuyển thành công {newEnrollments.Count} thiếu nhi sang niên khóa mới ({promotedCount} em lên lớp, {retainedCount} em ở lại lớp)!"
+                    promotedCount,
+                    retainedCount,
+                    graduatedCount,
+                    skippedCount,
+                    message = $"Kết chuyển hoàn tất! Lên lớp: {promotedCount} em | Ở lại lớp: {retainedCount} em | Tốt nghiệp: {graduatedCount} em | Nghỉ/Chuyển xứ: {skippedCount} em."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi thực thi kết chuyển niên khóa");
-                return Json(new { success = false, message = "Đã xảy ra lỗi khi lưu dữ liệu kết chuyển niên khóa." });
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Lỗi khi thực thi kết chuyển niên khóa cho lớp {ClassId}", request.SourceClassId);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Đã xảy ra lỗi trong quá trình kết chuyển dữ liệu. Hệ thống đã hoàn tác (Rollback) an toàn."
+                });
             }
         }
     }

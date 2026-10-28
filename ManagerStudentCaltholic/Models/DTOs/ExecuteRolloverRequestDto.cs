@@ -5,24 +5,66 @@ namespace ManagerStudentCaltholic.Models.DTOs
     public class ExecuteRolloverRequestDto
     {
         [Required]
+        public int SourceAcademicYearId { get; set; }
+
+        [Required]
         public int SourceClassId { get; set; }
 
         [Required]
-        public int TargetYearId { get; set; }
+        public int TargetAcademicYearId { get; set; }
 
-        // Lớp đích tại niên khóa mới dành cho học sinh ĐƯỢC LÊN LỚP
-        public int? PromoteToClassId { get; set; }
+        /// <summary>
+        /// Nếu bật true, các học sinh không chỉ định lớp đích cụ thể sẽ được chia đều tự động (Smart Balancing)
+        /// </summary>
+        public bool UseSmartBalancing { get; set; } = true;
 
-        // Lớp đích tại niên khóa mới dành cho học sinh Ở LẠI LỚP
-        public int? RetainInClassId { get; set; }
-
-        public List<StudentRolloverDecisionItem> Decisions { get; set; } = new();
+        [Required]
+        public List<StudentRolloverDecisionDto> Decisions { get; set; } = new();
     }
 
-    public class StudentRolloverDecisionItem
+    public class StudentRolloverDecisionDto
     {
+        [Required]
+        public long EnrollmentId { get; set; }
+
+        [Required]
         public long StudentId { get; set; }
-        public bool IsPromoted { get; set; } // True: vào PromoteToClassId, False: vào RetainInClassId
-        public bool Skip { get; set; }       // Bỏ qua nếu không muốn xếp lớp
+
+        /// <summary>
+        /// "PROMOTE" (Lên lớp), "RETAIN" (Ở lại lớp), "SKIP" (Nghỉ học/Chuyển xứ), "GRADUATE" (Hoàn thành chương trình)
+        /// </summary>
+        [Required, MaxLength(20)]
+        public string Action { get; set; } = "PROMOTE";
+
+        /// <summary>
+        /// Lớp đích tại niên khóa mới (Null nếu để thuật toán SmartClassBalancing tự phân bổ hoặc chọn SKIP/GRADUATE)
+        /// </summary>
+        public int? TargetClassId { get; set; }
+
+        [MaxLength(255)]
+        public string? Note { get; set; }
+    }
+
+    public class SavePromotionRuleDto
+    {
+        [Required]
+        public int AcademicYearId { get; set; }
+
+        [Required, MaxLength(50)]
+        public string GradeLevel { get; set; } = "ALL";
+
+        [Range(0.0, 10.0)]
+        public decimal MinYearAverage { get; set; } = 5.0m;
+
+        [Range(0.0, 100.0)]
+        public double MinAttendanceRate { get; set; } = 80.0;
+
+        public bool RequireSacramentPassed { get; set; } = true;
+
+        [Range(0.0, 10.0)]
+        public decimal MinSacramentScore { get; set; } = 5.0m;
+
+        [MaxLength(50)]
+        public string? NextGradeLevel { get; set; }
     }
 }

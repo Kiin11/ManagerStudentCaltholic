@@ -1,195 +1,371 @@
-﻿@model ManagerStudentCaltholic.Models.ViewModels.PromotionPreviewViewModel
-@using ManagerStudentCaltholic.Models.Entities
+﻿@model ManagerStudentCaltholic.Models.ViewModels.PromotionIndexViewModel
 @{
     ViewData["Title"] = "Xét Duyệt Lên Lớp & Kết Chuyển Niên Khóa";
-    var allYears = ViewBag.AllYears as List<AcademicYear> ?? new();
-    var sourceClasses = ViewBag.SourceClasses as List<ClassRoom> ?? new();
+    var allTargetClasses = Model.TargetPromoteClasses
+        .UnionBy(Model.TargetRetainClasses, c => c.Id)
+        .OrderBy(c => c.GradeLevel)
+        .ThenBy(c => c.Name)
+        .ToList();
 }
+
 @Html.AntiForgeryToken()
 
 <div class="container-fluid py-4">
-    <!-- Header -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
-        <div>
-            <h4 class="fw-bold text-dark mb-1">
-                <i class="bi bi-arrow-up-right-circle-fill text-primary me-2"></i>Hội Đồng Xét Lên Lớp & Kết Chuyển Niên Khóa
-            </h4>
-            <small class="text-muted">
-                Tự động tổng hợp kết quả cuối năm, xét duyệt lên lớp / đặc cách và chuyển danh sách học sinh sang niên khóa mới.
-            </small>
-        </div>
-        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3" onclick="cloneClassesToNewYear()">
-            <i class="bi bi-files me-1"></i> Sao Chép Khung Lớp Sang Niên Khóa Đích (@Model.TargetYearName)
-        </button>
-    </div>
-
-    <!-- Bộ lọc Niên khóa Nguồn - Lớp Nguồn - Tiêu chí xét duyệt -->
+    <!-- Header & Thanh công cụ -->
     <div class="card border-0 shadow-sm rounded-4 mb-4">
-        <div class="card-body p-3">
-            <form method="get" asp-action="Index" class="row g-3 align-items-end">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-mortarboard-fill text-primary me-2"></i>Công Cụ Tự Động Xét Lên Lớp & Kết Chuyển Niên Khóa
+                    </h4>
+                    <p class="text-muted small mb-0">
+                        Tự động đánh giá ĐTB Cả năm, Tỷ lệ chuyên cần, Khảo hạch Bí tích và phân bổ cân bằng sĩ số Nam/Nữ sang niên khóa mới.
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#ruleConfigModal">
+                        <i class="bi bi-sliders me-1"></i> Quy tắc xét lên lớp
+                    </button>
+                    <button type="button" class="btn btn-outline-primary rounded-pill px-3" onclick="cloneClassesToNewYear()">
+                        <i class="bi bi-copy me-1"></i> Sao chép danh mục lớp sang NK mới
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bộ lọc 3 cấp: Niên khóa cũ -> Lớp xét duyệt -> Niên khóa mới -->
+            <form method="get" action="/Promotion/Index" class="row g-3 align-items-end pt-2 border-top">
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold text-secondary">1. Niên Khóa Nguồn (Năm Cũ)</label>
-                    <select name="sourceYearId" id="sourceYearId" class="form-select form-select-sm" onchange="this.form.submit()">
-                        @foreach (var y in allYears)
+                    <label class="form-label fw-bold small text-secondary">1. Niên khóa nguồn (Xét duyệt)</label>
+                    <select name="sourceYearId" id="selectSourceYear" class="form-select" onchange="this.form.submit()">
+                        @foreach (var y in Model.AcademicYears)
                         {
                             <option value="@y.Id" selected="@(y.Id == Model.SourceYearId)">
-                                @y.Name @(y.IsCurrent ? "(Đang kích hoạt)" : "")
+                                @y.Name @(y.IsCurrent ? "(Hiện hành)" : "")
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold small text-secondary">2. Lớp xét duyệt</label>
+                    <select name="classId" id="selectSourceClass" class="form-select" onchange="this.form.submit()">
+                        @if (!Model.SourceClasses.Any())
+                        {
+                            <option value="0">-- Chưa có lớp trong niên khóa này --</option>
+                        }
+                        @foreach (var c in Model.SourceClasses)
+                        {
+                            <option value="@c.Id" selected="@(c.Id == Model.SelectedClassId)">
+                                [@c.GradeLevel] @c.Name
                             </option>
                         }
                     </select>
                 </div>
 
                 <div class="col-md-3">
-                    <label class="form-label small fw-bold text-secondary">2. Chọn Lớp Xét Duyệt</label>
-                    <select name="sourceClassId" class="form-select form-select-sm fw-semibold" onchange="this.form.submit()">
-                        @foreach (var c in sourceClasses)
+                    <label class="form-label fw-bold small text-secondary">3. Niên khóa đích (Kết chuyển sang)</label>
+                    <select name="targetYearId" id="selectTargetYear" class="form-select" onchange="this.form.submit()">
+                        @foreach (var y in Model.AcademicYears)
                         {
-                            <option value="@c.Id" selected="@(c.Id == Model.SourceClassId)">
-                                @c.Name (@c.GradeLevel)
+                            <option value="@y.Id" selected="@(y.Id == Model.TargetYearId)">
+                                @y.Name @(y.IsCurrent ? "(Hiện hành)" : "")
                             </option>
                         }
                     </select>
                 </div>
 
                 <div class="col-md-2">
-                    <label class="form-label small fw-bold text-secondary">3. Niên Khóa Đích (Năm Mới)</label>
-                    <select name="targetYearId" id="targetYearId" class="form-select form-select-sm" onchange="this.form.submit()">
-                        @foreach (var y in allYears)
-                        {
-                            <option value="@y.Id" selected="@(y.Id == Model.TargetYearId)">@y.Name</option>
-                        }
-                    </select>
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label small fw-bold text-secondary">ĐTB Tối Thiểu</label>
-                    <input type="number" step="0.5" min="0" max="10" name="minAvg" value="@Model.MinYearAverage" class="form-control form-control-sm text-center" />
-                </div>
-
-                <div class="col-md-2 d-flex gap-2">
-                    <div class="w-100">
-                        <label class="form-label small fw-bold text-secondary">% Chuyên Cần</label>
-                        <input type="number" step="5" min="0" max="100" name="minAtt" value="@Model.MinAttendanceRate" class="form-control form-control-sm text-center" />
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm align-self-end px-3" title="Áp dụng tiêu chí">
-                        <i class="bi bi-funnel-fill"></i>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">
+                        <i class="bi bi-funnel-fill me-1"></i> Tải dữ liệu
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Khu vực Cấu hình Lớp Đích & Nút Thực thi Kết chuyển -->
-    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-primary-subtle">
-        <div class="card-body p-3">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-dark mb-1">
-                        <i class="bi bi-check2-circle text-success me-1"></i>Chuyển Học Sinh ĐƯỢC LÊN LỚP (@Model.PassedCount em) vào lớp:
-                    </label>
-                    <select id="promoteToClassId" class="form-select form-select-sm fw-bold border-success">
-                        <option value="">-- Chọn lớp lên ở niên khóa @Model.TargetYearName --</option>
-                        @foreach (var tc in Model.TargetYearClasses)
-                        {
-                            <option value="@tc.Id">@tc.Name (@tc.GradeLevel)</option>
-                        }
-                    </select>
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-dark mb-1">
-                        <i class="bi bi-arrow-repeat text-danger me-1"></i>Giữ Học Sinh Ở LẠI LỚP (@Model.RetainedCount em) vào lớp:
-                    </label>
-                    <select id="retainInClassId" class="form-select form-select-sm fw-bold border-danger">
-                        <option value="">-- Chọn lớp học lại ở niên khóa @Model.TargetYearName --</option>
-                        @foreach (var tc in Model.TargetYearClasses)
-                        {
-                            <option value="@tc.Id" selected="@(tc.Id == Model.SuggestedRetainClassId)">@tc.Name (@tc.GradeLevel)</option>
-                        }
-                    </select>
-                </div>
-
-                <div class="col-md-4 text-md-end">
-                    <button type="button" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm mt-3 mt-md-0" onclick="executeRollover()">
-                        <i class="bi bi-cloud-upload-fill me-1"></i> Xác Nhận Kết Chuyển Sang @Model.TargetYearName
-                    </button>
-                </div>
+    <!-- Thẻ KPI Thống kê nhanh & Quy tắc đang áp dụng -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                <div class="text-muted small">Tổng sĩ số lớp xét duyệt</div>
+                <div class="fs-3 fw-bold text-dark">@Model.TotalStudents <span class="fs-6 fw-normal text-muted">thiếu nhi</span></div>
+                <small class="text-secondary">Lớp: <strong>@Model.SelectedClassName</strong></small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                <div class="text-muted small">Đủ điều kiện lên lớp</div>
+                <div class="fs-3 fw-bold text-success" id="statPromoteCount">@Model.TotalPromoted</div>
+                <small class="text-success"><i class="bi bi-arrow-up-right-circle me-1"></i>Khối đích gợi ý: <strong>@Model.SuggestedNextGradeLevel</strong></small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                <div class="text-muted small">Chưa đạt / Ở lại lớp</div>
+                <div class="fs-3 fw-bold text-danger" id="statRetainCount">@Model.TotalRetained</div>
+                <small class="text-muted">Yêu cầu ĐTB &ge; @Model.AppliedRule.MinYearAverage.ToString("0.0") &amp; CC &ge; @Model.AppliedRule.MinAttendanceRate%</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                <div class="text-muted small">Đã kết chuyển trước đó</div>
+                <div class="fs-3 fw-bold text-primary">@Model.TotalAlreadyProcessed</div>
+                <small class="text-muted">Sang niên khóa: <strong>@Model.TargetYearName</strong></small>
             </div>
         </div>
     </div>
 
-    <!-- Bảng Danh sách Học sinh Xét duyệt -->
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+    <!-- Bảng Ma trận Xét duyệt Học sinh -->
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h6 class="fw-bold mb-0 text-dark">
+                    Danh Sách Xét Duyệt Học Sinh Lớp @Model.SelectedClassName
+                </h6>
+                <small class="text-muted">
+                    Điều kiện áp dụng: ĐTB Năm &ge; <strong>@Model.AppliedRule.MinYearAverage.ToString("0.0")</strong> |
+                    Chuyên cần &ge; <strong>@Model.AppliedRule.MinAttendanceRate%</strong> |
+                    Khảo hạch Bí tích: <strong>@(Model.AppliedRule.RequireSacramentPassed ? $"Bắt buộc (>= {Model.AppliedRule.MinSacramentScore:0.0})" : "Không bắt buộc")</strong>
+                </small>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkSmartBalancing" checked>
+                    <label class="form-check-label small fw-semibold" for="chkSmartBalancing">
+                        Tự động chia đều sĩ số &amp; Nam/Nữ
+                    </label>
+                </div>
+                <button type="button" class="btn btn-success rounded-pill px-4 fw-bold" onclick="openConfirmRolloverModal()" @(Model.Students.Any(s => !s.IsAlreadyRolledOver) ? "" : "disabled")>
+                    <i class="bi bi-check2-all me-1"></i> Thực Thi Kết Chuyển
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table table-bordered table-hover align-middle mb-0 text-center">
-                <thead class="table-light small">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light text-secondary small text-uppercase">
                     <tr>
-                        <th style="width: 45px;">STT</th>
-                        <th style="width: 95px;">Mã QR</th>
-                        <th class="text-start">Tên Thánh & Họ Tên</th>
-                        <th>ĐTB HK1</th>
-                        <th>ĐTB HK2</th>
-                        <th class="bg-warning-subtle">ĐTB Cả Năm</th>
-                        <th>% Chuyên Cần</th>
-                        <th>Xếp Loại</th>
-                        <th>Xét Bí Tích</th>
-                        <th style="width: 170px;">Quyết Định Lên Lớp</th>
-                        <th>Trạng Thái Năm Mới</th>
+                        <th class="ps-4">#</th>
+                        <th>Mã TN</th>
+                        <th>Tên Thánh &amp; Họ Tên</th>
+                        <th class="text-center">Giới tính</th>
+                        <th class="text-center">ĐTB HK1</th>
+                        <th class="text-center">ĐTB HK2</th>
+                        <th class="text-center">ĐTB Năm</th>
+                        <th class="text-center">% Chuyên Cần</th>
+                        <th class="text-center">Thi Bí Tích</th>
+                        <th class="text-center">Đánh Giá Hệ Thống</th>
+                        <th style="min-width: 170px;">Quyết Định</th>
+                        <th style="min-width: 210px;" class="pe-4">Lớp Đích (@Model.TargetYearName)</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @if (Model.Students.Any())
+                    @if (!Model.Students.Any())
                     {
-                        var stt = 1;
+                        <tr>
+                            <td colspan="12" class="text-center py-5 text-muted">
+                                Không có học sinh nào đang theo học trong lớp này.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        int idx = 1;
                         foreach (var s in Model.Students)
                         {
-                            <tr class="student-rollover-row" data-student-id="@s.StudentId">
-                                <td class="fw-bold text-muted">@(stt++)</td>
-                                <td><span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span></td>
-                                <td class="text-start fw-bold text-dark">@s.ChristianName @s.FullName</td>
-                                <td>@(s.HK1Average.HasValue? s.HK1Average.Value.ToString("0.00") : "--")</td>
-                                <td>@(s.HK2Average.HasValue? s.HK2Average.Value.ToString("0.00") : "--")</td>
-                                <td class="fw-bold text-primary bg-light">@(s.YearAverage.HasValue? s.YearAverage.Value.ToString("0.00") : "--")</td>
-                                <td><span class="badge bg-light text-dark border">@s.AttendanceRate%</span></td>
-                                <td><span class="badge bg-secondary">@s.AcademicRank</span></td>
+                            <tr class="student-rollover-row @(s.IsAlreadyRolledOver ? "table-light text-muted" : "")"
+                                data-enrollment-id="@s.EnrollmentId"
+                                data-student-id="@s.StudentId"
+                                data-already-rolled="@s.IsAlreadyRolledOver.ToString().ToLower()">
+                                <td class="ps-4 fw-semibold">@(idx++)</td>
+                                <td><span class="badge bg-light text-dark border">@s.StudentCode</span></td>
                                 <td>
-                                    <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-2">
-                                        Tạm khóa (Chờ quy tắc)
+                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                    <small class="text-muted">NS: @s.DateOfBirth.ToString("dd/MM/yyyy")</small>
+                                </td>
+                                <td class="text-center">@s.Gender</td>
+                                <td class="text-center">@(s.Semester1Average?.ToString("0.00") ?? "--")</td>
+                                <td class="text-center">@(s.Semester2Average?.ToString("0.00") ?? "--")</td>
+                                <td class="text-center fw-bold @(s.YearAverage >= Model.AppliedRule.MinYearAverage ? "text-primary" : "text-danger")">
+                                    @(s.YearAverage?.ToString("0.00") ?? "--")
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge @(s.AttendanceRate >= Model.AppliedRule.MinAttendanceRate ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">
+                                        @s.AttendanceRate.ToString("0.0")%
                                     </span>
                                 </td>
-                                <td>
-                                    <select class="form-select form-select-sm fw-bold decision-select @(s.IsPromoted ? "text-success border-success" : "text-danger border-danger")"
-                                            @(s.AlreadyEnrolledInTargetYear ? "disabled" : "")
-                                            onchange="updateSelectStyle(this)">
-                                        <option value="PROMOTE" selected="@s.IsPromoted">✔ Lên lớp</option>
-                                        <option value="RETAIN" selected="@(!s.IsPromoted)">✘ Ở lại lớp</option>
-                                        <option value="SKIP">Bỏ qua (Nghỉ/Chuyển xứ)</option>
-                                    </select>
-                                    <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">@s.PromotionNote</small>
-                                </td>
-                                <td>
-                                    @if (s.AlreadyEnrolledInTargetYear)
+                                <td class="text-center">
+                                    @if (s.HasSacramentExamColumn)
                                     {
-                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                            Đã vào lớp: @s.ExistingTargetClassName
+                                        <span class="fw-semibold @(s.SacramentExamScore >= Model.AppliedRule.MinSacramentScore ? "text-success" : "text-danger")">
+                                            @(s.SacramentExamScore?.ToString("0.00") ?? "Chưa thi")
                                         </span>
                                     }
                                     else
                                     {
-                                        <span class="badge bg-warning-subtle text-dark border px-2 py-1">Chưa kết chuyển</span>
+                                        <span class="text-muted small">--</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (s.IsAlreadyRolledOver)
+                                    {
+                                        <span class="badge bg-secondary">Đã xếp vào: @s.ExistingTargetClassName</span>
+                                    }
+                                    else if (s.IsPromoted)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check-circle-fill me-1"></i>@s.AcademicRank - Lên lớp
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="@s.EvaluationReason">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Ở lại (@s.EvaluationReason)
+                                        </span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (s.IsAlreadyRolledOver)
+                                    {
+                                        <span class="small fst-italic text-muted">Đã hoàn tất</span>
+                                    }
+                                    else
+                                    {
+                                        <select class="form-select form-select-sm decision-select fw-semibold" onchange="recalculateSummaryCounts()">
+                                            <option value="PROMOTE" selected="@(s.SuggestedAction == "PROMOTE")">✔ Lên lớp</option>
+                                            <option value="RETAIN" selected="@(s.SuggestedAction == "RETAIN")">✘ Ở lại lớp</option>
+                                            <option value="GRADUATE" selected="@(s.SuggestedAction == "GRADUATE")">🎓 Hoàn thành / Ra trường</option>
+                                            <option value="SKIP">⏭ Bỏ qua (Nghỉ / Chuyển xứ)</option>
+                                        </select>
+                                    }
+                                </td>
+                                <td class="pe-4">
+                                    @if (s.IsAlreadyRolledOver)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary">@s.ExistingTargetClassName</span>
+                                    }
+                                    else
+                                    {
+                                        <select class="form-select form-select-sm target-class-select">
+                                            <option value="0">-- Tự động cân bằng sĩ số --</option>
+                                            @foreach (var tc in allTargetClasses)
+                                            {
+                                                <option value="@tc.Id" selected="@(s.SuggestedTargetClassId == tc.Id)">
+                                                    [@tc.GradeLevel] @tc.Name
+                                                </option>
+                                            }
+                                        </select>
                                     }
                                 </td>
                             </tr>
                         }
                     }
-                    else
-                    {
-                        <tr>
-                            <td colspan="11" class="py-5 text-muted">Lớp hiện tại chưa có dữ liệu thiếu nhi.</td>
-                        </tr>
-                    }
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cấu hình Quy tắc Lên lớp (TASK-P3-01.1) -->
+<div class="modal fade" id="ruleConfigModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-light">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-sliders text-primary me-2"></i>Cấu Hình Quy Tắc Xét Lên Lớp (@Model.CurrentGradeLevel)
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-bold small">Khối áp dụng</label>
+                    <select id="ruleGradeLevel" class="form-select">
+                        <option value="@Model.CurrentGradeLevel" selected>Khối hiện tại (@Model.CurrentGradeLevel)</option>
+                        <option value="ALL">Toàn Giáo xứ (Mặc định chung)</option>
+                    </select>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-bold small">ĐTB Cả năm tối thiểu</label>
+                        <input type="number" step="0.1" min="0" max="10" id="ruleMinAvg" class="form-control" value="@Model.AppliedRule.MinYearAverage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-bold small">% Chuyên cần tối thiểu</label>
+                        <input type="number" step="1" min="0" max="100" id="ruleMinAtt" class="form-control" value="@Model.AppliedRule.MinAttendanceRate" />
+                    </div>
+                </div>
+                <div class="row g-3 mb-3 align-items-center">
+                    <div class="col-7">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="ruleReqSacrament" @(Model.AppliedRule.RequireSacramentPassed ? "checked" : "")>
+                            <label class="form-check-label small fw-semibold" for="ruleReqSacrament">
+                                Bắt buộc đậu Khảo hạch Bí tích
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-5">
+                        <label class="form-label fw-bold small">Điểm Bí tích tối thiểu</label>
+                        <input type="number" step="0.1" min="0" max="10" id="ruleMinSacScore" class="form-control form-control-sm" value="@Model.AppliedRule.MinSacramentScore.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" />
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-bold small">Khối chuyển tiếp sau khi hoàn thành khối này (Tùy chọn)</label>
+                    <input type="text" id="ruleNextGrade" class="form-control" placeholder="VD: Rước Lễ, Thêm Sức, Bao Đồng..." value="@Model.AppliedRule.NextGradeLevel" />
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" onclick="savePromotionRule()">
+                    Lưu Quy Tắc
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Xác nhận Kết chuyển Hàng loạt -->
+<div class="modal fade" id="confirmRolloverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-warning-subtle">
+                <h6 class="modal-title fw-bold text-dark">
+                    <i class="bi bi-exclamation-octagon-fill text-warning me-2"></i>Xác Nhận Kết Chuyển Niên Khóa
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="mb-3">
+                    Bạn sắp thực hiện kết chuyển học sinh từ lớp <strong>@Model.SelectedClassName (@Model.SourceYearName)</strong> sang niên khóa <strong>@Model.TargetYearName</strong>:
+                </p>
+                <ul class="list-group mb-3">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>✔ Được lên lớp (PROMOTE):</span>
+                        <span class="badge bg-success rounded-pill fs-6" id="modalCountPromote">0</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>✘ Ở lại lớp / Lưu ban (RETAIN):</span>
+                        <span class="badge bg-danger rounded-pill fs-6" id="modalCountRetain">0</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>🎓 Hoàn thành chương trình (GRADUATE):</span>
+                        <span class="badge bg-info text-dark rounded-pill fs-6" id="modalCountGraduate">0</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>⏭ Nghỉ học / Chuyển xứ (SKIP):</span>
+                        <span class="badge bg-secondary rounded-pill fs-6" id="modalCountSkip">0</span>
+                    </li>
+                </ul>
+                <div class="alert alert-info small mb-0">
+                    <i class="bi bi-shield-lock-fill me-1"></i> Toàn bộ tiến trình được bảo vệ bằng giao dịch <strong>ACID Transaction</strong>. Nếu có bất kỳ lỗi nào xảy ra, dữ liệu sẽ được hoàn tác nguyên trạng.
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" id="btnExecuteRollover" class="btn btn-success rounded-pill px-4 fw-bold" onclick="submitExecuteRollover()">
+                    <i class="bi bi-rocket-takeoff me-1"></i> Xác Nhận Thực Thi
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -200,80 +376,43 @@
             return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
-        function updateSelectStyle(sel) {
-            sel.classList.remove('text-success', 'border-success', 'text-danger', 'border-danger', 'text-secondary');
-            if (sel.value === 'PROMOTE') {
-                sel.classList.add('text-success', 'border-success');
-            } else if (sel.value === 'RETAIN') {
-                sel.classList.add('text-danger', 'border-danger');
-            } else {
-                sel.classList.add('text-secondary');
-            }
-        }
-
-        async function cloneClassesToNewYear() {
-            const sourceYearId = document.getElementById('sourceYearId').value;
-            const targetYearId = document.getElementById('targetYearId').value;
-            if (sourceYearId === targetYearId) {
-                alert('Vui lòng chọn Niên khóa Đích (Năm mới) khác với Niên khóa Nguồn trước khi sao chép khung lớp!');
-                return;
-            }
-            if (!confirm('Hệ thống sẽ tự động tạo các lớp học tương ứng sang niên khóa mới. Tiếp tục?')) return;
-
-            const formData = new FormData();
-            formData.append('sourceYearId', sourceYearId);
-            formData.append('targetYearId', targetYearId);
-
-            const res = await fetch('/Promotion/CloneClassesToNewYear', {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': getCsrfToken() },
-                body: formData
-            });
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) location.reload();
-        }
-
-        async function executeRollover() {
-            const targetYearId = parseInt(document.getElementById('targetYearId').value);
-            const promoteToClassId = document.getElementById('promoteToClassId').value;
-            const retainInClassId = document.getElementById('retainInClassId').value;
-
-            const decisions = [];
+        function recalculateSummaryCounts() {
+            let promote = 0, retain = 0, graduate = 0, skip = 0;
             document.querySelectorAll('.student-rollover-row').forEach(row => {
+                if (row.dataset.alreadyRolled === 'true') return;
                 const sel = row.querySelector('.decision-select');
-                if (sel && !sel.disabled) {
-                    decisions.push({
-                        studentId: parseInt(row.getAttribute('data-student-id')),
-                        isPromoted: sel.value === 'PROMOTE',
-                        skip: sel.value === 'SKIP'
-                    });
-                }
+                if (!sel) return;
+                if (sel.value === 'PROMOTE') promote++;
+                else if (sel.value === 'RETAIN') retain++;
+                else if (sel.value === 'GRADUATE') graduate++;
+                else if (sel.value === 'SKIP') skip++;
             });
 
-            const hasPromote = decisions.some(d => !d.skip && d.isPromoted);
-            const hasRetain = decisions.some(d => !d.skip && !d.isPromoted);
+            document.getElementById('statPromoteCount').innerText = promote;
+            document.getElementById('statRetainCount').innerText = retain;
+            document.getElementById('modalCountPromote').innerText = promote;
+            document.getElementById('modalCountRetain').innerText = retain;
+            document.getElementById('modalCountGraduate').innerText = graduate;
+            document.getElementById('modalCountSkip').innerText = skip;
+        }
 
-            if (hasPromote && !promoteToClassId) {
-                alert('Vui lòng chọn Lớp Đích cho nhóm học sinh ĐƯỢC LÊN LỚP!');
-                return;
-            }
-            if (hasRetain && !retainInClassId) {
-                alert('Vui lòng chọn Lớp Đích cho nhóm học sinh Ở LẠI LỚP!');
-                return;
-            }
+        function openConfirmRolloverModal() {
+            recalculateSummaryCounts();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmRolloverModal')).show();
+        }
 
-            if (!confirm('Xác nhận thực thi kết chuyển danh sách thiếu nhi sang niên khóa mới?')) return;
-
+        async function savePromotionRule() {
             const payload = {
-                sourceClassId: @Model.SourceClassId,
-                targetYearId: targetYearId,
-                promoteToClassId: promoteToClassId ? parseInt(promoteToClassId) : null,
-                retainInClassId: retainInClassId ? parseInt(retainInClassId) : null,
-                decisions: decisions
+                academicYearId: @Model.SourceYearId,
+                gradeLevel: document.getElementById('ruleGradeLevel').value,
+                minYearAverage: parseFloat(document.getElementById('ruleMinAvg').value) || 5.0,
+                minAttendanceRate: parseFloat(document.getElementById('ruleMinAtt').value) || 80.0,
+                requireSacramentPassed: document.getElementById('ruleReqSacrament').checked,
+                minSacramentScore: parseFloat(document.getElementById('ruleMinSacScore').value) || 5.0,
+                nextGradeLevel: document.getElementById('ruleNextGrade').value.trim()
             };
 
-            const res = await fetch('/Promotion/ExecuteRollover', {
+            const res = await fetch('/Promotion/SavePromotionRule', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -283,8 +422,99 @@
             });
 
             const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Lỗi: ' + (data.message || 'Không thể lưu quy tắc.'));
+            }
+        }
+
+        async function cloneClassesToNewYear() {
+            const srcYear = @Model.SourceYearId;
+            const dstYear = @Model.TargetYearId;
+            if (srcYear === dstYear) {
+                alert('Vui lòng chọn Niên khóa đích khác với Niên khóa nguồn trước khi sao chép danh mục lớp!');
+                return;
+            }
+            if (!confirm('Sao chép toàn bộ cấu trúc lớp từ niên khóa nguồn sang niên khóa đích?')) return;
+
+            const formData = new URLSearchParams();
+            formData.append('sourceYearId', srcYear);
+            formData.append('targetYearId', dstYear);
+
+            const res = await fetch('/Promotion/CloneClassesToNewYear', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                body: formData.toString()
+            });
+
+            const data = await res.json();
             alert(data.message);
             if (data.success) location.reload();
+        }
+
+        async function submitExecuteRollover() {
+            const decisions = [];
+            document.querySelectorAll('.student-rollover-row').forEach(row => {
+                if (row.dataset.alreadyRolled === 'true') return;
+                const actionSelect = row.querySelector('.decision-select');
+                const targetSelect = row.querySelector('.target-class-select');
+                if (!actionSelect) return;
+
+                const targetVal = targetSelect ? parseInt(targetSelect.value) : 0;
+                decisions.push({
+                    enrollmentId: parseInt(row.dataset.enrollmentId),
+                    studentId: parseInt(row.dataset.studentId),
+                    action: actionSelect.value,
+                    targetClassId: targetVal > 0 ? targetVal : null
+                });
+            });
+
+            if (decisions.length === 0) {
+                alert('Không có học sinh nào cần kết chuyển.');
+                return;
+            }
+
+            const btn = document.getElementById('btnExecuteRollover');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...';
+
+            try {
+                const payload = {
+                    sourceAcademicYearId: @Model.SourceYearId,
+                    sourceClassId: @Model.SelectedClassId,
+                    targetAcademicYearId: @Model.TargetYearId,
+                    useSmartBalancing: document.getElementById('chkSmartBalancing').checked,
+                    decisions: decisions
+                };
+
+                const res = await fetch('/Promotion/ExecuteRollover', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert('Lỗi: ' + (data.message || 'Không thể kết chuyển.'));
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Xác Nhận Thực Thi';
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Xác Nhận Thực Thi';
+            }
         }
     </script>
 }
