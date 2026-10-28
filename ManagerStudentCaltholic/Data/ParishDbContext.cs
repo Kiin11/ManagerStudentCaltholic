@@ -47,6 +47,7 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
         public DbSet<ParentMessageTemplate> ParentMessageTemplates => Set<ParentMessageTemplate>();
         public DbSet<StudentRegistrationRequest> StudentRegistrationRequests => Set<StudentRegistrationRequest>();
+        public DbSet<PromotionRuleConfig> PromotionRuleConfigs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -469,6 +470,24 @@ namespace ManagerStudentCaltholic.Data
 
             modelBuilder.Entity<TeacherClass>()
                 .HasIndex(t => new { t.UserId, t.ClassId, t.AcademicYear }).IsUnique();
+
+            // 6.1. PromotionRuleConfig (TASK-P3-01.1)
+            modelBuilder.Entity<PromotionRuleConfig>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(e => e.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Đảm bảo mỗi Niên khóa + Khối chỉ có 1 quy tắc đang hoạt động
+                entity.HasIndex(e => new { e.AcademicYearId, e.GradeLevel })
+                      .IsUnique()
+                      .HasFilter("\"IsDeleted\" = false");
+
+                entity.HasQueryFilter(e => !e.IsDeleted);
+            });
         }
 
         /// <summary>
