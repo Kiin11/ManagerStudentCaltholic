@@ -4,7 +4,15 @@
     var totalStudents = (int)(ViewBag.TotalStudents ?? 0);
     var totalClasses = (int)(ViewBag.TotalClasses ?? 0);
     var totalEnrolled = (int)(ViewBag.TotalEnrolled ?? 0);
+    var pendingRegistrations = (int)(ViewBag.PendingRegistrations ?? 0);
     var isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+
+    // Quyền kiểm duyệt đơn tuyển sinh (Admin, Cha Linh Hướng, Ban Điều Hành)
+    var canReviewRegistrations = isAuthenticated && (
+        User.IsInRole("Admin") ||
+        User.IsInRole("SpiritualDirector") ||
+        User.IsInRole("ExecutiveBoard")
+    );
 }
 
 <div class="container-fluid px-0">
@@ -48,68 +56,117 @@
 
     <!-- KHU VỰC LỐI TẮT NHANH (QUICK ACTIONS & STATS) -->
     <div class="row g-3 mb-4">
-        @if (isAuthenticated)
-        {
-            <!-- Thẻ 1: Quản lý Mẫu Tin Nhắn -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex align-items-center">
-                    <div class="rounded-circle bg-warning-subtle text-warning d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
-                        <i class="bi bi-chat-text-fill"></i>
-                    </div>
-                    <div>
-                        <h6 class="fw-bold mb-1">Mẫu Tin Nhắn Phụ Huynh</h6>
-                        <p class="text-muted small mb-2">Soạn thảo & 1-Click sao chép gửi Zalo/Viber.</p>
-                        <a asp-controller="ParentMessages" asp-action="Index" class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-semibold">
-                            Truy cập Hub <i class="bi bi-arrow-right ms-1"></i>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-        }
-        
         @if (!isAuthenticated)
         {
-            <!-- Thẻ 2: Cổng Đăng Ký Trực Tuyến -->
+            <!-- Thẻ 1: Cổng Đăng Ký Trực Tuyến -->
             <div class="col-md-6 col-lg-4">
                 <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex align-items-center">
-                    <div class="rounded-circle bg-info-subtle text-info d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
-                        <i class="bi bi-person-plus-fill"></i>
-                    </div>
-                    <div>
-                        <h6 class="fw-bold mb-1">Cổng Đăng Ký Thiếu Nhi</h6>
-                        <p class="text-muted small mb-2">Link nộp hồ sơ & tải ảnh Rửa tội online.</p>
-                        <a asp-controller="PublicRegistration" asp-action="Index" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 fw-semibold">
-                            Mở cổng form <i class="bi bi-box-arrow-up-right ms-1"></i>
-                        </a>
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-info-subtle text-info d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-person-plus-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Cổng Đăng Ký Thiếu Nhi</h6>
+                            <p class="text-muted small mb-2">Link nộp hồ sơ & tải ảnh Rửa tội online.</p>
+                            <a asp-controller="PublicRegistration" asp-action="Index" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 fw-semibold">
+                                Mở cổng form <i class="bi bi-box-arrow-up-right ms-1"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+            <!-- Thẻ 2: Nút dành cho Phụ huynh nộp đơn & tra cứu -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-warning-subtle text-warning d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-chat-text-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Đăng Ký Tuyển Sinh Đầu Năm</h6>
+                            <p class="text-muted small mb-2">Phụ huynh chỉ đăng ký cho thiếu nhi mới.</p>
+                            <a asp-controller="PublicRegistration" asp-action="Index" class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-semibold">
+                                Truy cập Hub <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Thẻ 3: Tra cứu nhanh -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-card-checklist"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Tra cứu hồ sơ đã nộp</h6>
+                            <p class="text-muted small mb-2">Tra cứu hồ sơ thiếu nhi đã nộp.</p>
+                            <a asp-controller="PublicRegistration" asp-action="CheckStatus" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
+                                Tra cứu <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         }
 
         
         @if (isAuthenticated)
         {
-            <!-- Thẻ 3: Sổ Điểm Danh Nhanh -->
+            <!-- Thẻ 1: Quản lý Mẫu Tin Nhắn -->
             <div class="col-md-6 col-lg-4">
                 <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex align-items-center">
-                    <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
-                        <i class="bi bi-card-checklist"></i>
-                    </div>
-                    <div>
-                        <h6 class="fw-bold mb-1">Sổ Chuyên Cần Lớp</h6>
-                        <p class="text-muted small mb-2">Điểm danh lễ & giờ học giáo lý hàng tuần.</p>
-                        <a asp-controller="Attendance" asp-action="Index" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
-                            Mở sổ lớp <i class="bi bi-arrow-right ms-1"></i>
-                        </a>
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-warning-subtle text-warning d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-chat-text-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Mẫu Tin Nhắn Phụ Huynh</h6>
+                            <p class="text-muted small mb-2">Soạn thảo & 1-Click sao chép gửi Zalo/Viber.</p>
+                            <a asp-controller="ParentMessages" asp-action="Index" class="btn btn-sm btn-outline-warning rounded-pill px-3 fw-semibold">
+                                Truy cập Hub <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+            <!-- Thẻ 2: Sổ Điểm Danh Nhanh -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-card-checklist"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Sổ Chuyên Cần Lớp</h6>
+                            <p class="text-muted small mb-2">Điểm danh lễ & giờ học giáo lý hàng tuần.</p>
+                            <a asp-controller="Attendance" asp-action="Index" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
+                                Mở sổ lớp <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Thẻ 3: Kiểm Duyệt Đơn Tuyển Sinh -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
+                    <div class="card-body p-4 d-flex align-items-center">
+                        <div class="rounded-circle bg-info-subtle text-info d-flex align-items-center justify-content-center me-3" style="width: 56px; height: 56px; font-size: 1.5rem;">
+                            <i class="bi bi-person-plus-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Kiểm Duyệt Đơn Tuyển Sinh</h6>
+                            <p class="text-muted small mb-2">Kiểm duyệt hồ sơ phụ huynh đã đăng ký.</p>
+                            <a asp-controller="StudentRegistrations" asp-action="Index" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 fw-semibold">
+                                <span class="badge rounded-pill bg-danger text-white ms-2">
+                                    Có @pendingRegistrations chờ duyệt
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         }
     </div>
     @if (isAuthenticated)

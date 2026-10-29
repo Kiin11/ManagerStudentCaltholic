@@ -488,6 +488,32 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.HasQueryFilter(e => !e.IsDeleted);
             });
+
+            // 6.2. StudentRegistrationRequest (TASK-P3-02.1)
+            modelBuilder.Entity<StudentRegistrationRequest>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(e => e.AcademicYearId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.CreatedStudent)
+                      .WithMany()
+                      .HasForeignKey(e => e.CreatedStudentId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(e => e.AssignedClass)
+                      .WithMany()
+                      .HasForeignKey(e => e.AssignedClassId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(e => new { e.Status, e.CreatedAt });
+                entity.HasIndex(e => new { e.ParentPhone, e.DateOfBirth });
+
+                entity.HasQueryFilter(e => !e.IsDeleted);
+            });
         }
 
         /// <summary>
