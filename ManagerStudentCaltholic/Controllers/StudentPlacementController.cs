@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    public class StudentPlacementService : Controller
+    public class StudentPlacementController : Controller
     {
         private readonly ParishDbContext _context;
 
-        public StudentPlacementService(ParishDbContext context)
+        public StudentPlacementController(ParishDbContext context)
         {
             _context = context;
         }

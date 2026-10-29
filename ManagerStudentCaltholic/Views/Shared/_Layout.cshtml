@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
     <!-- PWA & Mobile Meta Tags -->
@@ -31,7 +31,6 @@
             scroll-behavior: smooth;
         }
 
-        /* Dành cho Chrome, Edge, Safari */
         ::-webkit-scrollbar {
             width: 10px;
             height: 10px;
@@ -87,13 +86,13 @@
                 color: #ffffff;
             }
 
-        /* Nút kéo lên sẽ tự ẩn khi trang đang ở đỉnh */
         #btnScrollToTop.hide-btn {
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
             transform: scale(0.8);
         }
+
         :root {
             --sidebar-width: 260px;
             --sidebar-collapsed-width: 78px;
@@ -158,20 +157,11 @@
             color: #fff;
         }
 
-        .sidebar-section-title {
-            font-size: 0.65rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #64748b;
-            font-weight: 700;
-            padding: 0.75rem 1.25rem 0.25rem; /* Giảm padding trên/dưới */
-        }
-
         .sidebar-menu .nav-link {
             color: #94a3b8;
             font-weight: 500;
-            font-size: 0.88rem; /* Giảm nhẹ size chữ cho thanh thoát */
-            padding: 0.45rem 1rem; /* Giảm độ dày từng dòng */
+            font-size: 0.88rem;
+            padding: 0.45rem 1rem;
             display: flex;
             align-items: center;
             border-radius: 0.4rem;
@@ -248,14 +238,13 @@
                 }
         }
 
-        /* Tùy chỉnh Accordion cho Sidebar (Đã phóng to tiêu đề nhóm) */
         .sidebar-section-title {
-            font-size: 0.85rem; /* Tăng kích thước chữ từ 0.65rem lên 0.85rem */
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: #8b9bb4; /* Điều chỉnh màu sáng hơn một chút để nổi bật trên nền tối */
+            color: #8b9bb4;
             font-weight: 700;
-            padding: 1.25rem 1.25rem 0.5rem; /* Tăng khoảng cách (padding) trên và dưới */
+            padding: 1.25rem 1.25rem 0.5rem;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
@@ -264,30 +253,29 @@
         }
 
             .sidebar-section-title:hover {
-                color: #ffffff; /* Sáng hẳn lên khi trỏ chuột vào */
+                color: #ffffff;
             }
 
             .sidebar-section-title .bi-chevron-down {
                 transition: transform 0.3s ease;
-                font-size: 0.9rem; /* Phóng to nhẹ icon mũi tên để cân đối với chữ */
+                font-size: 0.9rem;
             }
 
             .sidebar-section-title.collapsed .bi-chevron-down {
                 transform: rotate(-90deg);
             }
 
-        /* Xử lý khi Sidebar bị rút gọn ở chế độ Desktop */
         #app-sidebar.collapsed .sidebar-section-title .bi-chevron-down {
             display: none;
         }
 
         #app-sidebar.collapsed .sidebar-section-title {
-            padding: 1rem 0; /* Thu gọn padding khi sidebar bị thu nhỏ */
+            padding: 1rem 0;
             justify-content: center;
         }
 
         #app-sidebar.collapsed .collapse {
-            display: block !important; /* Luôn hiện icon khi sidebar thu gọn */
+            display: block !important;
         }
     </style>
     @await RenderSectionAsync("Styles", required: false)
@@ -295,12 +283,9 @@
 <body>
     <!-- CỤM NÚT KÉO LÊN & KÉO XUỐNG NHANH -->
     <div class="scroll-floating-controls" aria-label="Điều hướng cuộn trang">
-        <!-- Nút Kéo Lên Trên Cùng -->
         <button type="button" id="btnScrollToTop" class="btn-scroll-action hide-btn" onclick="scrollToTop()" title="Kéo lên đầu trang">
             <i class="bi bi-chevron-up"></i>
         </button>
-
-        <!-- Nút Kéo Xuống Dưới Cùng -->
         <button type="button" id="btnScrollToBottom" class="btn-scroll-action" onclick="scrollToBottom()" title="Kéo xuống chân trang">
             <i class="bi bi-chevron-down"></i>
         </button>
@@ -308,7 +293,6 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebarMobile()"></div>
 
     <!-- SIDEBAR BÊN TRÁI -->
-    <!-- SIDEBAR BÊN TRÁI ĐÃ TINH GỌN -->
     <aside id="app-sidebar">
         <!-- Logo & Brand Header -->
         <a asp-controller="Home" asp-action="Index" class="sidebar-brand text-decoration-none">
@@ -323,7 +307,6 @@
             </div>
         </a>
 
-        <!-- Menu Navigation Items -->
         <!-- Menu Navigation Items -->
         <div class="sidebar-menu flex-grow-1 overflow-y-auto py-2" id="sidebarAccordion">
 
@@ -430,6 +413,14 @@
                                     <span class="sidebar-text">Hồ Sơ Thiếu Nhi</span>
                                 </a>
                             </li>
+                            <!-- NÚT MỚI: SỔ BỘ BÍ TÍCH ĐIỆN TỬ (FEAT-P3-03) -->
+                            <li class="nav-item">
+                                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Sacraments" ? "active" : "")"
+                                   asp-controller="Sacraments" asp-action="Index">
+                                    <i class="bi bi-journal-bookmark-fill text-success"></i>
+                                    <span class="sidebar-text">Sổ Bộ Bí Tích</span>
+                                </a>
+                            </li>
                             <li class="nav-item">
                                 <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Grades" ? "active" : "")"
                                    asp-controller="Grades" asp-action="Index">
@@ -471,6 +462,13 @@
                     </div>
                     <div id="collapseHeThong" class="collapse show" data-bs-parent="#sidebarAccordion">
                         <ul class="nav flex-column">
+                            <li class="nav-item">
+                                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "StudentRegistrations" ? "active" : "")"
+                                   asp-controller="StudentRegistrations" asp-action="Index">
+                                    <i class="bi bi-person-vcard-fill text-info"></i>
+                                    <span class="sidebar-text">Duyệt Đơn Tuyển Sinh</span>
+                                </a>
+                            </li>
                             @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
                             {
                                 <li class="nav-item">
@@ -482,13 +480,15 @@
                                 </li>
                             }
                             <li class="nav-item">
-                                <a class="nav-link" asp-controller="Promotion" asp-action="Index">
+                                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Promotion" ? "active" : "")"
+                                   asp-controller="Promotion" asp-action="Index">
                                     <i class="bi bi-arrow-up-right-circle me-1"></i>
                                     <span class="sidebar-text">Kết Chuyển Niên Khóa</span>
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link text-warning" asp-controller="Governance" asp-action="Index">
+                                <a class="nav-link text-warning @(ViewContext.RouteData.Values["controller"]?.ToString() == "Governance" ? "active" : "")"
+                                   asp-controller="Governance" asp-action="Index">
                                     <i class="bi bi-person-badge-fill"></i>
                                     <span class="sidebar-text">Bàn Giao & Nhiệm Kỳ</span>
                                 </a>
@@ -501,7 +501,7 @@
 
         <!-- Sidebar Bottom Footer -->
         <div class="py-2 px-3 border-top border-secondary border-opacity-25 small text-center text-muted" style="font-size: 0.7rem;">
-            <span class="sidebar-text">&copy; 2026 GLGX Phú Trung</span>
+            <span class="sidebar-text">© 2026 GLGX Phú Trung</span>
         </div>
     </aside>
 
@@ -521,17 +521,27 @@
                     @ViewData["Title"]
                 </span>
             </div>
+
             <!-- BANNER BÁO MẤT SÓNG / OFFLINE -->
             <div id="offlineNotice" class="alert alert-warning border-0 rounded-0 py-1 px-3 mb-0 text-center small fw-semibold shadow-sm d-none">
                 <i class="bi bi-wifi-off me-1"></i> Thiết bị đang mất kết nối mạng. Ứng dụng đang hoạt động ở chế độ Offline (Dữ liệu lấy từ bộ nhớ đệm).
             </div>
 
-            <!-- Nút Tra cứu nhanh trên Topbar + Profile -->
+            <!-- Cụm Nút Lối Tắt Nhanh trên Topbar + Profile -->
             <div class="d-flex align-items-center gap-2">
-                <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Lookup" ? "active fw-bold text-warning" : "text-dark")"
+                @if (User.Identity != null && User.Identity.IsAuthenticated)
+                {
+                    <!-- Button Sổ Bộ Bí Tích trên Topbar -->
+                    <a class="btn btn-outline-success btn-sm rounded-pill px-3 d-none d-md-inline-flex align-items-center fw-semibold"
+                       asp-controller="Sacraments" asp-action="Index">
+                        <i class="bi bi-journal-bookmark-fill me-1"></i> Sổ Bộ Bí Tích
+                    </a>
+                }
+
+                <a class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 d-inline-flex align-items-center fw-semibold"
                    asp-controller="Lookup" asp-action="Index">
-                    <i class="bi bi-search text-warning"></i>
-                    <span class="sidebar-text">Tra Cứu Nhanh</span>
+                    <i class="bi bi-search me-1"></i>
+                    <span>Tra Cứu Nhanh</span>
                 </a>
 
                 @if (User.Identity != null && User.Identity.IsAuthenticated)
@@ -551,7 +561,8 @@
                                 <span class="badge @(role == UserRole.Admin ? "bg-danger" :
                                                                                            role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                                            role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-2 py-0 mt-1" style="font-size: 0.65rem;">
-                                    @(role == UserRole.Admin ? "Quản trị viên" : role == UserRole.SpiritualDirector ? "Cha" :
+                                    @(role == UserRole.Admin ? "Quản trị viên" :
+                                                                    role == UserRole.SpiritualDirector ? "Cha" :
                                                                     role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
                                                                     role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
                             </span>
@@ -569,9 +580,13 @@
                                 <i class="bi bi-person-badge text-primary me-2"></i> Hồ Sơ Cá Nhân
                             </a>
                         </li>
+                        <li>
+                            <a class="dropdown-item py-2" asp-controller="Sacraments" asp-action="Index">
+                                <i class="bi bi-journal-bookmark-fill text-success me-2"></i> Sổ Bộ Bí Tích Điện Tử
+                            </a>
+                        </li>
 
-                            <!-- Thêm dòng menu vào Nhật Ký cho Admin -->
-                            @if (User.IsInRole(UserRole.Admin))
+                        @if (User.IsInRole(UserRole.Admin))
                             {
                                 <li>
                                     <a class="dropdown-item py-2 text-danger" href="/Admin/Logs">
@@ -590,8 +605,8 @@
                                 </form>
                             </li>
                         </ul>
-                </div>
-                                }
+                    </div>
+                }
                 else
                 {
                     <a asp-controller="Account" asp-action="Login" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
@@ -599,7 +614,6 @@
                     </a>
                 }
             </div>
-
         </nav>
 
         <main role="main" class="flex-grow-1 p-3 p-md-4">
@@ -632,7 +646,6 @@
                         </button>
                     </div>
 
-                    <!-- Vùng kết quả tra cứu Ajax -->
                     <div id="lookupResultArea" class="d-none mt-3"></div>
                 </div>
             </div>
@@ -645,8 +658,15 @@
         function toggleSidebarDesktop() {
             const sidebar = document.getElementById('app-sidebar');
             const wrapper = document.getElementById('main-wrapper');
+
             sidebar.classList.toggle('collapsed');
             wrapper.classList.toggle('expanded');
+
+            if (sidebar.classList.contains('collapsed')) {
+                const collapses = document.querySelectorAll('#app-sidebar .collapse');
+                collapses.forEach(c => c.classList.add('show'));
+            }
+
             localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
         }
 
@@ -674,22 +694,6 @@
             setTimeout(() => document.getElementById('lookupStudentCodeInput').focus(), 400);
         }
 
-        function toggleSidebarDesktop() {
-            const sidebar = document.getElementById('app-sidebar');
-            const wrapper = document.getElementById('main-wrapper');
-
-            sidebar.classList.toggle('collapsed');
-            wrapper.classList.toggle('expanded');
-
-            // Nếu sidebar đang ở trạng thái rút gọn, tự động mở tất cả accordion để hiện icon
-            if (sidebar.classList.contains('collapsed')) {
-                const collapses = document.querySelectorAll('#app-sidebar .collapse');
-                collapses.forEach(c => c.classList.add('show'));
-            }
-
-            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
-        }
-
         async function executeLookupCode() {
             const code = document.getElementById('lookupStudentCodeInput').value.trim();
             const resArea = document.getElementById('lookupResultArea');
@@ -705,9 +709,7 @@
             resArea.classList.remove('d-none');
 
             try {
-                // Endpoint kiểm tra nhanh thông tin học sinh
-                const res = await fetch(`/Students/Index?searchKeyword=${encodeURIComponent(code)}`);
-                // Trong khi chờ các API chi tiết của Epic 10 hoàn thiện, hiển thị khung thẻ học sinh
+                await fetch(`/Students/Index?searchKeyword=${encodeURIComponent(code)}`);
                 resArea.className = "card border bg-light-subtle rounded-3 p-3 mt-3 shadow-sm";
                 resArea.innerHTML = `
                     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -724,7 +726,7 @@
                         <div class="col-6">
                             <div class="card p-2 border-0 bg-white shadow-sm">
                                 <span class="text-muted"><i class="bi bi-award text-warning me-1"></i>Sổ Điểm Giáo Lý:</span>
-                                <strong class="text-dark mt-1 d-block">Đạt yêu cầu (Sẽ hiển thị chi tiết ở Epic 10)</strong>
+                                <strong class="text-dark mt-1 d-block">Đạt yêu cầu</strong>
                             </div>
                         </div>
                     </div>
@@ -735,25 +737,14 @@
             }
         }
 
-        // Hàm cuộn mượt lên đỉnh trang
         function scrollToTop() {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // Hàm cuộn mượt xuống đáy trang
         function scrollToBottom() {
-            window.scrollTo({
-                top: document.documentElement.scrollHeight || document.body.scrollHeight,
-                behavior: 'smooth'
-            });
+            window.scrollTo({ top: document.documentElement.scrollHeight || document.body.scrollHeight, behavior: 'smooth' });
         }
 
-        // Tự động kiểm tra vị trí cuộn:
-        // - Khi đã cuộn xuống hơn 150px: Hiện nút kéo lên
-        // - Khi chạm đáy trang: Tự làm mờ nút kéo xuống
         window.addEventListener('scroll', function () {
             const btnTop = document.getElementById('btnScrollToTop');
             const btnBottom = document.getElementById('btnScrollToBottom');
@@ -769,7 +760,6 @@
             }
 
             if (btnBottom) {
-                // Nếu gần chạm đáy (cách đáy <= 50px) thì làm mờ nút kéo xuống
                 if (totalHeight - scrollPosition <= 50) {
                     btnBottom.style.opacity = '0.35';
                 } else {
@@ -778,7 +768,6 @@
             }
         });
 
-        // Đăng ký Service Worker
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
@@ -787,7 +776,6 @@
             });
         }
 
-        // Bắt sự kiện Online / Offline
         function updateNetworkStatus() {
             const notice = document.getElementById('offlineNotice');
             if (notice) {

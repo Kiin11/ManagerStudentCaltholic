@@ -115,6 +115,11 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Chỉ Admin hoặc Cha Tuyên Úy (qua màn hình Điều hành) mới có quyền cấp tài khoản cấp cao (Admin, Cha Tuyên Úy, Ban Điều Hành)." });
             }
 
+            if(model.ChristianName is null || model.FirstName is null || model.LastName is null)
+            {
+                return Json(new { success = false, message = "Tên Thánh, Họ và Tên là bắt buộc." });
+            }
+
             var newUser = new User
             {
                 Username = usernameClean,
