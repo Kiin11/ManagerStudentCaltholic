@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    public class HomeController : Controller 
+    public class HomeController : Controller
     {
         private readonly ParishDbContext _context;
+
         public HomeController(ParishDbContext context)
         {
             _context = context;
         }
+
         public async Task<IActionResult> Index()
         {
             // Lấy niên khóa hiện hành
@@ -26,10 +28,15 @@ namespace ManagerStudentCaltholic.Controllers
                 totalEnrolled = await _context.Enrollments.CountAsync(e => e.ClassRoom.AcademicYearId == currentYear.Id);
             }
 
+            // Đếm số lượng đơn đăng ký tuyển sinh đang chờ BĐH xét duyệt (FEAT-P3-02)
+            int pendingRegistrations = await _context.StudentRegistrationRequests
+                .CountAsync(r => r.Status == "PENDING");
+
             ViewBag.CurrentYearName = currentYear?.Name ?? "Chưa thiết lập";
             ViewBag.TotalStudents = totalStudents;
             ViewBag.TotalClasses = totalClasses;
             ViewBag.TotalEnrolled = totalEnrolled;
+            ViewBag.PendingRegistrations = pendingRegistrations;
 
             return View();
         }

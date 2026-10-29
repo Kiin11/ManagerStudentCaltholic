@@ -1,6 +1,8 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using System.Text.RegularExpressions;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -14,6 +16,7 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly IWebHostEnvironment _env;
         private readonly ILogger<PublicRegistrationController> _logger;
+        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
         public PublicRegistrationController(
             ParishDbContext context,
@@ -26,129 +29,137 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            ViewBag.CurrentYearName = currentYear?.Name ?? DateTime.Now.Year.ToString();
             return View();
         }
 
         /// <summary>
-        /// SEC-NEW-06 FIX: Bổ sung Rate Limiting, Kiểm tra Magic Bytes và Lưu ra ngoài wwwroot
+        /// POST: /PublicRegistration/Submit (Tiếp nhận hồ sơ đăng ký trực tuyến - TASK-P3-02.2 & TASK-P3-02.5)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
-        public async Task<IActionResult> Submit(
-            [FromForm] string christianName,
-            [FromForm] string firstName,
-            [FromForm] string lastName,
-            [FromForm] string gender,
-            [FromForm] DateTime dateOfBirth,
-            [FromForm] DateTime? baptismDate,
-            [FromForm] string parentPhone,
-            [FromForm] IFormFile? baptismCertificate)
+        public async Task<IActionResult> Submit([FromForm] PublicRegistrationSubmitDto dto)
         {
-            if (string.IsNullOrWhiteSpace(christianName) || string.IsNullOrWhiteSpace(firstName) ||
-                string.IsNullOrWhiteSpace(lastName) || string.IsNullOrWhiteSpace(parentPhone))
+            // 1. Chống Bot tự động bằng Honeypot field
+            if (!string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
             {
-                return Json(new { success = false, message = "Vui lòng điền đầy đủ các thông tin bắt buộc." });
+                _logger.LogWarning("SECURITY: Honeypot triggered on PublicRegistration from IP {IP}",
+                    HttpContext.Connection.RemoteIpAddress);
+                return Json(new { success = true, message = "Hồ sơ đã được ghi nhận." });
             }
 
-            string? storedCertPath = null;
-
-            if (baptismCertificate != null && baptismCertificate.Length > 0)
+            if (!ModelState.IsValid)
             {
-                const long maxFileSize = 5 * 1024 * 1024; // 5MB
-                if (baptismCertificate.Length > maxFileSize)
-                {
-                    return Json(new { success = false, message = "Dung lượng file ảnh giấy tờ rửa tội vượt quá giới hạn 5MB." });
-                }
-
-                var ext = Path.GetExtension(baptismCertificate.FileName).ToLowerInvariant();
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
-                if (!allowedExtensions.Contains(ext))
-                {
-                    return Json(new { success = false, message = "Chỉ chấp nhận file định dạng ảnh (.jpg, .jpeg, .png) hoặc (.pdf)." });
-                }
-
-                // SEC-NEW-06 FIX 1: Kiểm tra chữ ký tệp thực tế (Magic Bytes) chống giả mạo phần mở rộng
-                if (!await IsValidFileSignatureAsync(baptismCertificate, ext))
-                {
-                    _logger.LogWarning("Cảnh báo bảo mật: Phát hiện upload file giả mạo định dạng '{FileName}' từ IP {IP}",
-                        baptismCertificate.FileName, HttpContext.Connection.RemoteIpAddress);
-                    return Json(new { success = false, message = "Nội dung tệp tải lên không khớp với định dạng ảnh/PDF chuẩn." });
-                }
-
-                // SEC-NEW-06 FIX 2: Lưu vào thư mục PrivateUploads bên ngoài wwwroot để chặn truy cập tĩnh công khai
-                var privateFolder = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
-                if (!Directory.Exists(privateFolder))
-                {
-                    Directory.CreateDirectory(privateFolder);
-                }
-
-                var storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
-                var physicalPath = Path.Combine(privateFolder, storedFileName);
-
-                using (var stream = new FileStream(physicalPath, FileMode.Create))
-                {
-                    await baptismCertificate.CopyToAsync(stream);
-                }
-
-                // Lưu đường dẫn trỏ về Action có kiểm tra quyền [Authorize]
-                storedCertPath = $"/PublicRegistration/ViewCertificate?fileName={storedFileName}";
+                var firstErr = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage
+                               ?? "Dữ liệu đăng ký không hợp lệ.";
+                return BadRequest(new { success = false, message = firstErr });
             }
 
-            var newReg = new StudentRegistrationRequest
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            string cleanPhone = Regex.Replace(dto.ParentPhone.Trim(), @"\s+", "");
+            string cleanFirstName = dto.FirstName.Trim();
+            string cleanLastName = dto.LastName.Trim();
+
+            // 2. Kiểm tra trùng đơn đang chờ duyệt (PENDING) hoặc đã duyệt trong cùng niên khóa
+            var duplicateExists = await _context.Set<StudentRegistrationRequest>()
+                .AsNoTracking()
+                .AnyAsync(r => r.ParentPhone == cleanPhone &&
+                               r.DateOfBirth.Date == dto.DateOfBirth.Date &&
+                               r.LastName.ToLower() == cleanLastName.ToLower() &&
+                               r.Status != "REJECTED" &&
+                               (currentYear == null || r.AcademicYearId == currentYear.Id));
+
+            if (duplicateExists)
             {
-                ChristianName = christianName.Trim(),
-                FirstName = firstName.Trim(),
-                LastName = lastName.Trim(),
-                Gender = gender == "Nữ" ? "Nữ" : "Nam",
-                DateOfBirth = DateTime.SpecifyKind(dateOfBirth.Date, DateTimeKind.Utc),
-                BaptismDate = baptismDate.HasValue ? DateTime.SpecifyKind(baptismDate.Value.Date, DateTimeKind.Utc) : null,
-                ParentPhone = parentPhone.Trim(),
-                BaptismCertificatePath = storedCertPath,
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Hồ sơ của thiếu nhi này đã được nộp trước đó và đang trong quá trình xử lý. Phụ huynh vui lòng kiểm tra tại mục Tra cứu trạng thái đơn."
+                });
+            }
+
+            // 3. Kiểm tra & Lưu file ảnh/PDF Giấy Rửa Tội vào PrivateUploads (ngoài wwwroot)
+            string? savedFileName = null;
+            if (dto.CertificateFile != null && dto.CertificateFile.Length > 0)
+            {
+                if (dto.CertificateFile.Length > MaxFileSize)
+                {
+                    return BadRequest(new { success = false, message = "Kích thước ảnh Giấy Rửa Tội không được vượt quá 5MB." });
+                }
+
+                var ext = Path.GetExtension(dto.CertificateFile.FileName).ToLowerInvariant();
+                var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
+                if (!allowedExts.Contains(ext))
+                {
+                    return BadRequest(new { success = false, message = "Chỉ chấp nhận tệp định dạng JPG, PNG hoặc PDF." });
+                }
+
+                if (!await IsValidMagicBytesAsync(dto.CertificateFile, ext))
+                {
+                    _logger.LogWarning("SECURITY: Invalid file magic bytes uploaded from IP {IP}",
+                        HttpContext.Connection.RemoteIpAddress);
+                    return BadRequest(new { success = false, message = "Nội dung tệp tải lên không hợp lệ hoặc bị hỏng." });
+                }
+
+                var privateUploadDir = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
+                Directory.CreateDirectory(privateUploadDir);
+
+                savedFileName = $"cert_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}{ext}";
+                var fullSavePath = Path.Combine(privateUploadDir, savedFileName);
+
+                await using var fileStream = new FileStream(fullSavePath, FileMode.Create);
+                await dto.CertificateFile.CopyToAsync(fileStream);
+            }
+
+            var requestEntity = new StudentRegistrationRequest
+            {
+                ChristianName = dto.ChristianName.Trim(),
+                FirstName = cleanFirstName,
+                LastName = cleanLastName,
+                Gender = dto.Gender == "Nữ" ? "Nữ" : "Nam",
+                DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc),
+                BaptismDate = dto.BaptismDate.HasValue
+                    ? DateTime.SpecifyKind(dto.BaptismDate.Value.Date, DateTimeKind.Utc)
+                    : null,
+                BaptismParish = dto.BaptismParish?.Trim(),
+                ParentFullName = dto.ParentFullName.Trim(),
+                ParentPhone = cleanPhone,
+                ParentEmail = dto.ParentEmail?.Trim(),
+                Address = dto.Address?.Trim(),
+                ParishSubDivision = dto.ParishSubDivision?.Trim(),
+                RegistrationType = dto.RegistrationType == "TRANSFER" ? "TRANSFER" : "NEW",
+                AcademicYearId = currentYear?.Id,
+                TargetGradeLevel = dto.TargetGradeLevel.Trim(),
+                BaptismCertificatePath = savedFileName,
                 Status = "PENDING",
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.StudentRegistrationRequests.Add(newReg);
+            _context.Set<StudentRegistrationRequest>().Add(requestEntity);
             await _context.SaveChangesAsync();
 
-            return Json(new { success = true, message = "Gửi hồ sơ đăng ký thành công!" });
-        }
+            _logger.LogInformation(
+                "AUDIT PUBLIC_REG: New registration #{RegId} submitted for {FirstName} {LastName} (Phone: {Phone})",
+                requestEntity.Id, requestEntity.FirstName, requestEntity.LastName, requestEntity.ParentPhone);
 
-        /// <summary>
-        /// SEC-NEW-06 FIX 3: Chỉ nhân sự Ban Giáo Lý đã đăng nhập mới được xem Giấy Chứng Nhận Rửa Tội
-        /// </summary>
-        [HttpGet]
-        [Authorize(Policy = "RequireStaff")]
-        public IActionResult ViewCertificate(string fileName)
-        {
-            if (string.IsNullOrWhiteSpace(fileName)) return BadRequest();
+            TempData["SuccessMessage"] = $"Hồ sơ của em {requestEntity.ChristianName} {requestEntity.FirstName} {requestEntity.LastName} (Mã hồ sơ: #{requestEntity.Id}) đã được tiếp nhận thành công!";
 
-            var safeFileName = Path.GetFileName(fileName.Trim());
-            var privateRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs"));
-            if (!privateRoot.EndsWith(Path.DirectorySeparatorChar))
+            return Json(new
             {
-                privateRoot += Path.DirectorySeparatorChar;
-            }
-
-            var fullPath = Path.GetFullPath(Path.Combine(privateRoot, safeFileName));
-            if (!fullPath.StartsWith(privateRoot, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(fullPath))
-            {
-                return NotFound("Không tìm thấy tệp chứng nhận.");
-            }
-
-            var ext = Path.GetExtension(safeFileName).ToLowerInvariant();
-            var contentType = ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".png" => "image/png",
-                _ => "image/jpeg"
-            };
-
-            var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            return File(fileStream, contentType);
+                success = true,
+                registrationId = requestEntity.Id,
+                redirectUrl = Url.Action("Success", "PublicRegistration")
+            });
         }
 
         [HttpGet]
@@ -157,24 +168,53 @@ namespace ManagerStudentCaltholic.Controllers
             return View();
         }
 
-        private static async Task<bool> IsValidFileSignatureAsync(IFormFile file, string ext)
+        /// <summary>
+        /// GET/POST: /PublicRegistration/CheckStatus (Cổng tra cứu trạng thái hồ sơ cho Phụ huynh - TASK-P3-02.5)
+        /// </summary>
+        [HttpGet]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
+        public async Task<IActionResult> CheckStatus(string? phone, DateTime? dob)
         {
-            if (file.Length < 4) return false;
+            var vm = new RegistrationStatusCheckViewModel
+            {
+                ParentPhone = phone,
+                DateOfBirth = dob,
+                HasSearched = false
+            };
 
-            byte[] header = new byte[8];
-            using var stream = file.OpenReadStream();
+            if (!string.IsNullOrWhiteSpace(phone) && dob.HasValue)
+            {
+                vm.HasSearched = true;
+                string cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
+                var targetDob = dob.Value.Date;
+
+                vm.Results = await _context.Set<StudentRegistrationRequest>()
+                    .Include(r => r.CreatedStudent)
+                    .Include(r => r.AssignedClass)
+                    .Include(r => r.AcademicYear)
+                    .Where(r => r.ParentPhone == cleanPhone && r.DateOfBirth.Date == targetDob)
+                    .OrderByDescending(r => r.CreatedAt)
+                    .AsNoTracking()
+                    .ToListAsync();
+            }
+
+            return View(vm);
+        }
+
+        /// <summary>
+        /// Kiểm tra chữ ký số (Magic Bytes) của file JPEG, PNG, PDF
+        /// </summary>
+        private static async Task<bool> IsValidMagicBytesAsync(IFormFile file, string ext)
+        {
+            var header = new byte[8];
+            await using var stream = file.OpenReadStream();
             int bytesRead = await stream.ReadAsync(header, 0, header.Length);
             if (bytesRead < 4) return false;
 
             return ext switch
             {
-                // JPEG: FF D8 FF
                 ".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
-                // PNG: 89 50 4E 47 0D 0A 1A 0A
-                ".png" => bytesRead >= 8 &&
-                          header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
-                          header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A,
-                // PDF: 25 50 44 46 (%PDF)
+                ".png" => header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47,
                 ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
                 _ => false
             };

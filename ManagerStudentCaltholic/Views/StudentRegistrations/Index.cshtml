@@ -1,0 +1,400 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.AdminRegistrationDashboardViewModel
+@{
+    ViewData["Title"] = "Quản Lý & Xét Duyệt Hồ Sơ Tuyển Sinh";
+}
+
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">
+                <i class="bi bi-person-Vcard-fill text-primary me-2"></i>Dashboard Xét Duyệt Hồ Sơ Tuyển Sinh Đầu Năm
+            </h4>
+            <p class="text-muted small mb-0">
+                Niên khóa áp dụng: <strong>@Model.CurrentAcademicYearName</strong> — Tự động sinh mã Thiếu Nhi (<code>TN-YYYY-XXXX</code>) và phân lớp cân bằng sĩ số.
+            </p>
+        </div>
+        <a href="/PublicRegistration/Index" target="_blank" class="btn btn-outline-primary rounded-pill px-3">
+            <i class="bi bi-box-arrow-up-right me-1"></i> Mở Cổng Đăng Ký Công Khai
+        </a>
+    </div>
+
+    <!-- Thẻ KPI Thống kê -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-warning border-4">
+                <div class="text-muted small">Hồ sơ đang chờ duyệt (PENDING)</div>
+                <div class="fs-2 fw-bold text-warning">@Model.TotalPending</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-success border-4">
+                <div class="text-muted small">Đã duyệt & Xếp lớp (APPROVED)</div>
+                <div class="fs-2 fw-bold text-success">@Model.TotalApproved</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-danger border-4">
+                <div class="text-muted small">Từ chối / Chờ bổ sung (REJECTED)</div>
+                <div class="fs-2 fw-bold text-danger">@Model.TotalRejected</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thanh bộ lọc đa tiêu chí -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-3">
+            <form method="get" asp-action="Index" class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Trạng thái</label>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="ALL" selected="@(Model.StatusFilter == "ALL")">Tất cả trạng thái</option>
+                        <option value="PENDING" selected="@(Model.StatusFilter == "PENDING")">Chờ duyệt (PENDING)</option>
+                        <option value="APPROVED" selected="@(Model.StatusFilter == "APPROVED")">Đã duyệt (APPROVED)</option>
+                        <option value="REJECTED" selected="@(Model.StatusFilter == "REJECTED")">Từ chối (REJECTED)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Khối đăng ký</label>
+                    <select name="grade" class="form-select form-select-sm">
+                        <option value="ALL">Tất cả các khối</option>
+                        @foreach (var g in new[] { "Khai Tâm", "Rước Lễ", "Thêm Sức", "Bao Đồng" })
+                        {
+                            <option value="@g" selected="@(Model.GradeFilter == g)">@g</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-secondary">Tìm theo Tên / SĐT Phụ huynh</label>
+                    <input type="text" name="search" class="form-control form-control-sm" value="@Model.SearchTerm" placeholder="Nhập tên thiếu nhi hoặc SĐT..." />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Từ ngày</label>
+                    <input type="date" name="fromDate" class="form-control form-control-sm" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Đến ngày</label>
+                    <input type="date" name="toDate" class="form-control form-control-sm" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                        <i class="bi bi-funnel"></i> Lọc
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bảng danh sách hồ sơ -->
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small text-uppercase text-secondary">
+                    <tr>
+                        <th class="ps-4">Mã ĐK</th>
+                        <th>Thiếu Nhi</th>
+                        <th>Ngày Sinh / GT</th>
+                        <th>Khối ĐK / Loại</th>
+                        <th>Phụ Huynh & Liên Hệ</th>
+                        <th>Giấy Rửa Tội</th>
+                        <th>Trạng Thái</th>
+                        <th class="text-end pe-4">Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Requests.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                Không có hồ sơ đăng ký nào khớp với bộ lọc hiện tại.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var r in Model.Requests)
+                        {
+                            <tr>
+                                <td class="ps-4 fw-bold text-secondary">#@r.Id</td>
+                                <td>
+                                    <div class="fw-bold text-dark">@r.ChristianName @r.FirstName @r.LastName</div>
+                                    <small class="text-muted">Nộp lúc: @r.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                                </td>
+                                <td>
+                                    <div>@r.DateOfBirth.ToString("dd/MM/yyyy")</div>
+                                    <small class="text-muted">@r.Gender</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary-subtle text-primary">@r.TargetGradeLevel</span>
+                                    <div class="small text-muted mt-1">@(r.RegistrationType == "TRANSFER" ? "Chuyển xứ" : "Học mới")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">@r.ParentFullName</div>
+                                    <div class="small text-primary"><i class="bi bi-telephone me-1"></i>@r.ParentPhone</div>
+                                    @if (!string.IsNullOrWhiteSpace(r.ParishSubDivision))
+                                    {
+                                        <small class="text-muted">Giáo họ: @r.ParishSubDivision</small>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(r.BaptismCertificatePath))
+                                    {
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                            <i class="bi bi-file-earmark-check me-1"></i>Có đính kèm
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary">Chưa nộp file</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (r.Status == "PENDING")
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Chờ duyệt</span>
+                                    }
+                                    else if (r.Status == "APPROVED")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Đã duyệt</span>
+                                        <div class="small fw-semibold text-dark mt-1">
+                                            @(r.CreatedStudent?.StudentCode) - @(r.AssignedClass?.Name)
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="@r.RejectionReason">Từ chối</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                            data-id="@r.Id"
+                                            data-name="@($"{r.ChristianName} {r.FirstName} {r.LastName}")"
+                                            data-dob="@r.DateOfBirth.ToString("dd/MM/yyyy")"
+                                            data-gender="@r.Gender"
+                                            data-baptism="@(r.BaptismDate?.ToString("dd/MM/yyyy") ?? "Chưa khai")"
+                                            data-baptism-parish="@(r.BaptismParish ?? "--")"
+                                            data-parent="@r.ParentFullName"
+                                            data-phone="@r.ParentPhone"
+                                            data-address="@($"{r.ParishSubDivision} - {r.Address}".Trim(' ', '-'))"
+                                            data-grade="@r.TargetGradeLevel"
+                                            data-status="@r.Status"
+                                            data-has-cert="@((!string.IsNullOrWhiteSpace(r.BaptismCertificatePath)).ToString().ToLower())"
+                                            data-cert-ext="@(System.IO.Path.GetExtension(r.BaptismCertificatePath ?? "").ToLowerInvariant())"
+                                            onclick="openReviewModal(this)">
+                                        <i class="bi bi-eye me-1"></i> Kiểm duyệt
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Kiểm Duyệt Hồ Sơ 2 Cột (Thông tin & Xem trước Giấy Rửa Tội) -->
+<div class="modal fade" id="reviewRegistrationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-light">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-shield-check text-primary me-2"></i>Kiểm Duyệt Hồ Sơ Tuyển Sinh <span id="revReqIdBadge" class="badge bg-secondary ms-1"></span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="revRequestId" />
+                <div class="row g-4">
+                    <!-- Cột trái: Thông tin chi tiết & Quyết định xếp lớp -->
+                    <div class="col-lg-5">
+                        <h6 class="fw-bold text-primary mb-3" id="revStudentName"></h6>
+                        <ul class="list-group list-group-flush small mb-3">
+                            <li class="list-group-item d-flex justify-content-between px-0">
+                                <span class="text-muted">Ngày sinh / Giới tính:</span>
+                                <strong id="revDobGender"></strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between px-0">
+                                <span class="text-muted">Ngày & Nơi Rửa tội:</span>
+                                <strong id="revBaptismInfo"></strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between px-0">
+                                <span class="text-muted">Phụ huynh / SĐT:</span>
+                                <strong id="revParentInfo"></strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between px-0">
+                                <span class="text-muted">Giáo họ / Địa chỉ:</span>
+                                <strong id="revAddress"></strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between px-0">
+                                <span class="text-muted">Khối đăng ký dự kiến:</span>
+                                <span class="badge bg-primary" id="revTargetGrade"></span>
+                            </li>
+                        </ul>
+
+                        <div id="revActionPanel">
+                            <div class="p-3 bg-light rounded-3 mb-3 border">
+                                <label class="form-label fw-bold small text-dark">
+                                    Lớp xếp vào tại niên khóa @Model.CurrentAcademicYearName
+                                </label>
+                                <select id="revTargetClassId" class="form-select form-select-sm mb-1">
+                                    <option value="0">-- Tự động xếp lớp cân bằng sĩ số & Nam/Nữ --</option>
+                                    @foreach (var c in Model.AvailableClasses)
+                                    {
+                                        <option value="@c.Id" data-grade="@c.GradeLevel">[@c.GradeLevel] @c.Name</option>
+                                    }
+                                </select>
+                                <small class="text-muted">Nếu để Tự động, hệ thống sẽ chọn lớp thuộc khối đăng ký có sĩ số thấp nhất.</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-danger">Lý do từ chối / Yêu cầu bổ sung (Nếu từ chối)</label>
+                                <textarea id="revRejectionReason" class="form-control form-control-sm" rows="2" placeholder="VD: Ảnh chụp Giấy Rửa Tội bị mờ, vui lòng chụp lại rõ nét hơn..."></textarea>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="button" id="btnApproveReq" class="btn btn-success fw-bold flex-grow-1 rounded-pill" onclick="submitApproveRegistration()">
+                                    <i class="bi bi-check2-circle me-1"></i> Duyệt & Cấp Mã TN
+                                </button>
+                                <button type="button" id="btnRejectReq" class="btn btn-outline-danger fw-bold rounded-pill px-3" onclick="submitRejectRegistration()">
+                                    <i class="bi bi-x-circle me-1"></i> Từ chối
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cột phải: Khung xem chứng từ Giấy Rửa Tội bảo mật -->
+                    <div class="col-lg-7">
+                        <div class="border rounded-4 bg-light p-3 h-100 d-flex flex-column justify-content-center align-items-center" style="min-height: 380px;">
+                            <div id="revNoCertNotice" class="text-muted text-center d-none">
+                                <i class="bi bi-file-earmark-x fs-1 d-block mb-2"></i>
+                                Hồ sơ này chưa đính kèm tệp Giấy Chứng Nhận Rửa Tội.
+                            </div>
+                            <img id="revCertImg" src="#" alt="Giấy Rửa Tội" class="img-fluid rounded shadow-sm d-none" style="max-height: 460px;" />
+                            <iframe id="revCertPdf" src="" class="w-100 rounded border d-none" style="height: 460px;"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        function openReviewModal(btn) {
+            const reqId = btn.getAttribute('data-id');
+            const status = btn.getAttribute('data-status');
+            const hasCert = btn.getAttribute('data-has-cert') === 'true';
+            const certExt = btn.getAttribute('data-cert-ext');
+
+            document.getElementById('revRequestId').value = reqId;
+            document.getElementById('revReqIdBadge').textContent = '#' + reqId;
+            document.getElementById('revStudentName').textContent = btn.getAttribute('data-name');
+            document.getElementById('revDobGender').textContent = `${btn.getAttribute('data-dob')} (${btn.getAttribute('data-gender')})`;
+            document.getElementById('revBaptismInfo').textContent = `${btn.getAttribute('data-baptism')} (${btn.getAttribute('data-baptism-parish')})`;
+            document.getElementById('revParentInfo').textContent = `${btn.getAttribute('data-parent')} - ${btn.getAttribute('data-phone')}`;
+            document.getElementById('revAddress').textContent = btn.getAttribute('data-address') || '--';
+            document.getElementById('revTargetGrade').textContent = btn.getAttribute('data-grade');
+            document.getElementById('revTargetClassId').value = '0';
+            document.getElementById('revRejectionReason').value = '';
+
+            // Ẩn nút duyệt nếu đơn đã APPROVED
+            document.getElementById('revActionPanel').style.display = (status === 'APPROVED') ? 'none' : 'block';
+
+            // Hiển thị ảnh hoặc PDF Giấy Rửa Tội qua route bảo mật
+            const noCert = document.getElementById('revNoCertNotice');
+            const imgEl = document.getElementById('revCertImg');
+            const pdfEl = document.getElementById('revCertPdf');
+
+            noCert.classList.add('d-none');
+            imgEl.classList.add('d-none');
+            pdfEl.classList.add('d-none');
+
+            if (hasCert) {
+                const certUrl = `/StudentRegistrations/ViewCertificate/${reqId}`;
+                if (certExt === '.pdf') {
+                    pdfEl.src = certUrl;
+                    pdfEl.classList.remove('d-none');
+                } else {
+                    imgEl.src = certUrl;
+                    imgEl.classList.remove('d-none');
+                }
+            } else {
+                noCert.classList.remove('d-none');
+            }
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('reviewRegistrationModal')).show();
+        }
+
+        async function submitApproveRegistration() {
+            const reqId = parseInt(document.getElementById('revRequestId').value);
+            const targetClassId = parseInt(document.getElementById('revTargetClassId').value);
+            const btn = document.getElementById('btnApproveReq');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...';
+
+            try {
+                const res = await fetch('/StudentRegistrations/Approve', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        requestId: reqId,
+                        targetClassId: targetClassId > 0 ? targetClassId : null
+                    })
+                });
+
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    location.reload();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Duyệt & Cấp Mã TN';
+                }
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Duyệt & Cấp Mã TN';
+            }
+        }
+
+        async function submitRejectRegistration() {
+            const reqId = parseInt(document.getElementById('revRequestId').value);
+            const reason = document.getElementById('revRejectionReason').value.trim();
+
+            if (!reason) {
+                alert('Vui lòng nhập lý do từ chối hoặc yêu cầu phụ huynh bổ sung thông tin!');
+                document.getElementById('revRejectionReason').focus();
+                return;
+            }
+
+            const res = await fetch('/StudentRegistrations/Reject', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    requestId: reqId,
+                    rejectionReason: reason
+                })
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            if (data.success) location.reload();
+        }
+    </script>
+}

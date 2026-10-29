@@ -1,0 +1,104 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.RegistrationStatusCheckViewModel
+@{
+    ViewData["Title"] = "Tra Cứu Trạng Thái Hồ Sơ Tuyển Sinh";
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="fw-bold text-dark mb-0">
+                    <i class="bi bi-clipboard2-check-fill text-primary me-2"></i>Tra Cứu Hồ Sơ Tuyển Sinh
+                </h4>
+                <a asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                    <i class="bi bi-arrow-left me-1"></i> Quay lại trang Đăng ký
+                </a>
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+                    <form method="get" asp-action="CheckStatus" class="row g-3 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold small">Số điện thoại Phụ huynh đã đăng ký</label>
+                            <input type="tel" name="phone" class="form-control" value="@Model.ParentPhone" placeholder="09xxxxxxxx" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small">Ngày sinh của Thiếu nhi</label>
+                            <input type="date" name="dob" class="form-control" value="@(Model.DateOfBirth?.ToString("yyyy-MM-dd"))" required />
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary w-100 fw-bold">
+                                <i class="bi bi-search me-1"></i> Tra cứu
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            @if (Model.HasSearched)
+            {
+                if (!Model.Results.Any())
+                {
+                    <div class="alert alert-warning rounded-4 border-0 shadow-sm p-4 text-center">
+                        <i class="bi bi-exclamation-circle fs-3 d-block mb-2"></i>
+                        Không tìm thấy hồ sơ đăng ký nào khớp với Số điện thoại và Ngày sinh vừa nhập.
+                    </div>
+                }
+                else
+                {
+                    foreach (var item in Model.Results)
+                    {
+                        <div class="card border-0 shadow-sm rounded-4 mb-3">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <span class="badge bg-light text-secondary border mb-1">Mã hồ sơ: #@item.Id</span>
+                                        <h5 class="fw-bold text-dark mb-0">@item.ChristianName @item.FirstName @item.LastName</h5>
+                                        <small class="text-muted">Ngày nộp: @item.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm") | Khối đăng ký: <strong>@item.TargetGradeLevel</strong></small>
+                                    </div>
+                                    <div>
+                                        @if (item.Status == "PENDING")
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill">
+                                                <i class="bi bi-hourglass-split me-1"></i>Đang chờ Ban Điều Hành duyệt
+                                            </span>
+                                        }
+                                        else if (item.Status == "APPROVED")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                                                <i class="bi bi-check-circle-fill me-1"></i>Đã duyệt & Xếp lớp
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill">
+                                                <i class="bi bi-x-circle-fill me-1"></i>Cần bổ sung / Từ chối
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @if (item.Status == "APPROVED")
+                                {
+                                    <div class="alert alert-success rounded-3 mb-0 mt-3">
+                                        <div class="fw-bold mb-1"><i class="bi bi-stars me-1"></i>Thông tin nhập học chính thức:</div>
+                                        <div>Mã Thiếu Nhi: <strong class="text-primary">@(item.CreatedStudent?.StudentCode ?? "Đang cập nhật")</strong></div>
+                                        <div>Lớp được xếp: <strong>@(item.AssignedClass?.Name ?? "Đang cập nhật")</strong> (@(item.AcademicYear?.Name ?? ""))</div>
+                                        <div class="small mt-1 text-muted">Phụ huynh có thể dùng Mã Thiếu Nhi này để tra cứu điểm danh & bảng điểm tại cổng Tra cứu của Giáo xứ.</div>
+                                    </div>
+                                }
+                                else if (item.Status == "REJECTED")
+                                {
+                                    <div class="alert alert-danger rounded-3 mb-0 mt-3">
+                                        <div class="fw-bold"><i class="bi bi-info-circle-fill me-1"></i>Lý do / Yêu cầu bổ sung từ Ban Điều Hành:</div>
+                                        <div>@(item.RejectionReason ?? "Hồ sơ chưa hợp lệ.")</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            }
+        </div>
+    </div>
+</div>
