@@ -8,6 +8,73 @@
     var currentGender = (string)ViewBag.Gender;
 }
 
+<style>
+    /* CSS cho Dòng thời gian Tiến trình Bí tích (TASK-P3-03.4) */
+    .sacrament-timeline {
+        position: relative;
+        padding-left: 28px;
+    }
+
+        .sacrament-timeline::before {
+            content: '';
+            position: absolute;
+            top: 12px;
+            bottom: 12px;
+            left: 11px;
+            width: 3px;
+            background-color: #e2e8f0;
+            border-radius: 3px;
+        }
+
+    .sacrament-step {
+        position: relative;
+        margin-bottom: 16px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        padding: 14px 16px;
+        transition: all 0.2s ease;
+    }
+
+        .sacrament-step:hover {
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+        }
+
+        .sacrament-step.completed {
+            border-left: 4px solid #16a34a;
+            background-color: #f8fafc;
+        }
+
+        .sacrament-step.pending {
+            border-left: 4px solid #94a3b8;
+        }
+
+    .sacrament-dot {
+        position: absolute;
+        left: -27px;
+        top: 18px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        color: #fff;
+        border: 3px solid #fff;
+        box-shadow: 0 0 0 2px #cbd5e1;
+    }
+
+        .sacrament-dot.done {
+            background-color: #16a34a;
+            box-shadow: 0 0 0 2px #86efac;
+        }
+
+        .sacrament-dot.todo {
+            background-color: #94a3b8;
+        }
+</style>
+
 <div class="d-flex gap-2">
     <a asp-action="DownloadTemplate" class="btn btn-outline-secondary shadow-sm">
         <i class="bi bi-file-earmark-arrow-down me-1"></i> File Mẫu Excel
@@ -47,7 +114,7 @@
             <h3 class="fw-bold text-primary mb-1">
                 <i class="bi bi-people-fill me-2"></i>Hồ Sơ Thiếu Nhi Giáo Lý
             </h3>
-            <p class="text-muted mb-0">Quản lý lý lịch bí tích, mã QR điểm danh (Tổng số: <strong>@totalCount</strong> em)</p>
+            <p class="text-muted mb-0">Quản lý lý lịch bí tích, sổ bộ giáo xứ và mã QR điểm danh (Tổng số: <strong>@totalCount</strong> em)</p>
         </div>
         <div>
             <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createStudentModal">
@@ -131,7 +198,7 @@
                                 <td>
                                     <div class="fw-bold text-dark">@s.ChristianName @s.FirstName @s.LastName</div>
                                     <small class="text-muted">
-                                        @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "")
+                                        @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "Chưa cập nhật Rửa tội")
                                         @(s.ConfirmationDate.HasValue ? $" | Thêm sức: {s.ConfirmationDate.Value:dd/MM/yyyy}" : "")
                                     </small>
                                 </td>
@@ -164,18 +231,21 @@
                                     }
                                 </td>
                                 <td class="text-end pe-4">
-                                    <span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-pill">
-                                        <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-circle me-1" title="Tải file ảnh QR">
-                                            <i class="bi bi-qr-code">Down QR</i>
-                                        </a>
-                                    </span>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-circle me-1" onclick="openEditModal(@s.Id)" title="Chỉnh sửa">
-                                        <i class="bi bi-pencil">Edit</i>
+                                    <!-- Nút mở Sổ bộ & Tiến trình Bí tích (FEAT-P3-03) -->
+                                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2 me-1"
+                                            onclick="openSacramentModal(@s.Id)" title="Xem & Cập nhật Sổ bộ Bí tích">
+                                        <i class="bi bi-journal-bookmark-fill me-1"></i>Bí Tích
+                                    </button>
+                                    <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-pill px-2 me-1" title="Tải file ảnh QR">
+                                        <i class="bi bi-qr-code"></i> QR
+                                    </a>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 me-1" onclick="openEditModal(@s.Id)" title="Chỉnh sửa hồ sơ">
+                                        <i class="bi bi-pencil"></i> Sửa
                                     </button>
                                     <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
                                         @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-circle" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
-                                            <i class="bi bi-power">@(s.IsActive ? "Deactive" : "Active")</i>
+                                        <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-pill px-2" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
+                                            <i class="bi bi-power"></i> @(s.IsActive ? "Khóa" : "Mở")
                                         </button>
                                     </form>
                                 </td>
@@ -339,8 +409,126 @@
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- MODAL TIẾN TRÌNH & SỔ BỘ BÍ TÍCH ĐIỆN TỬ (FEAT-P3-03 / TASK-P3-03.4)      -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="sacramentRegistryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="bi bi-journal-bookmark-fill me-2"></i>Sổ Bộ & Tiến Trình Bí Tích:
+                        <span id="sacStudentTitle" class="text-warning"></span>
+                    </h5>
+                    <small id="sacStudentSubTitle" class="text-white-50"></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body p-4">
+                <!-- Khu vực cảnh báo thiếu Bí tích theo độ tuổi -->
+                <div id="sacMissingAlertsBox" class="d-none mb-3"></div>
+
+                <!-- Thông báo kết quả lưu/xóa -->
+                <div id="sacActionAlert" class="alert d-none border-0 shadow-sm small py-2 mb-3"></div>
+
+                <div class="row g-4">
+                    <!-- CỘT TRÁI: TIMELINE 4 CHẶNG BÍ TÍCH -->
+                    <div class="col-lg-7">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="fw-bold text-dark mb-0">
+                                <i class="bi bi-diagram-3-fill text-primary me-2"></i>Tiến Trình Lãnh Nhận Bí Tích (4 Chặng)
+                            </h6>
+                            <span class="badge bg-light text-secondary border">Bấm "Cập nhật" trên từng mốc để ghi sổ bộ</span>
+                        </div>
+
+                        <div id="sacTimelineLoading" class="text-center py-5 d-none">
+                            <div class="spinner-border text-primary" role="status"></div>
+                            <p class="small text-muted mt-2 mb-0">Đang tải dữ liệu Sổ bộ Bí tích...</p>
+                        </div>
+
+                        <div id="sacTimelineContainer" class="sacrament-timeline"></div>
+                    </div>
+
+                    <!-- CỘT PHẢI: FORM NHẬP / CẬP NHẬT SỔ BỘ BÍ TÍCH -->
+                    <div class="col-lg-5">
+                        <div class="card border-0 bg-light rounded-4 p-3 h-100" id="sacFormCard">
+                            <h6 class="fw-bold text-primary mb-3" id="sacFormHeader">
+                                <i class="bi bi-pencil-square me-1"></i>Cập Nhật Chi Tiết Sổ Bộ Bí Tích
+                            </h6>
+
+                            <input type="hidden" id="sacInputRecordId" value="0" />
+                            <input type="hidden" id="sacInputStudentId" value="0" />
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Loại Bí Tích <span class="text-danger">*</span></label>
+                                <select id="sacInputType" class="form-select form-select-sm fw-semibold" onchange="onSacramentTypeSelectChange()">
+                                    <option value="1">1. Bí tích Rửa Tội</option>
+                                    <option value="2">2. Xưng Tội & Rước Lễ Lần Đầu</option>
+                                    <option value="3">3. Bí tích Thêm Sức</option>
+                                    <option value="4">4. Bao Đồng (Tuyên Hứa Sống Đạo)</option>
+                                </select>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Ngày Lãnh Nhận <span class="text-danger">*</span></label>
+                                    <input type="date" id="sacInputDate" class="form-control form-control-sm" required />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Số Vào Sổ Bộ Giáo Xứ</label>
+                                    <input type="text" id="sacInputBookNo" class="form-control form-control-sm" placeholder="VD: Quyển 03, Trang 45, Số 123" maxlength="100" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Giáo Xứ Ban Bí Tích <span class="text-danger">*</span></label>
+                                <input type="text" id="sacInputParish" class="form-control form-control-sm" value="Giáo xứ Phú Trung" placeholder="Nhập tên Giáo xứ..." maxlength="150" required />
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Linh Mục / Giám Mục Chủ Sự</label>
+                                    <input type="text" id="sacInputPriest" class="form-control form-control-sm" placeholder="VD: Lm. Giuse Nguyễn Văn A" maxlength="120" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Người Đỡ Đầu (Cha/Mẹ TL)</label>
+                                    <input type="text" id="sacInputGodparent" class="form-control form-control-sm" placeholder="Tên Thánh & Họ tên người đỡ đầu" maxlength="120" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Ghi Chú Thêm</label>
+                                <textarea id="sacInputNotes" class="form-control form-control-sm" rows="2" placeholder="Ghi chú chuyển xứ, chuẩn chước (nếu có)..." maxlength="500"></textarea>
+                            </div>
+
+                            <div class="d-grid gap-2 mt-auto">
+                                <button type="button" id="btnSaveSacrament" class="btn btn-primary btn-sm rounded-pill fw-bold py-2 shadow-sm" onclick="submitSaveSacramentRecord()">
+                                    <i class="bi bi-floppy-fill me-1"></i> Lưu Vào Sổ Bộ Bí Tích
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
+        let currentSacramentTimeline = [];
+        let canEditCurrentSacrament = false;
+
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
         function openEditModal(studentId) {
             fetch(`/Students/GetStudentAjax/${studentId}`)
                 .then(r => r.json())
@@ -359,6 +547,265 @@
                     new bootstrap.Modal(document.getElementById('editStudentModal')).show();
                 })
                 .catch(err => alert('Không thể nạp dữ liệu thiếu nhi: ' + err));
+        }
+
+        // =========================================================================
+        // CÁC HÀM XỬ LÝ SỔ BỘ & TIẾN TRÌNH BÍ TÍCH (FEAT-P3-03)
+        // =========================================================================
+        async function openSacramentModal(studentId) {
+            document.getElementById('sacInputStudentId').value = studentId;
+            document.getElementById('sacActionAlert').classList.add('d-none');
+
+            const modalEl = document.getElementById('sacramentRegistryModal');
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+            await loadSacramentTimeline(studentId);
+        }
+
+        async function loadSacramentTimeline(studentId) {
+            const loadingEl = document.getElementById('sacTimelineLoading');
+            const containerEl = document.getElementById('sacTimelineContainer');
+            const alertBox = document.getElementById('sacMissingAlertsBox');
+
+            loadingEl.classList.remove('d-none');
+            containerEl.innerHTML = '';
+            alertBox.classList.add('d-none');
+            alertBox.innerHTML = '';
+
+            try {
+                const res = await fetch(`/Sacraments/GetRecords/${studentId}`);
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+                loadingEl.classList.add('d-none');
+
+                if (!data.success) {
+                    containerEl.innerHTML = `<div class="alert alert-danger small">${data.message || 'Không thể tải dữ liệu Bí tích.'}</div>`;
+                    return;
+                }
+
+                document.getElementById('sacStudentTitle').textContent = `${data.christianName} ${data.fullName}`;
+                document.getElementById('sacStudentSubTitle').textContent = `Mã QR: ${data.studentCode} | Ngày sinh: ${data.dateOfBirthDisplay} (${data.currentAge} tuổi)`;
+
+                currentSacramentTimeline = data.timeline || [];
+                canEditCurrentSacrament = data.canEdit === true;
+
+                // Ẩn/Khóa form bên phải nếu tài khoản chỉ là GLV đứng lớp (không phải BĐH / Trưởng khối)
+                const formCard = document.getElementById('sacFormCard');
+                formCard.style.opacity = canEditCurrentSacrament ? '1' : '0.6';
+                document.getElementById('btnSaveSacrament').disabled = !canEditCurrentSacrament;
+
+                // Hiển thị cảnh báo thiếu Bí tích theo độ tuổi
+                if (data.missingAlerts && data.missingAlerts.length > 0) {
+                    const ul = document.createElement('ul');
+                    ul.className = 'mb-0 ps-3 small';
+                    data.missingAlerts.forEach(a => {
+                        const li = document.createElement('li');
+                        li.textContent = a.warningMessage;
+                        ul.appendChild(li);
+                    });
+
+                    alertBox.className = 'alert alert-warning border-0 shadow-sm mb-3 py-2';
+                    alertBox.innerHTML = '<div class="fw-bold small mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Cảnh báo độ tuổi lãnh nhận Bí tích:</div>';
+                    alertBox.appendChild(ul);
+                    alertBox.classList.remove('d-none');
+                }
+
+                // Render 4 chặng Bí tích
+                currentSacramentTimeline.forEach(item => {
+                    const stepDiv = document.createElement('div');
+                    stepDiv.className = `sacrament-step ${item.isCompleted ? 'completed' : 'pending'}`;
+
+                    const dotSpan = document.createElement('span');
+                    dotSpan.className = `sacrament-dot ${item.isCompleted ? 'done' : 'todo'}`;
+                    dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>' : item.sacramentType;
+                    stepDiv.appendChild(dotSpan);
+
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'd-flex justify-content-between align-items-center mb-1';
+
+                    const titleStrong = document.createElement('strong');
+                    titleStrong.className = item.isCompleted ? 'text-success' : 'text-secondary';
+                    titleStrong.textContent = `${item.sacramentType}. ${item.sacramentName}`;
+                    headerDiv.appendChild(titleStrong);
+
+                    const actionGroup = document.createElement('div');
+                    actionGroup.className = 'd-flex gap-1';
+
+                    if (canEditCurrentSacrament) {
+                        const editBtn = document.createElement('button');
+                        editBtn.type = 'button';
+                        editBtn.className = 'btn btn-outline-primary btn-sm py-0 px-2 rounded-pill';
+                        editBtn.style.fontSize = '0.75rem';
+                        editBtn.innerHTML = '<i class="bi bi-pencil-square me-1"></i>' + (item.isCompleted ? 'Sửa sổ bộ' : 'Ghi sổ bộ');
+                        editBtn.onclick = () => selectSacramentStepForEdit(item.sacramentType);
+                        actionGroup.appendChild(editBtn);
+
+                        if (item.isCompleted && item.id > 0) {
+                            const delBtn = document.createElement('button');
+                            delBtn.type = 'button';
+                            delBtn.className = 'btn btn-outline-danger btn-sm py-0 px-2 rounded-pill';
+                            delBtn.style.fontSize = '0.75rem';
+                            delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+                            delBtn.title = 'Xóa bản ghi này';
+                            delBtn.onclick = () => submitDeleteSacramentRecord(item.id, data.studentId);
+                            actionGroup.appendChild(delBtn);
+                        }
+                    }
+
+                    headerDiv.appendChild(actionGroup);
+                    stepDiv.appendChild(headerDiv);
+
+                    if (item.isCompleted) {
+                        const detailDiv = document.createElement('div');
+                        detailDiv.className = 'small text-dark mt-1';
+
+                        const line1 = document.createElement('div');
+                        line1.innerHTML = `<i class="bi bi-calendar-check text-success me-1"></i>Ngày nhận: <strong>${item.receivedDateDisplay || '--'}</strong> | Nơi nhận: <strong>${item.parishName || 'Giáo xứ Phú Trung'}</strong>`;
+                        detailDiv.appendChild(line1);
+
+                        const line2 = document.createElement('div');
+                        line2.className = 'text-muted mt-1';
+                        line2.textContent = `Số Sổ bộ: ${item.registryBookNumber || 'Chưa ghi'} | Linh mục: ${item.priestName || 'Chưa ghi'} | Người đỡ đầu: ${item.godparentName || 'Chưa ghi'}`;
+                        detailDiv.appendChild(line2);
+
+                        if (item.notes) {
+                            const noteDiv = document.createElement('div');
+                            noteDiv.className = 'fst-italic text-secondary mt-1';
+                            noteDiv.textContent = `Ghi chú: ${item.notes}`;
+                            detailDiv.appendChild(noteDiv);
+                        }
+
+                        stepDiv.appendChild(detailDiv);
+                    } else {
+                        const emptyDiv = document.createElement('div');
+                        emptyDiv.className = 'small text-muted fst-italic';
+                        emptyDiv.textContent = 'Chưa có dữ liệu lãnh nhận Bí tích này.';
+                        stepDiv.appendChild(emptyDiv);
+                    }
+
+                    containerEl.appendChild(stepDiv);
+                });
+
+                // Mặc định nạp mốc Bí tích đầu tiên vào form
+                selectSacramentStepForEdit(1);
+            } catch (err) {
+                loadingEl.classList.add('d-none');
+                containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${err.message}</div>`;
+            }
+        }
+
+        function onSacramentTypeSelectChange() {
+            const selectedType = parseInt(document.getElementById('sacInputType').value);
+            selectSacramentStepForEdit(selectedType);
+        }
+
+        function selectSacramentStepForEdit(sacramentType) {
+            document.getElementById('sacInputType').value = sacramentType;
+            const item = currentSacramentTimeline.find(x => x.sacramentType === sacramentType);
+
+            if (item && item.isCompleted) {
+                document.getElementById('sacInputRecordId').value = item.id || 0;
+                document.getElementById('sacInputDate').value = item.receivedDate || '';
+                document.getElementById('sacInputParish').value = (item.parishName && !item.parishName.includes('Kế thừa')) ? item.parishName : 'Giáo xứ Phú Trung';
+                document.getElementById('sacInputPriest').value = item.priestName || '';
+                document.getElementById('sacInputGodparent').value = item.godparentName || '';
+                document.getElementById('sacInputBookNo').value = item.registryBookNumber || '';
+                document.getElementById('sacInputNotes').value = (item.notes && !item.notes.includes('Chưa cập nhật Số sổ bộ')) ? item.notes : '';
+            } else {
+                document.getElementById('sacInputRecordId').value = 0;
+                document.getElementById('sacInputDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('sacInputParish').value = 'Giáo xứ Phú Trung';
+                document.getElementById('sacInputPriest').value = '';
+                document.getElementById('sacInputGodparent').value = '';
+                document.getElementById('sacInputBookNo').value = '';
+                document.getElementById('sacInputNotes').value = '';
+            }
+        }
+
+        function showSacramentAlert(message, isSuccess) {
+            const box = document.getElementById('sacActionAlert');
+            box.className = `alert alert-${isSuccess ? 'success' : 'danger'} border-0 shadow-sm small py-2 mb-3`;
+            box.textContent = message;
+            box.classList.remove('d-none');
+        }
+
+        async function submitSaveSacramentRecord() {
+            const studentId = parseInt(document.getElementById('sacInputStudentId').value);
+            const recordId = parseInt(document.getElementById('sacInputRecordId').value);
+            const sacType = parseInt(document.getElementById('sacInputType').value);
+            const receivedDate = document.getElementById('sacInputDate').value;
+            const parishName = document.getElementById('sacInputParish').value.trim();
+            const priestName = document.getElementById('sacInputPriest').value.trim();
+            const godparentName = document.getElementById('sacInputGodparent').value.trim();
+            const bookNo = document.getElementById('sacInputBookNo').value.trim();
+            const notes = document.getElementById('sacInputNotes').value.trim();
+
+            if (!receivedDate || !parishName) {
+                showSacramentAlert('Vui lòng nhập đầy đủ Ngày lãnh nhận và Tên Giáo xứ ban Bí tích!', false);
+                return;
+            }
+
+            try {
+                const res = await fetch('/Sacraments/SaveRecord', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        id: recordId > 0 ? recordId : null,
+                        studentId: studentId,
+                        sacramentType: sacType,
+                        receivedDate: receivedDate,
+                        parishName: parishName,
+                        priestName: priestName,
+                        godparentName: godparentName,
+                        registryBookNumber: bookNo,
+                        notes: notes
+                    })
+                });
+
+                const result = await res.json();
+                if (result.success) {
+                    showSacramentAlert(result.message, true);
+                    await loadSacramentTimeline(studentId);
+                } else {
+                    showSacramentAlert(result.message || 'Không thể lưu thông tin Bí tích.', false);
+                }
+            } catch (err) {
+                showSacramentAlert('Lỗi kết nối máy chủ: ' + err.message, false);
+            }
+        }
+
+        async function submitDeleteSacramentRecord(recordId, studentId) {
+            if (!confirm('Bạn có chắc chắn muốn xóa bản ghi Bí tích này khỏi Sổ bộ?')) return;
+
+            try {
+                const res = await fetch('/Sacraments/DeleteRecord', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: JSON.stringify({
+                        recordId: recordId,
+                        studentId: studentId
+                    })
+                });
+
+                const result = await res.json();
+                if (result.success) {
+                    showSacramentAlert(result.message, true);
+                    await loadSacramentTimeline(studentId);
+                } else {
+                    showSacramentAlert(result.message || 'Không thể xóa bản ghi.', false);
+                }
+            } catch (err) {
+                showSacramentAlert('Lỗi kết nối máy chủ: ' + err.message, false);
+            }
         }
     </script>
 }

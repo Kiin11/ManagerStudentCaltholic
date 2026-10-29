@@ -28,10 +28,8 @@ namespace ManagerStudentCaltholic.Data
         // --- Role & Governance (Epic 9: US-9.4 & US-9.5) ---
         public DbSet<BranchHeadAssignment> BranchHeadAssignments => Set<BranchHeadAssignment>();
         public DbSet<UserRoleHistory> UserRoleHistories => Set<UserRoleHistory>();
-        
-        // --- Syllabus & Lesson Plans (Epic 9: TASK-904) ---
-        //public DbSet<ClassLessonPlan> ClassLessonPlans => Set<ClassLessonPlan>();
 
+        // --- Syllabus & Lesson Plans (Epic 9: TASK-904) ---
         public DbSet<ClassLessonDocument> ClassLessonDocuments => Set<ClassLessonDocument>();
 
         // --- Grade Configuration & Records (Epic 10: TASK-1001, TASK-1002) ---
@@ -43,11 +41,14 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<StudentGrade> StudentGrades => Set<StudentGrade>();
         public DbSet<AttendanceScoreRule> AttendanceScoreRules => Set<AttendanceScoreRule>();
         public DbSet<GradingFormula> GradingFormulas => Set<GradingFormula>();
-        public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>(); 
+        public DbSet<StudentGradeSummary> StudentGradeSummaries => Set<StudentGradeSummary>();
         public DbSet<TeacherClass> TeacherClasses => Set<TeacherClass>();
         public DbSet<ParentMessageTemplate> ParentMessageTemplates => Set<ParentMessageTemplate>();
         public DbSet<StudentRegistrationRequest> StudentRegistrationRequests => Set<StudentRegistrationRequest>();
         public DbSet<PromotionRuleConfig> PromotionRuleConfigs { get; set; }
+
+        // --- Sacrament Registry (Phase 3: FEAT-P3-03 / TASK-P3-03.1) ---
+        public DbSet<StudentSacramentRecord> StudentSacramentRecords => Set<StudentSacramentRecord>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -74,17 +75,12 @@ namespace ManagerStudentCaltholic.Data
 
             modelBuilder.Entity<Attendance>(entity =>
             {
-                // Đảm bảo 1 học sinh chỉ có 1 dòng ghi nhận trong 1 ngày
                 entity.HasIndex(a => new { a.EnrollmentId, a.AttendanceDate }).IsUnique();
-
-                // B-Tree Index tra cứu theo ngày
                 entity.HasIndex(a => a.AttendanceDate);
-
-                // TỐI ƯU TRUY VẤN THEO THỨ: Đánh Index trên DayOfWeek và trạng thái đi Lễ
                 entity.HasIndex(a => new { a.DayOfWeek, a.AttendedMass });
                 entity.HasIndex(a => a.DayOfWeek);
 
-                entity.Property(a => a.DayOfWeek).HasConversion<int>(); // Lưu vào Postgres dưới dạng số nguyên (0..6)
+                entity.Property(a => a.DayOfWeek).HasConversion<int>();
                 entity.Property(a => a.AttendedMass).HasDefaultValue(false);
                 entity.Property(a => a.MassStatus).HasMaxLength(20).HasDefaultValue("ABSENT_UNPERMITTED");
                 entity.Property(a => a.ClassAttended).HasDefaultValue(false);
@@ -96,16 +92,13 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<AttendanceAuditLog>(entity =>
             {
                 entity.ToTable("AttendanceAuditLogs");
-
                 entity.HasKey(a => a.Id);
 
-                // Khóa ngoại liên kết với Attendance (1 bản ghi điểm danh có nhiều lượt log)
                 entity.HasOne(a => a.Attendance)
                       .WithMany()
                       .HasForeignKey(a => a.AttendanceId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Đánh Index để tối ưu truy vấn xem lịch sử theo điểm danh và theo thời gian
                 entity.HasIndex(a => a.AttendanceId);
                 entity.HasIndex(a => a.CreatedAt);
                 entity.HasIndex(a => a.ActionType);
@@ -122,7 +115,6 @@ namespace ManagerStudentCaltholic.Data
                 entity.ToTable("ClassTeachers");
                 entity.HasKey(ct => ct.Id);
 
-                // Chỉ định rõ ràng: ClassTeacher liên kết tới User qua khóa ngoại UserId
                 entity.HasOne(ct => ct.User)
                       .WithMany()
                       .HasForeignKey(ct => ct.UserId)
@@ -148,10 +140,7 @@ namespace ManagerStudentCaltholic.Data
                 entity.ToTable("Users");
                 entity.HasKey(u => u.Id);
 
-                // Username là duy nhất trên toàn hệ thống
                 entity.HasIndex(u => u.Username).IsUnique();
-
-                // Index tìm kiếm nhanh theo Email / SĐT / Role
                 entity.HasIndex(u => u.Email);
                 entity.HasIndex(u => u.PhoneNumber);
                 entity.HasIndex(u => u.Role);
@@ -159,7 +148,6 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(u => u.Username).HasMaxLength(50).IsRequired();
                 entity.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
                 entity.Property(u => u.FirstName).HasMaxLength(100).IsRequired();
-                entity.Property(u => u.LastLoginAt).HasMaxLength(10); 
                 entity.Property(u => u.ChristianName).HasMaxLength(50);
                 entity.Property(u => u.Address).HasMaxLength(200);
                 entity.Property(u => u.AvatarUrl).HasMaxLength(255);
@@ -169,7 +157,6 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(u => u.CreatedAt).HasDefaultValueSql("NOW()");
                 entity.Property(u => u.ManagedGradeLevel).HasMaxLength(50).IsRequired(false);
 
-                // Liên kết 1 - 1 / 1 - N tùy chọn với ClassTeacher và Student
                 entity.HasOne(u => u.ClassTeacher)
                       .WithMany()
                       .HasForeignKey(u => u.ClassTeacherId)
@@ -199,6 +186,7 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(rt => rt.Token).HasMaxLength(255).IsRequired();
                 entity.Property(rt => rt.CreatedAt).HasDefaultValueSql("NOW()");
             });
+
             modelBuilder.Entity<Announcement>(entity =>
             {
                 entity.ToTable("Announcements");
@@ -211,22 +199,18 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(a => a.IsActive).HasDefaultValue(true);
                 entity.Property(a => a.CreatedAt).HasDefaultValueSql("NOW()");
 
-                // Quan hệ tùy chọn với lớp học khi Scope = CLASS
                 entity.HasOne(a => a.TargetClassRoom)
                       .WithMany()
                       .HasForeignKey(a => a.TargetClassRoomId)
                       .OnDelete(DeleteBehavior.SetNull);
 
-                // B-Tree Indexes phục vụ lọc tin tức theo phạm vi, thời gian và ghim bài
                 entity.HasIndex(a => a.CreatedAt);
                 entity.HasIndex(a => a.Scope);
                 entity.HasIndex(a => a.TargetGradeLevel);
                 entity.HasIndex(a => a.IsPinned);
             });
 
-            // ==========================================
             // 4. FACILITIES & LOGISTICS (EPIC 9)
-            // ==========================================
             modelBuilder.Entity<BuildingZone>(entity =>
             {
                 entity.ToTable("BuildingZones");
@@ -253,7 +237,6 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasIndex(l => new { l.BuildingZoneId, l.FloorNumber });
             });
 
-            // 4.1. ClassSchedule (TASK-904)
             modelBuilder.Entity<ClassSchedule>(entity =>
             {
                 entity.ToTable("ClassSchedules");
@@ -276,7 +259,6 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasIndex(s => s.ClassRoomId);
             });
 
-            // 4.2. RoomIncidentReport (TASK-905)
             modelBuilder.Entity<RoomIncidentReport>(entity =>
             {
                 entity.ToTable("RoomIncidentReports");
@@ -302,9 +284,7 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasIndex(r => new { r.ClassRoomLocationId, r.Status });
                 entity.HasIndex(r => r.ReporterUserId);
             });
-            // ==========================================
-            // 4.3. ClassLessonPlan (TASK-904: Kế hoạch năm học & Bài giảng theo tuần)
-            // ==========================================
+
             modelBuilder.Entity<ClassLessonPlan>(entity =>
             {
                 entity.ToTable("ClassLessonPlans");
@@ -333,16 +313,12 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(p => p.IsExamDay).HasDefaultValue(false);
                 entity.Property(p => p.IsDayOff).HasDefaultValue(false);
 
-                // Index phục vụ load nhanh giáo án tuần theo lớp và năm học
                 entity.HasIndex(p => new { p.ClassRoomId, p.LessonDate });
                 entity.HasIndex(p => p.AcademicYearId);
                 entity.HasIndex(p => p.AssignedTeacherUserId);
             });
 
-            // ==========================================
             // 5. GOVERNANCE & ROLES (TASK-906 & TASK-907)
-            // ==========================================
-            // 5.1. BranchHeadAssignment (TASK-906)
             modelBuilder.Entity<BranchHeadAssignment>(entity =>
             {
                 entity.ToTable("BranchHeadAssignments");
@@ -367,12 +343,10 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(b => b.Notes).HasMaxLength(255);
                 entity.Property(b => b.AssignedAt).HasDefaultValueSql("NOW()");
 
-                // Ràng buộc duy nhất: Trong 1 niên khóa, 1 khối chỉ do 1 Trưởng khối phụ trách
                 entity.HasIndex(b => new { b.AcademicYearId, b.ManagedGradeLevel }).IsUnique();
                 entity.HasIndex(b => b.UserId);
             });
 
-            // 5.2. UserRoleHistory (TASK-907)
             modelBuilder.Entity<UserRoleHistory>(entity =>
             {
                 entity.ToTable("UserRoleHistory");
@@ -418,7 +392,6 @@ namespace ManagerStudentCaltholic.Data
                       .HasForeignKey(g => g.ClassRoomId)
                       .OnDelete(DeleteBehavior.SetNull);
 
-                // Index tìm kiếm cấu hình theo năm, học kỳ và khối
                 entity.HasIndex(g => new { g.AcademicYearId, g.GradeLevel, g.Semester });
                 entity.Property(g => g.WeightFactor).HasDefaultValue(1);
                 entity.Property(g => g.IsSacramentExam).HasDefaultValue(false);
@@ -441,7 +414,6 @@ namespace ManagerStudentCaltholic.Data
                       .HasForeignKey(r => r.GradeConfigurationId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Ràng buộc duy nhất: Một học sinh chỉ có 1 điểm duy nhất cho 1 cột cấu hình
                 entity.HasIndex(r => new { r.EnrollmentId, r.GradeConfigurationId })
                       .IsUnique();
 
@@ -481,7 +453,6 @@ namespace ManagerStudentCaltholic.Data
                       .HasForeignKey(e => e.AcademicYearId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Đảm bảo mỗi Niên khóa + Khối chỉ có 1 quy tắc đang hoạt động
                 entity.HasIndex(e => new { e.AcademicYearId, e.GradeLevel })
                       .IsUnique()
                       .HasFilter("\"IsDeleted\" = false");
@@ -514,10 +485,39 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.HasQueryFilter(e => !e.IsDeleted);
             });
+
+            // 6.3. StudentSacramentRecord (TASK-P3-03.1: Sổ bộ Bí tích điện tử)
+            modelBuilder.Entity<StudentSacramentRecord>(entity =>
+            {
+                entity.ToTable("StudentSacramentRecords");
+                entity.HasKey(s => s.Id);
+
+                entity.HasOne(s => s.Student)
+                      .WithMany()
+                      .HasForeignKey(s => s.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                // Mỗi học sinh chỉ có tối đa 1 bản ghi đang hiệu lực cho mỗi loại Bí tích (1..4)
+                entity.HasIndex(s => new { s.StudentId, s.SacramentType })
+                      .IsUnique()
+                      .HasFilter("\"IsDeleted\" = false");
+
+                entity.HasIndex(s => s.SacramentType);
+                entity.HasIndex(s => s.RegistryBookNumber);
+
+                entity.Property(s => s.ParishName).HasMaxLength(150).IsRequired();
+                entity.Property(s => s.PriestName).HasMaxLength(120);
+                entity.Property(s => s.GodparentName).HasMaxLength(120);
+                entity.Property(s => s.RegistryBookNumber).HasMaxLength(100);
+                entity.Property(s => s.Notes).HasMaxLength(500);
+                entity.Property(s => s.CreatedAt).HasDefaultValueSql("NOW()");
+
+                entity.HasQueryFilter(s => !s.IsDeleted);
+            });
         }
 
         /// <summary>
-        /// TASK-710: Ghi đè SaveChangesAsync để khi gọi _context.Remove(), 
+        /// TASK-710: Ghi đè SaveChangesAsync để khi gọi _context.Remove(),
         /// EF Core tự động chuyển thành Soft Delete (cập nhật IsDeleted = true và DeletedAt)
         /// </summary>
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -526,7 +526,6 @@ namespace ManagerStudentCaltholic.Data
             {
                 if (entry.State == EntityState.Deleted)
                 {
-                    // Chuyển hành vi Delete thành Modify
                     entry.State = EntityState.Modified;
                     entry.Entity.IsDeleted = true;
                     entry.Entity.DeletedAt = DateTime.UtcNow;

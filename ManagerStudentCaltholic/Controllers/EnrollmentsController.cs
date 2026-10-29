@@ -82,6 +82,12 @@ namespace ManagerStudentCaltholic.Controllers
                 })
                 .ToListAsync();
 
+            if(targetClass.AcademicYear is null)
+            {
+                TempData["ErrorMessage"] = "Niên khóa của lớp học không tồn tại.";
+                return RedirectToAction("Index", "Classes");
+            }
+
             var viewModel = new ClassEnrollmentViewModel
             {
                 ClassId = targetClass.Id,
@@ -159,6 +165,15 @@ namespace ManagerStudentCaltholic.Controllers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
                 });
+
+                if(targetClass is null)
+                {                     
+                    return Json(new { success = false, message = "Lớp học không tồn tại." });
+                }
+                if(targetClass.AcademicYear is null)
+                {
+                    return Json(new { success = false, message = "Niên khóa của lớp học không tồn tại." });
+                }
 
                 _logger.LogInformation("Đã xếp {Count} học sinh vào lớp {Class} (Niên khóa: {Year})",
                     validStudentIds.Count, targetClass.Name, targetClass.AcademicYear.Name);
