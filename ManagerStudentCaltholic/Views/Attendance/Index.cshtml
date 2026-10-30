@@ -58,6 +58,39 @@
 
     <!-- Alert Box Thông Báo Toast/Inline -->
     <div id="attendanceAlert" class="alert d-none shadow-sm border-0" role="alert"></div>
+    <!-- THANH TRẠNG THÁI OFFLINE-FIRST & ĐỒNG BỘ INDEXEDDB (FEAT-P3-06) -->
+    <div id="offlineAttendanceStatusBar" class="alert alert-light border shadow-sm rounded-3 py-2 px-3 mb-3 d-flex flex-wrap justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2 small">
+            <i class="bi bi-cloud-check-fill text-primary fs-5"></i>
+            <div>
+                <span class="fw-bold text-dark">Bộ nhớ Điểm danh Offline (IndexedDB):</span>
+                <span class="badge bg-primary-subtle text-primary border ms-1" id="badgeOfflineCachedCount">0 thiếu nhi</span>
+                <span class="ms-2 text-muted">Chờ đồng bộ:</span>
+                <span class="badge bg-secondary rounded-pill" id="badgeOfflinePendingCount">0</span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 mt-2 mt-sm-0">
+            <button type="button" id="btnOfflineManualSync" class="btn btn-sm btn-warning fw-bold rounded-pill px-3 d-none"
+                    onclick="ParishOfflineEngine.syncPendingAttendances(true)">
+                <i class="bi bi-cloud-arrow-up-fill me-1"></i> Đồng Bộ Ngay
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                    onclick="downloadOfflineClassCache()">
+                <i class="bi bi-cloud-arrow-down me-1"></i> Tải Dữ Liệu Offline
+            </button>
+        </div>
+    </div>
+
+    <!-- Thanh tiến trình đồng bộ Background Sync -->
+    <div id="offlineSyncProgressWrap" class="card border-0 shadow-sm rounded-3 mb-3 p-3 bg-primary-subtle d-none">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small fw-bold text-primary" id="offlineSyncProgressText">Đang đồng bộ dữ liệu điểm danh...</span>
+            <span class="spinner-border spinner-border-sm text-primary"></span>
+        </div>
+        <div class="progress" style="height: 8px;">
+            <div id="offlineSyncProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 25%"></div>
+        </div>
+    </div>
 
     <!-- Bảng Điểm Danh Chuyên Cần -->
     <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
@@ -466,6 +499,39 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        // Tự động lưu danh sách học sinh của lớp đang hiển thị vào IndexedDB ngay khi mở trang
+        document.addEventListener('DOMContentLoaded', function () {
+            const domStudents = [];
+            document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]').forEach(r => {
+                const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
+                const code = r.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
+                const fullName = r.querySelector('td:nth-child(3) .fw-bold')?.textContent?.trim() || '';
+                const studentId = parseInt(r.querySelector('button[data-student-id]')?.getAttribute('data-student-id') || '0');
+                domStudents.push({
+                    enrollmentId: enrollmentId,
+                    studentId: studentId,
+                    studentCode: code,
+                    christianName: '',
+                    fullName: fullName,
+                    gender: 'Nam'
+                });
+            });
+
+            if (typeof ParishOfflineEngine !== 'undefined' && domStudents.length > 0) {
+                ParishOfflineEngine.cacheStudentsFromDomTable(@Model.ClassId, '@Html.Raw(Model.ClassName)', '@Html.Raw(Model.GradeLevel)', domStudents);
+            }
+        });
+
+        async function downloadOfflineClassCache() {
+            const res = await ParishOfflineEngine.prefetchStudentsCache(@Model.ClassId);
+            if (res.success) {
+                showAlert(`Đã tải thành công ${res.count} hồ sơ thiếu nhi vào bộ nhớ Offline của thiết bị!`, true);
+            } else {
+                showAlert('Không thể tải dữ liệu Offline. Vui lòng kiểm tra kết nối mạng.', false);
+            }
+        }
+
+        // FEAT-P3-06: Lưu Điểm Danh Lớp (Hỗ trợ cả Online & Offline-First qua IndexedDB)
         async function saveBatchAttendance() {
             const classId = parseInt(document.getElementById('selectClass').value);
             const date = document.getElementById('inputDate').value;
@@ -479,8 +545,8 @@
             const items = [];
             rows.forEach(r => {
                 const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
+                const code = r.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
 
-                // Nếu là Chúa Nhật thì lấy giá trị trên giao diện, nếu không phải thì mặc định false / ABSENT_UNPERMITTED
                 const chkClass = r.querySelector('.chk-class');
                 const selClass = r.querySelector('.select-class-status');
                 const classAttended = chkClass ? chkClass.checked : false;
@@ -492,6 +558,7 @@
 
                 items.push({
                     enrollmentId: enrollmentId,
+                    studentCode: code,
                     classAttended: classAttended,
                     classStatus: classStatus,
                     attendedMass: attendedMass,
@@ -500,6 +567,13 @@
                 });
             });
 
+            // 1. Nếu thiết bị đang mất mạng -> Lưu thẳng vào IndexedDB
+            if (!navigator.onLine && typeof ParishOfflineEngine !== 'undefined') {
+                const offlineRes = await ParishOfflineEngine.saveBatchAttendanceOffline(classId, date, items);
+                showAlert(offlineRes.message, true);
+                return;
+            }
+
             const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
 
             try {
@@ -507,7 +581,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
+                        'X-CSRF-TOKEN': token
                     },
                     body: JSON.stringify({
                         classId: classId,
@@ -516,18 +590,22 @@
                     })
                 });
 
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
                 const data = await res.json();
-                if (data.success) {
-                    showAlert(data.message, true);
-                } else {
-                    showAlert(data.message, false);
-                }
+                showAlert(data.message, data.success);
             } catch (err) {
-                showAlert('Lỗi kết nối máy chủ: ' + err, false);
+                // 2. Nếu đang bấm Lưu mà rớt mạng đột ngột -> Chuyển sang lưu vào IndexedDB không làm mất dữ liệu
+                if (typeof ParishOfflineEngine !== 'undefined') {
+                    const fallbackRes = await ParishOfflineEngine.saveBatchAttendanceOffline(classId, date, items);
+                    showAlert(fallbackRes.message, true);
+                } else {
+                    showAlert('Lỗi kết nối máy chủ: ' + err.message, false);
+                }
             }
         }
 
-                let makeUpModalInstance = null;
+        let makeUpModalInstance = null;
 
         async function openMakeUpModal(enrollmentId, studentName) {
             document.getElementById('makeUpEnrollmentId').value = enrollmentId;

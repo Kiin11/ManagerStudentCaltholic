@@ -604,23 +604,24 @@
                         </li>
 
                         @if (User.IsInRole(UserRole.Admin))
-                            {
-                                <li>
-                                    <a class="dropdown-item py-2 text-danger" href="/Admin/Logs">
-                                        <i class="bi bi-terminal me-2"></i> Nhật Ký Hệ Thống
-                                    </a>
-                                </li>
-                            }
-
-                            <li><hr class="dropdown-divider"></li>
+                        {
                             <li>
-                                <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="dropdown-item py-2 text-danger">
-                                        <i class="bi bi-box-arrow-right me-2"></i> Đăng Xuất
-                                    </button>
-                                </form>
+                                <a class="dropdown-item py-2 text-danger" href="/Admin/Logs">
+                                    <i class="bi bi-terminal me-2"></i> Nhật Ký Hệ Thống
+                                </a>
                             </li>
+                        }
+
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form asp-controller="Account" asp-action="Logout" method="post" class="m-0"
+                                    onsubmit="if(window.ParishOfflineEngine) { ParishOfflineEngine.clearCacheOnLogout(); }">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="dropdown-item py-2 text-danger">
+                                    <i class="bi bi-box-arrow-right me-2"></i> Đăng Xuất
+                                </button>
+                            </form>
+                        </li>                                               
                         </ul>
                     </div>
                 }
@@ -874,6 +875,10 @@
         </div>
     </div>
 
+
     <script src="~/js/pwa-installer.js" asp-append-version="true"></script>
 </body>
 </html>
+
+<!-- Engine Điểm danh Offline-First bằng IndexedDB (FEAT-P3-06) -->
+<script src="~/js/offline-attendance.js" asp-append-version="true"></script>
