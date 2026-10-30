@@ -67,6 +67,11 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<ClassRoom>(entity =>
             {
                 entity.Property(c => c.IsGradeLocked).HasDefaultValue(false);
+
+                entity.HasOne(c => c.ClassRoomLocation)
+                      .WithMany()
+                      .HasForeignKey(c => c.ClassRoomLocationId)
+                      .OnDelete(DeleteBehavior.SetNull);
             });
 
             // Ràng buộc duy nhất: 1 học sinh chỉ xếp vào 1 lớp trong cùng 1 niên khóa
@@ -490,29 +495,23 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<StudentSacramentRecord>(entity =>
             {
                 entity.ToTable("StudentSacramentRecords");
-                entity.HasKey(s => s.Id);
+                entity.HasKey(r => r.Id);
+                entity.HasQueryFilter(r => !r.IsDeleted);
 
-                entity.HasOne(s => s.Student)
+                entity.HasOne(r => r.Student)
                       .WithMany()
-                      .HasForeignKey(s => s.StudentId)
+                      .HasForeignKey(r => r.StudentId)
                       .OnDelete(DeleteBehavior.Cascade);
 
-                // Mỗi học sinh chỉ có tối đa 1 bản ghi đang hiệu lực cho mỗi loại Bí tích (1..4)
-                entity.HasIndex(s => new { s.StudentId, s.SacramentType })
-                      .IsUnique()
-                      .HasFilter("\"IsDeleted\" = false");
+                entity.Property(r => r.ParishName).HasMaxLength(150).IsRequired();
+                entity.Property(r => r.PriestName).HasMaxLength(120).IsRequired(false);
+                entity.Property(r => r.GodparentName).HasMaxLength(120).IsRequired(false);
+                entity.Property(r => r.RegistryBookNumber).HasMaxLength(100).IsRequired(false);
+                entity.Property(r => r.Notes).HasMaxLength(500).IsRequired(false);
+                entity.Property(r => r.CreatedBy).HasMaxLength(100).IsRequired(false);
+                entity.Property(r => r.UpdatedBy).HasMaxLength(100).IsRequired(false);
 
-                entity.HasIndex(s => s.SacramentType);
-                entity.HasIndex(s => s.RegistryBookNumber);
-
-                entity.Property(s => s.ParishName).HasMaxLength(150).IsRequired();
-                entity.Property(s => s.PriestName).HasMaxLength(120);
-                entity.Property(s => s.GodparentName).HasMaxLength(120);
-                entity.Property(s => s.RegistryBookNumber).HasMaxLength(100);
-                entity.Property(s => s.Notes).HasMaxLength(500);
-                entity.Property(s => s.CreatedAt).HasDefaultValueSql("NOW()");
-
-                entity.HasQueryFilter(s => !s.IsDeleted);
+                entity.HasIndex(r => new { r.StudentId, r.SacramentType }).IsUnique();
             });
         }
 

@@ -14,13 +14,10 @@ namespace ManagerStudentCaltholic.Services
             _context = context;
         }
 
-        /// <summary>
-        /// Xếp 1 học sinh mới vào lớp có sĩ số thấp nhất và cân bằng giới tính
-        /// </summary>
         public async Task<int?> DetermineBestClassForNewStudentAsync(int academicYearId, string gradeLevel, string gender)
         {
             var classes = await _context.Classes
-                .Include(c => c.ClassRoomLocations)
+                .Include(c => c.ClassRoomLocation)
                 .Include(c => c.Enrollments)
                     .ThenInclude(e => e.Student)
                 .Where(c => c.AcademicYearId == academicYearId && c.GradeLevel == gradeLevel)
@@ -35,7 +32,7 @@ namespace ManagerStudentCaltholic.Services
                 .Select(c => new
                 {
                     ClassId = c.Id,
-                    MaxCap = c.ClassRoomLocations.FirstOrDefault()?.Capacity > 0 ? c.ClassRoomLocations.FirstOrDefault().Capacity : DefaultMaxCapacity,
+                    MaxCap = c.ClassRoomLocation?.Capacity > 0 ? c.ClassRoomLocation.Capacity : DefaultMaxCapacity,
                     TotalCount = c.Enrollments.Count(e => !e.IsDeleted),
                     SameGenderCount = c.Enrollments.Count(e => !e.IsDeleted &&
                         string.Equals(e.Student.Gender, normGender, StringComparison.OrdinalIgnoreCase))
@@ -48,9 +45,6 @@ namespace ManagerStudentCaltholic.Services
             return bestClass?.ClassId ?? classes.First().Id;
         }
 
-        /// <summary>
-        /// Thuật toán Smart Class Balancing: Dàn đều danh sách học sinh lên lớp theo giới tính & trần sĩ số phòng học (TASK-P3-01.3)
-        /// </summary>
         public async Task<Dictionary<long, int>> BatchAssignToTargetClassesAsync(
             List<long> studentIds,
             int targetYearId,
@@ -61,7 +55,7 @@ namespace ManagerStudentCaltholic.Services
             if (studentIds == null || !studentIds.Any()) return assignments;
 
             var candidateClasses = await _context.Classes
-                .Include(c => c.ClassRoomLocations)
+                .Include(c => c.ClassRoomLocation)
                 .Include(c => c.Enrollments)
                     .ThenInclude(e => e.Student)
                 .Where(c => c.AcademicYearId == targetYearId && c.GradeLevel == targetGradeLevel)
@@ -71,7 +65,6 @@ namespace ManagerStudentCaltholic.Services
 
             if (!candidateClasses.Any()) return assignments;
 
-            // Nếu có tiền tố cấp lớp (VD: "Khai Tâm 2"), ưu tiên lọc các lớp "Khai Tâm 2A", "Khai Tâm 2B"...
             if (!string.IsNullOrWhiteSpace(preferredClassPrefix))
             {
                 var prefixMatches = candidateClasses
@@ -84,13 +77,12 @@ namespace ManagerStudentCaltholic.Services
                 }
             }
 
-            // Tạo bộ đếm trạng thái sĩ số & giới tính hiện thời của từng lớp đích trong bộ nhớ
             var classBuckets = candidateClasses.Select(c => new ClassBucketState
             {
                 ClassId = c.Id,
                 ClassName = c.Name,
-                MaxCapacity = c.ClassRoomLocations.FirstOrDefault()?.Capacity > 0
-                    ? c.ClassRoomLocations.FirstOrDefault().Capacity
+                MaxCapacity = c.ClassRoomLocation?.Capacity > 0
+                    ? c.ClassRoomLocation.Capacity
                     : DefaultMaxCapacity,
                 TotalStudents = c.Enrollments.Count(e => !e.IsDeleted),
                 MaleCount = c.Enrollments.Count(e => !e.IsDeleted &&
@@ -106,7 +98,6 @@ namespace ManagerStudentCaltholic.Services
                 .AsNoTracking()
                 .ToListAsync();
 
-            // Tách nhóm Nam và Nữ để phân bổ xen kẽ đồng đều
             var maleStudents = students
                 .Where(s => string.Equals(s.Gender, "Nam", StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -114,7 +105,6 @@ namespace ManagerStudentCaltholic.Services
                 .Where(s => !string.Equals(s.Gender, "Nam", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            // 1. Phân bổ nhóm Nam: Ưu tiên lớp còn chỗ trống -> ít học sinh Nam nhất -> tổng sĩ số thấp nhất
             foreach (var student in maleStudents)
             {
                 var target = classBuckets
@@ -130,7 +120,6 @@ namespace ManagerStudentCaltholic.Services
                 target.MaleCount++;
             }
 
-            // 2. Phân bổ nhóm Nữ: Ưu tiên lớp còn chỗ trống -> ít học sinh Nữ nhất -> tổng sĩ số thấp nhất
             foreach (var student in femaleStudents)
             {
                 var target = classBuckets

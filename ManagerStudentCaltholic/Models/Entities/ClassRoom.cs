@@ -1,6 +1,5 @@
-﻿using ManagerStudentCaltholic.Interface.Models;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
+using ManagerStudentCaltholic.Interface.Models;
 
 namespace ManagerStudentCaltholic.Models.Entities
 {
@@ -8,28 +7,33 @@ namespace ManagerStudentCaltholic.Models.Entities
     {
         public int Id { get; set; }
 
-        public int AcademicYearId { get; set; }
-        [ValidateNever]
-        public AcademicYear? AcademicYear { get; set; }
+        [Required]
+        [MaxLength(50)]
+        public string Name { get; set; } = string.Empty;
 
-        public string RoomName { get;set; } = string.Empty; // Ví dụ: "1A", "2B", "3C"
+        [Required]
+        [MaxLength(50)]
+        public string GradeLevel { get; set; } = string.Empty;
 
-        [Required, MaxLength(50)]
-        public string Name { get; set; } = string.Empty; // Ví dụ: "Xưng Tội 1A"
+        [MaxLength(50)]
+        public string? RoomName { get; set; }
 
         [MaxLength(20)]
-        public string GradeLevel { get; set; } = string.Empty; // Khai tâm, Rước lễ, Thêm sức, Bao đồng
-        [ValidateNever]
-        public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
-        // Thêm danh sách ClassTeachers vào ClassRoom
-        [ValidateNever]
-        public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>(); 
+        public string? Shift { get; set; }
 
-        public ICollection<ClassRoomLocation> ClassRoomLocations { get; set; } = new List<ClassRoomLocation>();
+        public int AcademicYearId { get; set; }
+        public AcademicYear AcademicYear { get; set; } = null!;
+
+        // Chỉ giữ duy nhất mối quan hệ tới 1 phòng học cố định
+        public int? ClassRoomLocationId { get; set; }
+        public ClassRoomLocation? ClassRoomLocation { get; set; }
+
+        public bool IsGradeLocked { get; set; } = false;
+
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
-        public int? ClassRoomLocationId { get; set; }
-        public string Shift { get; set; } = string.Empty; // Buổi học: Sáng, Chiều
-        public bool IsGradeLocked { get; set; } = false;
+
+        public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
+        public ICollection<ClassTeacher> ClassTeachers { get; set; } = new List<ClassTeacher>();
     }
 }
