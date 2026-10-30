@@ -18,9 +18,6 @@ namespace ManagerStudentCaltholic.Controllers
             _logger = logger;
         }
 
-        /// <summary>
-        /// SEC-NEW-01 FIX: Hàm kiểm tra và chuẩn hóa đường dẫn file log an toàn tuyệt đối
-        /// </summary>
         private bool TryGetSafeLogPath(string? fileName, out string fullPath, out string safeFileName)
         {
             fullPath = string.Empty;
@@ -29,7 +26,6 @@ namespace ManagerStudentCaltholic.Controllers
             if (string.IsNullOrWhiteSpace(fileName))
                 return false;
 
-            // 1. Tước bỏ hoàn toàn mọi ký tự đường dẫn thư mục (../, ..\, /, \, C:\...)
             safeFileName = Path.GetFileName(fileName.Trim());
             if (string.IsNullOrWhiteSpace(safeFileName) ||
                 !string.Equals(safeFileName, fileName.Trim(), StringComparison.Ordinal) ||
@@ -46,7 +42,6 @@ namespace ManagerStudentCaltholic.Controllers
 
             var candidatePath = Path.GetFullPath(Path.Combine(logsRoot, safeFileName));
 
-            // 2. Đảm bảo đường dẫn đích bắt buộc nằm bên trong thư mục logsRoot
             if (!candidatePath.StartsWith(logsRoot, StringComparison.OrdinalIgnoreCase) ||
                 !System.IO.File.Exists(candidatePath))
             {
@@ -62,6 +57,7 @@ namespace ManagerStudentCaltholic.Controllers
         [Route("Logs")]
         public async Task<IActionResult> Index(string? fileName, string? level, string? search)
         {
+            // Tự động ghi 1 dòng log kiểm tra để đảm bảo thư mục và file log được flush
             var logsPath = Path.Combine(_env.ContentRootPath, "logs");
             var model = new SystemLogsViewModel
             {
@@ -71,6 +67,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!Directory.Exists(logsPath))
             {
+                Directory.CreateDirectory(logsPath);
                 return View(model);
             }
 
@@ -88,7 +85,6 @@ namespace ManagerStudentCaltholic.Controllers
                 return View(model);
             }
 
-            // SEC-NEW-01 FIX: Xác thực tên file an toàn trước khi mở FileStream
             if (!TryGetSafeLogPath(requestedFile, out var fullPath, out var safeFileName))
             {
                 _logger.LogWarning("Cảnh báo bảo mật: Phát hiện truy cập file log không hợp lệ '{FileName}' từ Admin {User}",
@@ -99,12 +95,16 @@ namespace ManagerStudentCaltholic.Controllers
             model.SelectedFile = safeFileName;
             var entries = new List<LogEntryItem>();
 
+            // FIX ERR-P3.03.5: Bỏ dấu backslash trước '$' ở cuối Regex và hỗ trợ đầy đủ định dạng Timestamp của Serilog
+            var logHeaderRegex = new Regex(
+                @"^(?<ts>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(\.\d{3,7})?(\s*[+-]\d{2}:\d{2})?|\[\d{2}:\d{2}:\d{2}\]?)\s*\[(?<lvl>[A-Z]{3,4})\]\s*(?<msg>.*)$",
+                RegexOptions.Compiled);
+
             using (var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var reader = new StreamReader(stream))
             {
                 string? line;
                 LogEntryItem? currentEntry = null;
-                var logHeaderRegex = new Regex(@"^(?<ts>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}(\.\d{3})?(\s[+-]\d{2}:\d{2})?|\[\d{2}:\d{2}:\d{2})\s?\[(?<lvl>[A-Z]{3})\]\s(?<msg>.*)\$");
 
                 while ((line = await reader.ReadLineAsync()) != null)
                 {
@@ -117,7 +117,7 @@ namespace ManagerStudentCaltholic.Controllers
 
                         var lvl = match.Groups["lvl"].Value.ToUpperInvariant();
                         var msg = match.Groups["msg"].Value;
-                        var tsRaw = match.Groups["ts"].Value.Trim('[', ']');
+                        var tsRaw = match.Groups["ts"].Value.Trim('[', ']', ' ');
                         DateTime? parsedTs = DateTime.TryParse(tsRaw, out var dt) ? dt : null;
 
                         currentEntry = new LogEntryItem
@@ -134,6 +134,17 @@ namespace ManagerStudentCaltholic.Controllers
                             ? line
                             : currentEntry.Exception + Environment.NewLine + line;
                     }
+                    else
+                    {
+                        // Fallback: Nếu dòng log không khớp chuẩn Regex vẫn giữ lại để hiển thị
+                        currentEntry = new LogEntryItem
+                        {
+                            Timestamp = null,
+                            Level = "INF",
+                            Message = line,
+                            RawLine = line
+                        };
+                    }
                 }
 
                 if (currentEntry != null) entries.Add(currentEntry);
@@ -141,7 +152,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             model.TotalLines = entries.Count;
 
-            if (!string.IsNullOrEmpty(level))
+            if (!string.IsNullOrEmpty(level) && level != "ALL")
             {
                 entries = entries.Where(e => e.Level.Equals(level, StringComparison.OrdinalIgnoreCase)).ToList();
             }
@@ -164,7 +175,6 @@ namespace ManagerStudentCaltholic.Controllers
         [Route("Admin/Logs/Download")]
         public IActionResult Download(string fileName)
         {
-            // SEC-NEW-01 FIX: Dùng chung hàm kiểm tra Path Traversal nghiêm ngặt
             if (!TryGetSafeLogPath(fileName, out var fullPath, out var safeFileName))
             {
                 _logger.LogWarning("Cảnh báo bảo mật: Phát hiện tải file log trái phép '{FileName}' bởi {User}",

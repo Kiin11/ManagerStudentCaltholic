@@ -169,7 +169,7 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Approve([FromBody] ApproveRegistrationDto dto)
         {
-            if (!ModelState.IsValid)
+            if (dto == null || !ModelState.IsValid)
             {
                 return BadRequest(new { success = false, message = "Yêu cầu duyệt không hợp lệ." });
             }
@@ -198,7 +198,6 @@ namespace ManagerStudentCaltholic.Controllers
 
             int yearId = req.AcademicYearId ?? currentYear.Id;
 
-            // Xác định lớp xếp vào: Nếu BĐH chọn lớp cụ thể thì kiểm tra hợp lệ; nếu để trống thì gọi Smart Balancing
             int? targetClassId = dto.TargetClassId;
             if (targetClassId.HasValue && targetClassId.Value > 0)
             {
@@ -228,67 +227,75 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == targetClassId.Value);
 
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            // FIX ERR-P3.03.3: Bắt buộc dùng CreateExecutionStrategy() khi mở Transaction với PostgreSQL Retry Strategy
+            var strategy = _context.Database.CreateExecutionStrategy();
+            string generatedCode = string.Empty;
+            long createdStudentId = 0;
+            var reviewerName = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "ExecutiveBoard";
+
             try
             {
-                // Bước 1: Tự động sinh mã Thiếu nhi chuẩn TN-YYYY-XXXX
-                string generatedCode = await _codeGenerator.GenerateUniqueCodeAsync();
-
-                // Bước 2: Tạo mới thực thể Student
-                var newStudent = new Student
+                await strategy.ExecuteAsync(async () =>
                 {
-                    StudentCode = generatedCode,
-                    ChristianName = req.ChristianName,
-                    FirstName = req.FirstName,
-                    LastName = req.LastName,
-                    Gender = req.Gender,
-                    DateOfBirth = req.DateOfBirth,
-                    BaptismDate = req.BaptismDate,
-                    ParentPhone = req.ParentPhone,
-                    IsActive = true,
-                    IsDeleted = false
-                };
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                _context.Students.Add(newStudent);
-                await _context.SaveChangesAsync();
+                    generatedCode = await _codeGenerator.GenerateUniqueCodeAsync();
 
-                // Bước 3: Tạo bản ghi Enrollment xếp vào lớp
-                var enrollment = new Enrollment
-                {
-                    StudentId = newStudent.Id,
-                    ClassRoomId = targetClassId.Value,
-                    IsDeleted = false
-                };
-                _context.Enrollments.Add(enrollment);
+                    var newStudent = new Student
+                    {
+                        StudentCode = generatedCode,
+                        ChristianName = req.ChristianName.Trim(),
+                        FirstName = req.FirstName.Trim(),
+                        LastName = req.LastName.Trim(),
+                        Gender = string.IsNullOrWhiteSpace(req.Gender) ? "Nam" : req.Gender.Trim(),
+                        DateOfBirth = DateTime.SpecifyKind(req.DateOfBirth.Date, DateTimeKind.Utc),
+                        BaptismDate = req.BaptismDate.HasValue
+                            ? DateTime.SpecifyKind(req.BaptismDate.Value.Date, DateTimeKind.Utc)
+                            : null,
+                        ParentPhone = req.ParentPhone?.Trim(),
+                        IsActive = true,
+                        IsDeleted = false
+                    };
 
-                // Bước 4: Cập nhật trạng thái hồ sơ đăng ký
-                var reviewerName = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "ExecutiveBoard";
-                req.Status = "APPROVED";
-                req.CreatedStudentId = newStudent.Id;
-                req.AssignedClassId = targetClassId.Value;
-                req.AcademicYearId = yearId;
-                req.ReviewedBy = reviewerName;
-                req.ReviewedAt = DateTime.UtcNow;
-                req.RejectionReason = null;
+                    _context.Students.Add(newStudent);
+                    await _context.SaveChangesAsync();
+                    createdStudentId = newStudent.Id;
 
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                    var enrollment = new Enrollment
+                    {
+                        StudentId = newStudent.Id,
+                        ClassRoomId = targetClassId.Value,
+                        EnrolledAt = DateTime.UtcNow,
+                        IsDeleted = false
+                    };
+                    _context.Enrollments.Add(enrollment);
+
+                    req.Status = "APPROVED";
+                    req.CreatedStudentId = newStudent.Id;
+                    req.AssignedClassId = targetClassId.Value;
+                    req.AcademicYearId = yearId;
+                    req.ReviewedBy = reviewerName;
+                    req.ReviewedAt = DateTime.UtcNow;
+                    req.RejectionReason = null;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
 
                 _logger.LogInformation(
                     "AUDIT REG_APPROVE: User {Reviewer} approved Registration #{RegId} -> Created Student {StudentCode} (ID={StudentId}) in Class {ClassName} (ID={ClassId})",
-                    reviewerName, req.Id, newStudent.StudentCode, newStudent.Id, assignedClass?.Name, targetClassId.Value);
+                    reviewerName, req.Id, generatedCode, createdStudentId, assignedClass?.Name, targetClassId.Value);
 
                 return Json(new
                 {
                     success = true,
-                    studentCode = newStudent.StudentCode,
+                    studentCode = generatedCode,
                     className = assignedClass?.Name ?? "",
-                    message = $"Đã duyệt thành công! Mã Thiếu Nhi: {newStudent.StudentCode} - Xếp vào lớp: {assignedClass?.Name}."
+                    message = $"Đã duyệt thành công! Mã Thiếu Nhi: {generatedCode} - Xếp vào lớp: {assignedClass?.Name}."
                 });
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 _logger.LogError(ex, "Lỗi hệ thống khi duyệt hồ sơ đăng ký #{RegId}", dto.RequestId);
                 return StatusCode(500, new
                 {
