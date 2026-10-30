@@ -191,12 +191,19 @@
                                     <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
                                 </td>
                                 <td>
-                                    <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
+                                    <!-- <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
                                             title="Điểm danh bù"
                                             data-enrollment-id="@s.EnrollmentId"
                                             data-student-name="@($"{s.ChristianName} {s.FullName}".Trim())"
                                             onclick="openMakeUpModalFromBtn(this)">
                                         <i class="bi bi-arrow-repeat"></i> Bù
+                                    </button> -->
+                                    <!-- NÚT 1-CLICK COPY TIN BÁO VẮNG GỬI ZALO/VIBER (TASK-P3-07.4) -->
+                                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
+                                            title="1-Click Copy tin nhắn báo vắng / đi trễ gửi Phụ huynh"
+                                            data-enrollment-id="@s.EnrollmentId"
+                                            onclick="quickCopyAbsenceMessageFromRow(this)">
+                                        <i class="bi bi-chat-dots-fill"></i> Copy Tin
                                     </button>
                                 </td>
                                 <td>
@@ -985,7 +992,57 @@
                     list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
                 });
         }
+        // TASK-P3-07.4: 1-Click Copy tin nhắn báo vắng / đi trễ ngay trên dòng Sổ Điểm Danh
+        async function quickCopyAbsenceMessageFromRow(btn) {
+            const row = btn.closest('tr');
+            const enrollmentId = parseInt(btn.getAttribute('data-enrollment-id'));
+            const date = document.getElementById('inputDate')?.value || new Date().toISOString().split('T')[0];
 
+            const chkMass = row.querySelector('.chk-mass');
+            const selMass = row.querySelector('.select-mass-status');
+            const attendedMass = chkMass ? chkMass.checked : false;
+            const massStatus = selMass ? selMass.value : 'ABSENT_UNPERMITTED';
+
+            const chkClass = row.querySelector('.chk-class');
+            const selClass = row.querySelector('.select-class-status');
+            const classAttended = chkClass ? chkClass.checked : false;
+            const classStatus = selClass ? selClass.value : 'ABSENT_UNPERMITTED';
+
+            const studentName = row.querySelector('td:nth-child(3) .fw-bold')?.textContent?.trim() || 'Thiếu nhi';
+            const studentCode = row.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
+
+            try {
+                let compiledText = '';
+
+                if (navigator.onLine) {
+                    const url = `/ParentMessages/QuickAbsenceMessage?enrollmentId=${enrollmentId}&attendanceDate=${encodeURIComponent(date)}&attendedMass=${attendedMass}&massStatus=${encodeURIComponent(massStatus)}&classAttended=${classAttended}&classStatus=${encodeURIComponent(classStatus)}`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.success) {
+                        compiledText = data.compiledMessage;
+                    }
+                }
+
+                // Fallback tự sinh nội dung ngay tại Client nếu thiết bị đang ở chế độ Offline
+                if (!compiledText) {
+                    compiledText = `Kính chào Quý Phụ huynh em ${studentName} (Mã TN: ${studentCode} - Lớp @Html.Raw(Model.ClassName)). Ngày ${date}, Ban Giáo Lý ghi nhận em vắng mặt trong buổi sinh hoạt Giáo lý. Kính mong Quý Phụ huynh phản hồi lý do cho GLV phụ trách. Xin cảm ơn Quý Phụ huynh!`;
+                }
+
+                await navigator.clipboard.writeText(compiledText);
+
+                const origHtml = btn.innerHTML;
+                btn.className = 'btn btn-success btn-sm rounded-pill px-2';
+                btn.innerHTML = '<i class="bi bi-check2-all"></i> Đã Copy';
+                showAlert(`Đã sao chép tin nhắn của em "${studentName}" vào Clipboard! Bạn có thể dán (Paste) gửi Zalo ngay.`, true);
+
+                setTimeout(() => {
+                    btn.className = 'btn btn-outline-primary btn-sm rounded-pill px-2';
+                    btn.innerHTML = origHtml;
+                }, 2200);
+            } catch (err) {
+                showAlert('Không thể tự động sao chép vào Clipboard: ' + err.message, false);
+            }
+        }
     </script>
 }
 
