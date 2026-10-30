@@ -1,0 +1,448 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.SacramentEvaluationFilterViewModel
+@{
+    ViewData["Title"] = "Xét Duyệt Điều Kiện Lãnh Bí Tích";
+    bool isBatchApproved = Model.BatchStatus == "APPROVED";
+}
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-award-fill text-warning me-2"></i>Xét Duyệt Điều Kiện Lãnh Nhận Bí Tích Tự Động
+            </h3>
+            <p class="text-muted small mb-0">
+                Tự động đối chiếu Điểm trung bình năm, Tỷ lệ chuyên cần (Lễ & Học) và Điểm khảo hạch để lập tờ trình đệ trình Cha Xứ phê duyệt.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-journal-bookmark me-1"></i> Về Sổ Bộ Bí Tích
+            </a>
+            <a asp-action="ExportApprovalExcel"
+               asp-route-academicYearId="@Model.AcademicYearId"
+               asp-route-grade="@Model.SelectedGrade"
+               asp-route-classId="@Model.SelectedClassId"
+               asp-route-sacramentType="@Model.SacramentType"
+               asp-route-minAvg="@Model.MinYearAverage"
+               asp-route-minAtt="@Model.MinAttendanceRate"
+               asp-route-reqExam="@Model.RequireSacramentExam"
+               asp-route-minExam="@Model.MinSacramentExamScore"
+               asp-route-batchId="@Model.ExistingBatchId"
+               class="btn btn-success btn-sm rounded-pill px-3 shadow-sm">
+                <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Excel Tờ Trình
+            </a>
+            <a asp-action="PrintApprovalSheet"
+               asp-route-academicYearId="@Model.AcademicYearId"
+               asp-route-grade="@Model.SelectedGrade"
+               asp-route-classId="@Model.SelectedClassId"
+               asp-route-sacramentType="@Model.SacramentType"
+               asp-route-minAvg="@Model.MinYearAverage"
+               asp-route-minAtt="@Model.MinAttendanceRate"
+               asp-route-reqExam="@Model.RequireSacramentExam"
+               asp-route-minExam="@Model.MinSacramentExamScore"
+               asp-route-batchId="@Model.ExistingBatchId"
+               target="_blank"
+               class="btn btn-dark btn-sm rounded-pill px-3 shadow-sm">
+                <i class="bi bi-printer-fill me-1"></i> In Tờ Trình Trình Cha Xứ (A4)
+            </a>
+        </div>
+    </div>
+
+    <!-- Bộ lọc Tiêu chuẩn Xét duyệt -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-3">
+            <form method="get" asp-action="Evaluation" class="row g-2 align-items-end">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Niên khóa</label>
+                    <select name="academicYearId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        @foreach (var y in Model.AcademicYears)
+                        {
+                            <option value="@y.Id" selected="@(y.Id == Model.AcademicYearId)">@y.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Khối xét duyệt</label>
+                    <select name="grade" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="Khai Tâm" selected="@(Model.SelectedGrade == "Khai Tâm")">Khối Khai Tâm</option>
+                        <option value="Rước Lễ" selected="@(Model.SelectedGrade == "Rước Lễ")">Khối Rước Lễ</option>
+                        <option value="Thêm Sức" selected="@(Model.SelectedGrade == "Thêm Sức")">Khối Thêm Sức</option>
+                        <option value="Bao Đồng" selected="@(Model.SelectedGrade == "Bao Đồng")">Khối Bao Đồng</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Lớp học</label>
+                    <select name="classId" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">-- Toàn bộ khối --</option>
+                        @foreach (var c in Model.AvailableClasses)
+                        {
+                            <option value="@c.Id" selected="@(Model.SelectedClassId == c.Id)">@c.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold text-secondary">Bí tích xét duyệt</label>
+                    <select name="sacramentType" class="form-select form-select-sm">
+                        <option value="1" selected="@(Model.SacramentType == 1)">1. Rửa Tội</option>
+                        <option value="2" selected="@(Model.SacramentType == 2)">2. Rước Lễ Lần Đầu</option>
+                        <option value="3" selected="@(Model.SacramentType == 3)">3. Thêm Sức</option>
+                        <option value="4" selected="@(Model.SacramentType == 4)">4. Bao Đồng</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small fw-bold text-secondary">ĐTB ≥</label>
+                    <input type="number" step="0.1" min="0" max="10" name="minAvg" value="@Model.MinYearAverage.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm text-center" />
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small fw-bold text-secondary">CC (%) ≥</label>
+                    <input type="number" step="1" min="0" max="100" name="minAtt" value="@Model.MinAttendanceRate" class="form-control form-control-sm text-center" />
+                </div>
+                <div class="col-md-2 d-flex gap-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                        <i class="bi bi-calculator me-1"></i> Quét Xét Duyệt
+                    </button>
+                </div>
+            </form>
+
+            @if (Model.SavedBatches.Any())
+            {
+                <div class="mt-3 pt-2 border-top d-flex flex-wrap align-items-center gap-2">
+                    <span class="small fw-bold text-secondary"><i class="bi bi-clock-history me-1"></i>Các tờ trình đã lưu:</span>
+                    @foreach (var b in Model.SavedBatches.Take(5))
+                    {
+                        <a asp-action="Evaluation" asp-route-batchId="@b.Id"
+                           class="badge text-decoration-none @(b.Id == Model.ExistingBatchId ? "bg-primary text-white" : "bg-light text-dark border") px-3 py-2 rounded-pill">
+                            #@b.Id - @b.Title (@(b.Status == "APPROVED" ? "Đã duyệt" : "Bản nháp"))
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Thẻ KPI Thống kê kết quả -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-primary border-4">
+                <div class="text-muted small">Tổng sĩ số xét duyệt</div>
+                <div class="fs-3 fw-bold text-dark">@Model.TotalCandidates <small class="fs-6 fw-normal text-muted">em</small></div>
+                <small class="text-secondary">Đã nhận trước đó: <strong>@Model.TotalAlreadyReceived</strong> em</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-success border-4">
+                <div class="text-muted small">Đạt chuẩn tự động</div>
+                <div class="fs-3 fw-bold text-success">@Model.TotalSystemEligible <small class="fs-6 fw-normal text-muted">em</small></div>
+                <small class="text-muted">ĐTB ≥ @Model.MinYearAverage.ToString("0.0") & CC ≥ @Model.MinAttendanceRate%</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-warning border-4">
+                <div class="text-muted small">Xét đặc cách (Chuẩn chước)</div>
+                <div class="fs-3 fw-bold text-warning" id="kpiSpecialCount">@Model.TotalSpecialExemption</div>
+                <small class="text-muted">Được BĐH / Cha Xứ chước giảm</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white border-start border-info border-4">
+                <div class="text-muted small">Tổng danh sách trình ký</div>
+                <div class="fs-3 fw-bold text-primary" id="kpiFinalApprovedCount">@Model.TotalFinalApproved</div>
+                <small class="text-muted">Chưa đủ ĐK: <strong class="text-danger" id="kpiIneligibleCount">@Model.TotalIneligible</strong> em</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thông tin Tờ trình & Nút Phê duyệt đồng bộ Sổ bộ -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-light-subtle">
+        <div class="card-body p-3">
+            <input type="hidden" id="batchIdInput" value="@(Model.ExistingBatchId ?? 0)" />
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Tiêu đề Tờ trình xét duyệt <span class="text-danger">*</span></label>
+                    <input type="text" id="batchTitleInput" class="form-control form-control-sm fw-semibold" value="@Model.BatchTitle" @(isBatchApproved ? "readonly" : "") />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Ngày ban Bí tích dự kiến</label>
+                    <input type="date" id="ceremonyDateInput" class="form-control form-control-sm" value="@Model.PlannedCeremonyDate.ToString("yyyy-MM-dd")" @(isBatchApproved ? "readonly" : "") />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Linh mục / Giám mục chủ sự</label>
+                    <input type="text" id="celebrantPriestInput" class="form-control form-control-sm" value="@Model.CelebrantPriest" placeholder="VD: ĐGM / Lm. Chánh xứ..." @(isBatchApproved ? "readonly" : "") />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Ký hiệu Quyển Sổ bộ</label>
+                    <input type="text" id="bookPrefixInput" class="form-control form-control-sm" value="@Model.RegistryBookPrefix" placeholder="VD: Q.2026-RL" @(isBatchApproved ? "readonly" : "") />
+                </div>
+                <div class="col-md-2 d-flex gap-1">
+                    @if (!isBatchApproved)
+                    {
+                        <button type="button" class="btn btn-primary btn-sm w-100 fw-bold" onclick="saveApprovalBatch()">
+                            <i class="bi bi-floppy-fill me-1"></i> Lưu Tờ Trình
+                        </button>
+                        @if (Model.CanApprove && Model.ExistingBatchId.HasValue)
+                        {
+                            <button type="button" class="btn btn-success btn-sm w-100 fw-bold" onclick="approveAndSyncBatch(@Model.ExistingBatchId.Value)">
+                                <i class="bi bi-check2-all me-1"></i> Duyệt & Ghi Sổ
+                            </button>
+                        }
+                    }
+                    else
+                    {
+                        <span class="badge bg-success w-100 py-2 text-center">
+                            <i class="bi bi-patch-check-fill me-1"></i>Đã duyệt bởi @Model.ApprovedBy (@Model.ApprovedAt?.ToLocalTime().ToString("dd/MM/yyyy"))
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bảng Ma trận Xét duyệt -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small text-uppercase text-secondary">
+                    <tr>
+                        <th class="ps-3">#</th>
+                        <th>Mã TN</th>
+                        <th>Tên Thánh & Họ Tên</th>
+                        <th>Lớp</th>
+                        <th class="text-center">ĐTB Năm</th>
+                        <th class="text-center">Khảo Hạch</th>
+                        <th class="text-center">% Lễ CN</th>
+                        <th class="text-center">% Học GL</th>
+                        <th class="text-center">% Chung</th>
+                        <th class="text-center">Đánh Giá Hệ Thống</th>
+                        <th class="text-center">Đặc Cách</th>
+                        <th class="text-center">Đưa Vào DS Trình</th>
+                        <th>Người Đỡ Đầu</th>
+                        <th class="pe-3">Số Sổ Bộ / Ghi Chú</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Candidates.Any())
+                    {
+                        <tr>
+                            <td colspan="14" class="text-center py-5 text-muted">
+                                Không có học sinh nào thuộc phạm vi Khối / Lớp đang chọn.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        int stt = 1;
+                        foreach (var s in Model.Candidates)
+                        {
+                            <tr class="candidate-eval-row @(s.AlreadyReceivedSacrament ? "table-light text-muted" : "")"
+                                data-student-id="@s.StudentId"
+                                data-enrollment-id="@s.EnrollmentId"
+                                data-sys-eligible="@s.IsSystemEligible.ToString().ToLower()"
+                                data-already-received="@s.AlreadyReceivedSacrament.ToString().ToLower()">
+                                <td class="ps-3 fw-semibold">@(stt++)</td>
+                                <td><span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span></td>
+                                <td>
+                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                    <small class="text-muted">NS: @s.DateOfBirth.ToString("dd/MM/yyyy") (@s.Gender)</small>
+                                </td>
+                                <td><span class="badge bg-primary-subtle text-primary">@s.ClassName</span></td>
+                                <td class="text-center fw-bold @(s.YearAverage >= Model.MinYearAverage ? "text-primary" : "text-danger")">
+                                    @(s.YearAverage?.ToString("0.00") ?? "--")
+                                </td>
+                                <td class="text-center">
+                                    @if (s.HasSacramentExamColumn)
+                                    {
+                                        <span class="fw-semibold @(s.SacramentExamScore >= Model.MinSacramentExamScore ? "text-success" : "text-danger")">
+                                            @(s.SacramentExamScore?.ToString("0.00") ?? "Chưa thi")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">--</span>
+                                    }
+                                </td>
+                                <td class="text-center">@s.MassAttendanceRate.ToString("0.0")%</td>
+                                <td class="text-center">@s.ClassAttendanceRate.ToString("0.0")%</td>
+                                <td class="text-center">
+                                    <span class="badge @(s.CombinedAttendanceRate >= Model.MinAttendanceRate ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">
+                                        @s.CombinedAttendanceRate.ToString("0.0")%
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    @if (s.AlreadyReceivedSacrament)
+                                    {
+                                        <span class="badge bg-secondary">Đã nhận (@s.ExistingReceivedDateStr)</span>
+                                    }
+                                    else if (s.IsSystemEligible)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Đủ điều kiện
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="@s.EvaluationReason">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Thiếu ĐK
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (!s.AlreadyReceivedSacrament)
+                                    {
+                                        <input type="checkbox" class="form-check-input chk-exemption"
+                                               @(s.IsSpecialExemption ? "checked" : "")
+                                               @(isBatchApproved ? "disabled" : "")
+                                               onchange="onExemptionToggle(this)" />
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (!s.AlreadyReceivedSacrament)
+                                    {
+                                        <input type="checkbox" class="form-check-input chk-approve-final"
+                                               @(s.IsApprovedForSacrament ? "checked" : "")
+                                               @(isBatchApproved ? "disabled" : "")
+                                               onchange="recalculateKpiCounts()" />
+                                    }
+                                </td>
+                                <td>
+                                    @if (!s.AlreadyReceivedSacrament)
+                                    {
+                                        <input type="text" class="form-control form-control-sm input-godparent"
+                                               value="@s.GodparentName" placeholder="Tên Thánh & Họ tên..."
+                                               @(isBatchApproved ? "readonly" : "") />
+                                    }
+                                </td>
+                                <td class="pe-3">
+                                    @if (!s.AlreadyReceivedSacrament)
+                                    {
+                                        <div class="input-group input-group-sm">
+                                            <input type="text" class="form-control input-book-no" style="max-width: 110px;"
+                                                   value="@s.AssignedRegistryNumber" placeholder="Số sổ..." @(isBatchApproved ? "readonly" : "") />
+                                            <input type="text" class="form-control input-eval-note"
+                                                   value="@s.EvaluationReason" placeholder="Lý do / Ghi chú..." @(isBatchApproved ? "readonly" : "") />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <small class="text-muted font-monospace">Sổ: @(s.ExistingBookNumber ?? "Đã lưu")</small>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        function onExemptionToggle(chk) {
+            const row = chk.closest('tr');
+            const finalChk = row.querySelector('.chk-approve-final');
+            const noteInput = row.querySelector('.input-eval-note');
+            if (chk.checked && finalChk) {
+                finalChk.checked = true;
+                if (noteInput && !noteInput.value.includes('Đặc cách')) {
+                    noteInput.value = 'Xét đặc cách / Chuẩn chước: ' + noteInput.value;
+                }
+            }
+            recalculateKpiCounts();
+        }
+
+        function recalculateKpiCounts() {
+            let special = 0, approved = 0, ineligible = 0;
+            document.querySelectorAll('.candidate-eval-row').forEach(row => {
+                if (row.dataset.alreadyReceived === 'true') return;
+                const sysEligible = row.dataset.sysEligible === 'true';
+                const isExempt = row.querySelector('.chk-exemption')?.checked || false;
+                const isFinal = row.querySelector('.chk-approve-final')?.checked || false;
+
+                if (!sysEligible && isExempt && isFinal) special++;
+                if (isFinal) approved++;
+                else ineligible++;
+            });
+
+            document.getElementById('kpiSpecialCount').textContent = special;
+            document.getElementById('kpiFinalApprovedCount').textContent = approved;
+            document.getElementById('kpiIneligibleCount').textContent = ineligible;
+        }
+
+        async function saveApprovalBatch() {
+            const items = [];
+            document.querySelectorAll('.candidate-eval-row').forEach(row => {
+                if (row.dataset.alreadyReceived === 'true') return;
+                items.push({
+                    studentId: parseInt(row.dataset.studentId),
+                    enrollmentId: parseInt(row.dataset.enrollmentId),
+                    isSpecialExemption: row.querySelector('.chk-exemption')?.checked || false,
+                    isApprovedForSacrament: row.querySelector('.chk-approve-final')?.checked || false,
+                    godparentName: row.querySelector('.input-godparent')?.value.trim() || null,
+                    assignedRegistryNumber: row.querySelector('.input-book-no')?.value.trim() || null,
+                    evaluationNote: row.querySelector('.input-eval-note')?.value.trim() || null
+                });
+            });
+
+            const batchIdVal = parseInt(document.getElementById('batchIdInput').value) || 0;
+            const payload = {
+                batchId: batchIdVal > 0 ? batchIdVal : null,
+                academicYearId: @Model.AcademicYearId,
+                gradeLevel: '@Html.Raw(Model.SelectedGrade)',
+                classRoomId: @(Model.SelectedClassId.HasValue? Model.SelectedClassId.Value.ToString() : "null"),
+                sacramentType: @Model.SacramentType,
+                title: document.getElementById('batchTitleInput').value.trim(),
+                minYearAverage: @Model.MinYearAverage.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                minAttendanceRate: @Model.MinAttendanceRate.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                requireSacramentExam: @(Model.RequireSacramentExam.ToString().ToLower()),
+                minSacramentExamScore: @Model.MinSacramentExamScore.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                plannedCeremonyDate: document.getElementById('ceremonyDateInput').value,
+                ceremonyParish: 'Giáo xứ Phú Trung',
+                celebrantPriest: document.getElementById('celebrantPriestInput').value.trim(),
+                registryBookPrefix: document.getElementById('bookPrefixInput').value.trim(),
+                items: items
+            };
+
+            const res = await fetch('/Sacraments/SaveApprovalBatch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            if (data.success && data.batchId) {
+                window.location.href = `/Sacraments/Evaluation?batchId=${data.batchId}`;
+            }
+        }
+
+        async function approveAndSyncBatch(batchId) {
+            if (!confirm('Xác nhận PHÊ DUYỆT CHÍNH THỨC danh sách này? Hệ thống sẽ tự động ghi toàn bộ thiếu nhi đạt điều kiện vào Sổ Bộ Bí Tích Điện Tử!')) {
+                return;
+            }
+
+            const res = await fetch('/Sacraments/ApproveBatch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                body: JSON.stringify({ batchId: batchId })
+            });
+
+            const data = await res.json();
+            alert(data.message);
+            if (data.success) {
+                location.reload();
+            }
+        }
+    </script>
+}

@@ -50,6 +50,10 @@ namespace ManagerStudentCaltholic.Data
         // --- Sacrament Registry (Phase 3: FEAT-P3-03 / TASK-P3-03.1) ---
         public DbSet<StudentSacramentRecord> StudentSacramentRecords => Set<StudentSacramentRecord>();
 
+        // --- Sacrament Approval Workflow (Phase 3: FEAT-P3-04) ---
+        public DbSet<SacramentApprovalBatch> SacramentApprovalBatches => Set<SacramentApprovalBatch>();
+        public DbSet<SacramentApprovalItem> SacramentApprovalItems => Set<SacramentApprovalItem>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -512,6 +516,51 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(r => r.UpdatedBy).HasMaxLength(100).IsRequired(false);
 
                 entity.HasIndex(r => new { r.StudentId, r.SacramentType }).IsUnique();
+            });
+
+            modelBuilder.Entity<SacramentApprovalBatch>(entity =>
+            {
+                entity.ToTable("SacramentApprovalBatches");
+                entity.HasKey(b => b.Id);
+                entity.HasQueryFilter(b => !b.IsDeleted);
+
+                entity.HasIndex(b => new { b.AcademicYearId, b.GradeLevel, b.SacramentType });
+                entity.HasIndex(b => b.Status);
+                entity.HasIndex(b => b.IsDeleted);
+
+                entity.HasOne(b => b.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(b => b.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(b => b.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(b => b.ClassRoomId)
+                      .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<SacramentApprovalItem>(entity =>
+            {
+                entity.ToTable("SacramentApprovalItems");
+                entity.HasKey(i => i.Id);
+
+                entity.HasIndex(i => new { i.BatchId, i.StudentId }).IsUnique();
+                entity.HasIndex(i => i.EnrollmentId);
+
+                entity.HasOne(i => i.Batch)
+                      .WithMany(b => b.Items)
+                      .HasForeignKey(i => i.BatchId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(i => i.Student)
+                      .WithMany()
+                      .HasForeignKey(i => i.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(i => i.Enrollment)
+                      .WithMany()
+                      .HasForeignKey(i => i.EnrollmentId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
         }
 

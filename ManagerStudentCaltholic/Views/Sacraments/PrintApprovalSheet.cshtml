@@ -1,0 +1,155 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.SacramentEvaluationFilterViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Tờ Trình Xét Duyệt Bí Tích - @Model.SacramentName</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body {
+            background: #e2e8f0;
+            font-family: 'Times New Roman', Times, serif;
+            color: #000;
+        }
+
+        .a4-sheet {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 10mm auto;
+            background: #fff;
+            padding: 15mm 18mm;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .table-print th, .table-print td {
+            border: 1px solid #000 !important;
+            padding: 5px 6px;
+            font-size: 11.5pt;
+            vertical-align: middle;
+        }
+
+        @@media print {
+            body {
+                background: #fff;
+                margin: 0;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .a4-sheet {
+                margin: 0;
+                box-shadow: none;
+                width: 100%;
+                padding: 10mm;
+            }
+
+            @@page {
+                size: A4 portrait;
+                margin: 10mm;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print bg-dark text-white py-2 px-4 d-flex justify-content-between align-items-center sticky-top">
+        <div>
+            <strong>Tờ Trình Đệ Trình Cha Xứ Phê Duyệt Danh Sách Lãnh Nhận @Model.SacramentName</strong>
+            <span class="ms-2 badge bg-warning text-dark">Tổng cộng: @Model.Candidates.Count em</span>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold" onclick="window.print()">In Tờ Trình / Xuất PDF (Ctrl + P)</button>
+            <button class="btn btn-outline-light btn-sm rounded-pill px-3" onclick="window.close()">Đóng</button>
+        </div>
+    </div>
+
+    <div class="a4-sheet">
+        <div class="row text-center mb-3">
+            <div class="col-6">
+                <div class="fw-bold text-uppercase" style="font-size: 11pt;">GIÁO PHẬN SÀI GÒN</div>
+                <div class="fw-bold text-uppercase" style="font-size: 12pt;">GIÁO XỨ PHÚ TRUNG</div>
+                <div style="font-size: 10.5pt;">BAN GIÁO LÝ THIẾU NHI</div>
+            </div>
+            <div class="col-6">
+                <div class="fw-bold text-uppercase" style="font-size: 11pt;">NIÊN KHÓA: @Model.AcademicYearName</div>
+                <div class="fst-italic" style="font-size: 10.5pt;">Tp.HCM, ngày @DateTime.Now.ToString("dd") tháng @DateTime.Now.ToString("MM") năm @DateTime.Now.ToString("yyyy")</div>
+            </div>
+        </div>
+
+        <div class="text-center my-4">
+            <h4 class="fw-bold text-uppercase mb-1">TỜ TRÌNH & DANH SÁCH XÉT DUYỆT LÃNH NHẬN @Model.SacramentName.ToUpperInvariant()</h4>
+            <div class="fs-6">
+                Khối: <strong>@Model.SelectedGrade</strong> |
+                Ngày Lễ ban Bí tích dự kiến: <strong>@Model.PlannedCeremonyDate.ToString("dd/MM/yyyy")</strong> |
+                Chủ sự: <strong>@(string.IsNullOrWhiteSpace(Model.CelebrantPriest) ? "Linh mục Chánh xứ" : Model.CelebrantPriest)</strong>
+            </div>
+            <div class="small fst-italic mt-1">
+                (Tiêu chuẩn xét duyệt: Điểm TB Cả năm ≥ @Model.MinYearAverage.ToString("0.0"), Chuyên cần Thánh Lễ & Giáo lý ≥ @Model.MinAttendanceRate%)
+            </div>
+        </div>
+
+        <table class="table table-bordered table-print mb-4">
+            <thead class="text-center fw-bold">
+                <tr>
+                    <th style="width: 38px;">STT</th>
+                    <th style="width: 95px;">Mã Số</th>
+                    <th>Tên Thánh, Họ và Tên</th>
+                    <th style="width: 85px;">Ngày Sinh</th>
+                    <th style="width: 75px;">Lớp</th>
+                    <th style="width: 55px;">ĐTB</th>
+                    <th style="width: 60px;">% CC</th>
+                    <th>Người Đỡ Đầu</th>
+                    <th style="width: 110px;">Ghi Chú</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Candidates.Any())
+                {
+                    <tr>
+                        <td colspan="9" class="text-center py-4">Chưa có thiếu nhi nào trong danh sách phê duyệt.</td>
+                    </tr>
+                }
+                else
+                {
+                    int idx = 1;
+                    foreach (var s in Model.Candidates)
+                    {
+                        <tr>
+                            <td class="text-center">@(idx++)</td>
+                            <td class="text-center">@s.StudentCode</td>
+                            <td><strong>@s.ChristianName @s.FullName</strong></td>
+                            <td class="text-center">@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                            <td class="text-center">@s.ClassName</td>
+                            <td class="text-center">@(s.YearAverage?.ToString("0.0") ?? "--")</td>
+                            <td class="text-center">@s.CombinedAttendanceRate.ToString("0")%</td>
+                            <td>@s.GodparentName</td>
+                            <td class="text-center">@(s.IsSpecialExemption ? "Đặc cách" : "Đủ ĐK")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+        <div class="mb-4" style="font-size: 11.5pt;">
+            Danh sách này gồm có: <strong>@Model.Candidates.Count</strong> thiếu nhi đủ điều kiện lãnh nhận <strong>@Model.SacramentName</strong>. Kính trình Cha Chánh xứ / Cha Tuyên úy xem xét và phê chuẩn.
+        </div>
+
+        <div class="row text-center mt-5 pt-2" style="font-size: 12pt;">
+            <div class="col-6">
+                <div class="fw-bold text-uppercase">TRƯỞNG BAN ĐIỀU HÀNH GIÁO LÝ</div>
+                <div class="fst-italic small">(Ký và ghi rõ họ tên)</div>
+                <div style="height: 95px;"></div>
+            </div>
+            <div class="col-6">
+                <div class="fw-bold text-uppercase">PHÊ CHUẨN CỦA LINH MỤC CHÁNH XỨ</div>
+                <div class="fst-italic small">(Ký tên và đóng dấu Giáo xứ)</div>
+                <div style="height: 95px;"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
