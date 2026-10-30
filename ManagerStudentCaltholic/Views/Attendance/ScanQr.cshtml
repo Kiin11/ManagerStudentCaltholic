@@ -10,6 +10,25 @@
 }
 
 @Html.AntiForgeryToken()
+<div class="container pt-2">
+    <div id="offlineAttendanceStatusBar" class="alert alert-light border shadow-sm rounded-pill py-1 px-3 mb-2 d-flex justify-content-between align-items-center small">
+        <div>
+            <i class="bi bi-database-fill-check text-primary me-1"></i>
+            <span>Bộ nhớ QR Offline: <strong id="badgeOfflineCachedCount">0 thiếu nhi</strong></span>
+            <span class="ms-2">| Chờ đồng bộ: <span class="badge bg-secondary rounded-pill" id="badgeOfflinePendingCount">0</span></span>
+        </div>
+        <div class="d-flex gap-1">
+            <button type="button" id="btnOfflineManualSync" class="btn btn-warning btn-sm rounded-pill py-0 px-2 fw-bold d-none"
+                    onclick="ParishOfflineEngine.syncPendingAttendances(true)">
+                Đồng bộ ngay
+            </button>
+            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill py-0 px-2"
+                    onclick="ParishOfflineEngine.prefetchStudentsCache()">
+                <i class="bi bi-cloud-arrow-down"></i> Tải DS Offline
+            </button>
+        </div>
+    </div>
+</div>
 
 @if (isMobile)
 {
@@ -225,6 +244,9 @@ else{
         let lastScannedTime = 0;
 
         document.addEventListener("DOMContentLoaded", function () {
+            if (navigator.onLine && typeof ParishOfflineEngine !== "undefined") {
+                ParishOfflineEngine.prefetchStudentsCache();
+            }
             // Kiểm tra chắc chắn thư viện đã sẵn sàng trước khi gọi
             if (typeof Html5Qrcode === "undefined") {
                 console.error("Thư viện Html5Qrcode chưa được nạp thành công! Hãy kiểm tra lại đường dẫn file hoặc quyền CSP.");
@@ -355,38 +377,60 @@ else{
 
         // Xử lý gửi mã lên Backend
         async function handleScannedCode(decodedText) {
-            const code = decodedText?.trim();
+            const code = decodedText?.trim().toUpperCase();
             if (!code || isProcessing) return;
 
+            // Chống quét trùng liên tiếp cùng 1 thẻ trong vòng 2.5 giây
+            const nowMs = Date.now();
+            if (code === lastScannedCode && (nowMs - lastScannedTime) < 2500) {
+                return;
+            }
+
+            isProcessing = true;
+            lastScannedCode = code;
+            lastScannedTime = nowMs;
+
             try {
+                // TRƯỜNG HỢP 1: Thiết bị đang Offline -> Đối chiếu trực tiếp trong IndexedDB (0ms độ trễ)
+                if (!navigator.onLine && typeof ParishOfflineEngine !== "undefined") {
+                    const offlineResult = await ParishOfflineEngine.processOfflineQrScan(code);
+                    renderScanResult(offlineResult);
+                    return;
+                }
+
+                // TRƯỜNG HỢP 2: Thiết bị đang Online -> Gửi lên Server
                 const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+                const token = tokenInput ? tokenInput.value : '';
+
                 const response = await fetch('/Attendance/ScanCheckIn', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'RequestVerificationToken': tokenInput ? tokenInput.value : ''
+                        'X-CSRF-TOKEN': token,
+                        'RequestVerificationToken': token
                     },
                     body: JSON.stringify({ studentCode: code })
                 });
 
-                // Đọc text trước khi parse để tránh lỗi "Unexpected end of JSON"
                 const responseText = await response.text();
                 if (!responseText) {
-                    throw new Error(`Máy chủ phản hồi rỗng (Mã lỗi HTTP: ${response.status})`);
+                    throw new Error(`HTTP ${response.status}`);
                 }
 
                 const result = JSON.parse(responseText);
-
-                if (result.success) {
-                    // Hiển thị kết quả điểm danh thành công
-                    renderScanResult(result);
-                } else {
-                    showError(result.message || "Điểm danh không thành công!");
-                }
+                renderScanResult(result);
             } catch (err) {
-                console.error("Lỗi gửi điểm danh:", err);
-                showError("Lỗi kết nối máy chủ: " + err.message);
+                console.warn("Mạng chập chờn khi quét QR, chuyển sang chế độ Offline IndexedDB:", err);
+                // Fallback sang IndexedDB ngay lập tức nếu mạng rớt giữa chừng
+                if (typeof ParishOfflineEngine !== "undefined") {
+                    const fallbackResult = await ParishOfflineEngine.processOfflineQrScan(code);
+                    renderScanResult(fallbackResult);
+                } else {
+                    renderErrorResult("Lỗi kết nối máy chủ: " + err.message);
+                }
+            } finally {
+                setTimeout(() => { isProcessing = false; }, 600);
             }
         }
 

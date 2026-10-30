@@ -1486,5 +1486,316 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         #endregion
+
+        #region Offline-First Attendance APIs (FEAT-P3-06)
+        /// <summary>
+        /// 1. GET: /Attendance/GetOfflineStudentsCache?classId=... (TASK-P3-06.1)
+        /// Tải danh sách thiếu nhi trong niên khóa hiện hành (theo phạm vi quyền của GLV) để lưu vào IndexedDB
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetOfflineStudentsCache(int? classId)
+        {
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (currentYear == null)
+            {
+                return Json(new { success = false, message = "Chưa có niên khóa nào được kích hoạt." });
+            }
+
+            var enrollmentsQuery = _context.Enrollments
+                .Include(e => e.Student)
+                .Include(e => e.ClassRoom)
+                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id && e.Student.IsActive);
+
+            // Nếu là Trưởng khối: Chỉ lấy học sinh thuộc khối phụ trách
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return Json(new { success = true, academicYear = currentYear.Name, students = new List<OfflineStudentCacheItemDto>() });
+                }
+                enrollmentsQuery = enrollmentsQuery.Where(e => e.ClassRoom.GradeLevel == managedGrade);
+            }
+
+            if (classId.HasValue && classId.Value > 0)
+            {
+                enrollmentsQuery = enrollmentsQuery.Where(e => e.ClassRoomId == classId.Value);
+            }
+
+            var students = await enrollmentsQuery
+                .OrderBy(e => e.ClassRoom.Name)
+                .ThenBy(e => e.Student.StudentCode)
+                .Select(e => new OfflineStudentCacheItemDto
+                {
+                    EnrollmentId = e.Id,
+                    StudentId = e.StudentId,
+                    StudentCode = e.Student.StudentCode.ToUpper(),
+                    ChristianName = e.Student.ChristianName,
+                    FullName = (e.Student.FirstName + " " + e.Student.LastName).Trim(),
+                    Gender = e.Student.Gender ?? "Nam",
+                    ClassId = e.ClassRoomId,
+                    ClassName = e.ClassRoom.Name,
+                    GradeLevel = e.ClassRoom.GradeLevel
+                })
+                .AsNoTracking()
+                .ToListAsync();
+
+            return Json(new
+            {
+                success = true,
+                academicYear = currentYear.Name,
+                cachedAtUtc = DateTime.UtcNow,
+                totalCount = students.Count,
+                students
+            });
+        }
+
+        /// <summary>
+        /// 2. POST: /Attendance/SyncOfflineQueue (TASK-P3-06.4 & TASK-P3-06.5)
+        /// Đồng bộ hàng đợi điểm danh Offline từ IndexedDB lên Server kèm xử lý xung đột (Conflict Resolution)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SyncOfflineQueue([FromBody] OfflineSyncQueueRequestDto request)
+        {
+            if (request == null || request.Records == null || !request.Records.Any())
+            {
+                return Json(new { success = true, syncedCount = 0, syncedClientIds = new List<string>(), message = "Không có dữ liệu chờ đồng bộ." });
+            }
+
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (currentYear == null)
+            {
+                return BadRequest(new { success = false, message = "Chưa kích hoạt niên khóa hiện hành." });
+            }
+
+            // Kiểm tra phạm vi quyền hạn theo khối nếu là BranchHead
+            string? managedGrade = null;
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return Forbid();
+                }
+            }
+
+            var enrollmentIds = request.Records
+                .Where(r => r.EnrollmentId > 0)
+                .Select(r => r.EnrollmentId)
+                .Distinct()
+                .ToList();
+
+            var studentCodes = request.Records
+                .Where(r => r.EnrollmentId <= 0 && !string.IsNullOrWhiteSpace(r.StudentCode))
+                .Select(r => r.StudentCode.Trim().ToUpperInvariant())
+                .Distinct()
+                .ToList();
+
+            var validEnrollments = await _context.Enrollments
+                .Include(e => e.Student)
+                .Include(e => e.ClassRoom)
+                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id &&
+                            (enrollmentIds.Contains(e.Id) || studentCodes.Contains(e.Student.StudentCode.ToUpper())))
+                .AsNoTracking()
+                .ToListAsync();
+
+            var enrollmentById = validEnrollments.ToDictionary(e => e.Id, e => e);
+            var enrollmentByCode = validEnrollments
+                .GroupBy(e => e.Student.StudentCode.ToUpperInvariant())
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var syncedClientIds = new List<string>();
+            int upsertedCount = 0;
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    // Sắp xếp theo thời gian thực tế phát sinh ở Client từ sớm đến muộn
+                    var orderedRecords = request.Records.OrderBy(r => r.ClientTimestampUtc).ToList();
+
+                    var targetDates = orderedRecords
+                        .Select(r => DateTime.SpecifyKind(r.AttendanceDate.Date, DateTimeKind.Utc))
+                        .Distinct()
+                        .ToList();
+
+                    var validEnrIds = validEnrollments.Select(e => e.Id).ToList();
+
+                    var existingAttendances = await _context.Attendances
+                        .Where(a => validEnrIds.Contains(a.EnrollmentId) && targetDates.Contains(a.AttendanceDate))
+                        .ToListAsync();
+
+                    var attendanceMap = existingAttendances
+                        .ToDictionary(a => (a.EnrollmentId, a.AttendanceDate.Date), a => a);
+
+                    foreach (var item in orderedRecords)
+                    {
+                        Enrollment? targetEnrollment = null;
+                        if (item.EnrollmentId > 0 && enrollmentById.TryGetValue(item.EnrollmentId, out var enrById))
+                        {
+                            targetEnrollment = enrById;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(item.StudentCode) &&
+                                 enrollmentByCode.TryGetValue(item.StudentCode.Trim().ToUpperInvariant(), out var enrByCode))
+                        {
+                            targetEnrollment = enrByCode;
+                        }
+
+                        if (targetEnrollment == null)
+                        {
+                            continue;
+                        }
+
+                        // Chặn ghi chéo khối nếu là Trưởng khối
+                        if (!string.IsNullOrEmpty(managedGrade) &&
+                            !string.Equals(targetEnrollment.ClassRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        var attDate = DateTime.SpecifyKind(item.AttendanceDate.Date, DateTimeKind.Utc);
+                        TimeSpan? incomingMassTime = TimeSpan.TryParse(item.MassCheckInTimeStr, out var mTs) ? mTs : null;
+                        TimeSpan? incomingClassTime = TimeSpan.TryParse(item.ClassCheckInTimeStr, out var cTs) ? cTs : null;
+
+                        if (!attendanceMap.TryGetValue((targetEnrollment.Id, attDate), out var existing))
+                        {
+                            existing = new Attendance
+                            {
+                                EnrollmentId = targetEnrollment.Id,
+                                AttendanceDate = attDate,
+                                DayOfWeek = attDate.DayOfWeek,
+                                AttendedMass = item.AttendedMass,
+                                MassStatus = item.MassStatus,
+                                MassCheckInTime = incomingMassTime,
+                                ClassAttended = item.ClassAttended,
+                                ClassStatus = item.ClassStatus,
+                                ClassCheckInTime = incomingClassTime,
+                                Note = item.Note,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            _context.Attendances.Add(existing);
+                            attendanceMap[(targetEnrollment.Id, attDate)] = existing;
+                        }
+                        else
+                        {
+                            // THUẬT TOÁN XỬ LÝ XUNG ĐỘT (CONFLICT RESOLUTION - TASK-P3-06.5):
+                            // Nếu nhiều thiết bị cùng đồng bộ cho 1 học sinh:
+                            // 1. Ưu tiên giữ trạng thái Có mặt (Attended = true) và thời gian CheckInTime sớm nhất
+                            if (item.RecordType == "QR_SCAN")
+                            {
+                                if (item.AttendedMass)
+                                {
+                                    if (!existing.AttendedMass)
+                                    {
+                                        existing.AttendedMass = true;
+                                        existing.MassStatus = item.MassStatus;
+                                        existing.MassCheckInTime = incomingMassTime;
+                                    }
+                                    else if (incomingMassTime.HasValue &&
+                                             (!existing.MassCheckInTime.HasValue || incomingMassTime.Value < existing.MassCheckInTime.Value))
+                                    {
+                                        // Lấy thời점 quét sớm hơn và trạng thái tốt hơn
+                                        existing.MassCheckInTime = incomingMassTime;
+                                        existing.MassStatus = PickBetterAttendanceStatus(existing.MassStatus, item.MassStatus);
+                                    }
+                                }
+
+                                if (item.ClassAttended)
+                                {
+                                    if (!existing.ClassAttended)
+                                    {
+                                        existing.ClassAttended = true;
+                                        existing.ClassStatus = item.ClassStatus;
+                                        existing.ClassCheckInTime = incomingClassTime;
+                                    }
+                                    else if (incomingClassTime.HasValue &&
+                                             (!existing.ClassCheckInTime.HasValue || incomingClassTime.Value < existing.ClassCheckInTime.Value))
+                                    {
+                                        existing.ClassCheckInTime = incomingClassTime;
+                                        existing.ClassStatus = PickBetterAttendanceStatus(existing.ClassStatus, item.ClassStatus);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Bản ghi từ Sổ Điểm Danh Lớp (BATCH_ROW):
+                                // Nếu trước đó học sinh đã quét QR có mặt (có MassCheckInTime / ClassCheckInTime) mà bản lưu sổ lớp chưa kịp cập nhật thì bảo toàn lượt quét QR
+                                if (!(existing.AttendedMass && existing.MassCheckInTime.HasValue && !item.AttendedMass))
+                                {
+                                    existing.AttendedMass = item.AttendedMass;
+                                    existing.MassStatus = item.MassStatus;
+                                }
+
+                                if (!(existing.ClassAttended && existing.ClassCheckInTime.HasValue && !item.ClassAttended))
+                                {
+                                    existing.ClassAttended = item.ClassAttended;
+                                    existing.ClassStatus = item.ClassStatus;
+                                }
+
+                                if (!string.IsNullOrWhiteSpace(item.Note))
+                                {
+                                    existing.Note = item.Note;
+                                }
+                            }
+                        }
+
+                        syncedClientIds.Add(item.ClientRecordId);
+                        upsertedCount++;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                _logger.LogInformation("AUDIT OFFLINE_SYNC: User={User} synced {Count} offline attendance records.",
+                    User.Identity?.Name, upsertedCount);
+
+                return Json(new
+                {
+                    success = true,
+                    syncedCount = upsertedCount,
+                    syncedClientIds,
+                    message = $"Đã đồng bộ thành công {upsertedCount} lượt điểm danh ngoại tuyến lên máy chủ!"
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi đồng bộ dữ liệu điểm danh Offline");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Đã xảy ra lỗi khi đồng bộ dữ liệu lên máy chủ. Dữ liệu vẫn được giữ an toàn trên thiết bị để thử lại."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Ưu tiên giữ trạng thái điểm danh có lợi nhất khi 2 thiết bị cùng quét mã cho 1 học sinh
+        /// </summary>
+        private static string PickBetterAttendanceStatus(string currentStatus, string incomingStatus)
+        {
+            static int Rank(string status) => status switch
+            {
+                AttendanceStatus.LinedUp => 4,
+                AttendanceStatus.Present => 3,
+                AttendanceStatus.Late => 2,
+                AttendanceStatus.AbsentPermitted => 1,
+                _ => 0
+            };
+
+            return Rank(incomingStatus) > Rank(currentStatus) ? incomingStatus : currentStatus;
+        }
+        #endregion
     }
 }

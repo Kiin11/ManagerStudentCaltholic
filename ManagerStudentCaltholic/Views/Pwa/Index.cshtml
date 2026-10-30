@@ -1,0 +1,88 @@
+﻿@{
+    ViewData["Title"] = "Chế Độ Ngoại Tuyến (Offline)";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 text-center p-4 p-md-5 bg-white">
+                <div class="mb-3">
+                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-inline-flex align-items-center justify-content-center"
+                         style="width: 84px; height: 84px;">
+                        <i class="bi bi-wifi-off display-4"></i>
+                    </div>
+                </div>
+
+                <h4 class="fw-bold text-dark mb-2">Thiết Bị Đang Mất Kết Nối Mạng</h4>
+                <p class="text-muted small mb-4">
+                    Không thể tải trang mới từ máy chủ do sóng di động hoặc Wi-Fi tại khu vực nhà thờ đang bị gián đoạn.
+                    Bạn vẫn có thể mở lại các trang Sổ Điểm Danh đã lưu trong bộ nhớ đệm.
+                </p>
+
+                <!-- Danh sách các lớp đã lưu tạm trong LocalStorage (nếu có) -->
+                <div id="cachedClassesBox" class="text-start bg-light rounded-3 p-3 mb-4 d-none border">
+                    <div class="fw-bold small text-secondary mb-2">
+                        <i class="bi bi-database-check text-primary me-1"></i>Dữ liệu lớp học đã lưu trên máy:
+                    </div>
+                    <div id="cachedClassesList" class="list-group list-group-flush small"></div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-primary rounded-pill py-2 fw-bold shadow-sm" onclick="window.location.reload()">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Thử Kết Nối Lại
+                    </button>
+                    <div class="row g-2 mt-1">
+                        <div class="col-6">
+                            <a href="/Attendance/Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill py-2 fw-semibold">
+                                <i class="bi bi-card-checklist me-1"></i> Sổ Điểm Danh
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="/Attendance/ScanQr" class="btn btn-outline-dark btn-sm w-100 rounded-pill py-2 fw-semibold">
+                                <i class="bi bi-qr-code-scan me-1"></i> Quét Mã QR
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const box = document.getElementById('cachedClassesBox');
+            const list = document.getElementById('cachedClassesList');
+            let found = false;
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('offline_class_')) {
+                    try {
+                        const item = JSON.parse(localStorage.getItem(key));
+                        if (item && item.classId) {
+                            found = true;
+                            const a = document.createElement('a');
+                            a.href = `/Attendance/Index?classId=${item.classId}`;
+                            a.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent px-2 py-2';
+                            a.innerHTML = `
+                                <span><i class="bi bi-mortarboard-fill text-primary me-2"></i><strong>${item.className || ('Lớp #' + item.classId)}</strong></span>
+                                <span class="badge bg-primary-subtle text-primary rounded-pill">${(item.students ? item.students.length : 0)} em</span>
+                            `;
+                            list.appendChild(a);
+                        }
+                    } catch (e) { }
+                }
+            }
+
+            if (found) {
+                box.classList.remove('d-none');
+            }
+
+            window.addEventListener('online', function () {
+                window.location.reload();
+            });
+        });
+    </script>
+}

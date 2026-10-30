@@ -260,4 +260,53 @@ namespace ManagerStudentCaltholic.Models.ViewModels
     }
 
     #endregion
+
+    #region Offline-First Attendance DTOs (FEAT-P3-06)
+    public class OfflineStudentCacheItemDto
+    {
+        public long EnrollmentId { get; set; }
+        public long StudentId { get; set; }
+        public string StudentCode { get; set; } = string.Empty;
+        public string ChristianName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Gender { get; set; } = "Nam";
+        public int ClassId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public string GradeLevel { get; set; } = string.Empty;
+    }
+
+    public class OfflineSyncItemDto
+    {
+        /// <summary>
+        /// Khóa tự sinh tại IndexedDB ở Client để đối chiếu xóa sau khi sync
+        /// </summary>
+        public string ClientRecordId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// "QR_SCAN" (Quét mã QR) hoặc "BATCH_ROW" (Lưu từ Sổ điểm danh lớp)
+        /// </summary>
+        public string RecordType { get; set; } = "QR_SCAN";
+
+        public long EnrollmentId { get; set; }
+        public int ClassId { get; set; }
+        public string StudentCode { get; set; } = string.Empty;
+        public DateTime AttendanceDate { get; set; }
+
+        public bool AttendedMass { get; set; }
+        public string MassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+        public string? MassCheckInTimeStr { get; set; }
+
+        public bool ClassAttended { get; set; }
+        public string ClassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+        public string? ClassCheckInTimeStr { get; set; }
+
+        public string? Note { get; set; }
+        public DateTime ClientTimestampUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public class OfflineSyncQueueRequestDto
+    {
+        public List<OfflineSyncItemDto> Records { get; set; } = new();
+    }
+    #endregion
 }
