@@ -1,24 +1,99 @@
 ﻿{
-    "name": "Quản Lý Giáo Lý",
-    "short_name": "QL Giáo Lý",
-    "description": "Hệ thống quản lý giáo lý, điểm danh chuyên cần và sổ điểm giáo xứ",
-    "start_url": "/",
-    "display": "standalone",
-    "orientation": "portrait",
-    "background_color": "#0f172a",
-    "theme_color": "#1e40af",
-    "icons": [
+  "id": "/",
+  "name": "Hệ Thống Quản Lý Giáo Lý - Giáo Xứ Phú Trung",
+  "short_name": "QL Giáo Lý",
+  "description": "Ứng dụng quản lý giáo lý, quét QR điểm danh chuyên cần và sổ điểm điện tử Giáo xứ Phú Trung",
+  "lang": "vi-VN",
+  "dir": "ltr",
+  "start_url": "/?utm_source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#1e40af",
+  "categories": [
+    "education",
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Quét QR Điểm Danh",
+      "short_name": "Quét QR",
+      "description": "Mở nhanh camera quét thẻ QR thiếu nhi",
+      "url": "/Attendance/ScanQr?utm_source=pwa_shortcut",
+      "icons": [
         {
-            "src": "/icons/icon-192x192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
-        },
-        {
-            "src": "/icons/icon-512x512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
         }
-    ]
+      ]
+    },
+    {
+      "name": "Sổ Điểm Danh Lớp",
+      "short_name": "Điểm Danh",
+      "description": "Mở sổ điểm danh chuyên cần theo lớp",
+      "url": "/Attendance/Index?utm_source=pwa_shortcut",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Sổ Điểm Giáo Lý",
+      "short_name": "Sổ Điểm",
+      "description": "Nhập điểm học kỳ và xem tổng kết năm",
+      "url": "/Grades/Index?utm_source=pwa_shortcut",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Tra Cứu Học Viên",
+      "short_name": "Tra Cứu",
+      "description": "Tra cứu nhanh hồ sơ và chuyên cần thiếu nhi",
+      "url": "/TraCuu?utm_source=pwa_shortcut",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
 }

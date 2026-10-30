@@ -69,7 +69,24 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseStaticFiles();
+/*app.UseStaticFiles()*/;
+var contentTypeProvider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+contentTypeProvider.Mappings[".webmanifest"] = "application/manifest+json";
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    ContentTypeProvider = contentTypeProvider,
+    OnPrepareResponse = ctx =>
+    {
+        var fileName = ctx.File.Name.ToLowerInvariant();
+        if (fileName == "sw.js" || fileName == "manifest.json" || fileName.EndsWith(".webmanifest"))
+        {
+            ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+            ctx.Context.Response.Headers["Pragma"] = "no-cache";
+            ctx.Context.Response.Headers["Expires"] = "0";
+        }
+    }
+});
 app.UseRouting();
 
 // 3. Active Rate Limiter, Authentication & Authorization 
