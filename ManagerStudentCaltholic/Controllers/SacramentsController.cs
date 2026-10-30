@@ -1,11 +1,12 @@
-﻿using System.Security.Claims;
-using ManagerStudentCaltholic.Data;
+﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -14,15 +15,18 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly ISacramentRegistryService _sacramentService;
+        private readonly ISacramentEvaluationService _evaluationService;
         private readonly ILogger<SacramentsController> _logger;
 
         public SacramentsController(
             ParishDbContext context,
             ISacramentRegistryService sacramentService,
+            ISacramentEvaluationService evaluationService,
             ILogger<SacramentsController> logger)
         {
             _context = context;
             _sacramentService = sacramentService;
+            _evaluationService = evaluationService;
             _logger = logger;
         }
 
@@ -36,7 +40,6 @@ namespace ManagerStudentCaltholic.Controllers
 
         private bool CanEditRegistry =>
             IsLeadership || User.IsInRole(UserRole.BranchHead);
-
         private async Task<bool> CanAccessStudentAsync(long studentId)
         {
             if (IsLeadership) return true;
@@ -404,6 +407,204 @@ namespace ManagerStudentCaltholic.Controllers
                 success = true,
                 message = "Đã xóa bản ghi khỏi Sổ bộ Bí tích."
             });
+        }
+
+        /// <summary>
+        /// 4. GET: /Sacraments/Evaluation (Dashboard tự động xét duyệt điều kiện Bí tích - TASK-P3-04.3)
+        /// </summary>
+        [HttpGet]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> Evaluation(
+            int? academicYearId,
+            string? grade,
+            int? classId,
+            int? sacramentType,
+            decimal minAvg = 5.0m,
+            double minAtt = 80.0,
+            bool reqExam = true,
+            decimal minExam = 5.0m,
+            long? batchId = null)
+        {
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent)
+                              ?? await _context.AcademicYears.OrderByDescending(y => y.StartDate).AsNoTracking().FirstOrDefaultAsync();
+
+            int targetYearId = academicYearId ?? currentYear?.Id ?? 0;
+            string selectedGrade = string.IsNullOrWhiteSpace(grade) ? "Rước Lễ" : grade.Trim();
+
+            // Nếu là Trưởng khối (BranchHead): Khóa phạm vi vào đúng khối mình phụ trách
+            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return Forbid();
+                }
+                selectedGrade = managedGrade;
+            }
+
+            int targetSacType = sacramentType ?? _evaluationService.InferDefaultSacramentTypeByGrade(selectedGrade);
+
+            var vm = await _evaluationService.EvaluateCandidatesAsync(
+                targetYearId,
+                selectedGrade,
+                classId,
+                targetSacType,
+                minAvg,
+                minAtt,
+                reqExam,
+                minExam,
+                batchId);
+
+            vm.CanApprove = IsLeadership;
+            return View(vm);
+        }
+
+        /// <summary>
+        /// 5. POST: /Sacraments/SaveApprovalBatch (Lưu nháp Tờ trình xét duyệt Bí tích - TASK-P3-04.3)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> SaveApprovalBatch([FromBody] SaveSacramentApprovalBatchRequestDto dto)
+        {
+            if (dto == null || !ModelState.IsValid)
+            {
+                var err = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage
+                          ?? "Dữ liệu tờ trình xét duyệt không hợp lệ.";
+                return BadRequest(new { success = false, message = err });
+            }
+
+            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(dto.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
+
+            var operatorName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Ban Điều Hành";
+
+            try
+            {
+                var savedBatch = await _evaluationService.SaveDraftBatchAsync(dto, operatorName);
+                return Json(new
+                {
+                    success = true,
+                    batchId = savedBatch.Id,
+                    message = $"Đã lưu tờ trình xét duyệt #{savedBatch.Id} ({savedBatch.Title}) thành công!"
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lưu tờ trình xét duyệt Bí tích");
+                return StatusCode(500, new { success = false, message = "Đã xảy ra lỗi hệ thống khi lưu tờ trình." });
+            }
+        }
+
+        /// <summary>
+        /// 6. POST: /Sacraments/ApproveBatch (Cha Xứ / BĐH Phê duyệt chính thức & Đẩy vào Sổ bộ Bí tích - TASK-P3-04.4)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard}")]
+        public async Task<IActionResult> ApproveBatch([FromBody] ApproveSacramentBatchRequestDto dto)
+        {
+            if (dto == null || dto.BatchId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã đợt xét duyệt không hợp lệ." });
+            }
+
+            var approverName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Ban Điều Hành";
+            var (success, syncedCount, message) = await _evaluationService.ApproveBatchAndSyncToRegistryAsync(dto.BatchId, approverName);
+
+            if (!success)
+            {
+                return BadRequest(new { success = false, message });
+            }
+
+            return Json(new
+            {
+                success = true,
+                syncedCount,
+                message
+            });
+        }
+
+        /// <summary>
+        /// 7. GET: /Sacraments/ExportApprovalExcel (Xuất file Excel danh sách xét duyệt trình Cha Xứ - TASK-P3-04.4)
+        /// </summary>
+        [HttpGet]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> ExportApprovalExcel(
+            int academicYearId,
+            string grade = "Rước Lễ",
+            int? classId = null,
+            int sacramentType = 2,
+            decimal minAvg = 5.0m,
+            double minAtt = 80.0,
+            bool reqExam = true,
+            decimal minExam = 5.0m,
+            long? batchId = null)
+        {
+            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(grade, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
+
+            var excelBytes = await _evaluationService.ExportApprovalSheetToExcelAsync(
+                academicYearId, grade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
+
+            var fileName = $"ToTrinh_XetDuyet_BiTich_{grade.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}.xlsx";
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        /// <summary>
+        /// 8. GET: /Sacraments/PrintApprovalSheet (Bản in A4 Biên bản đệ trình Cha Xứ ký duyệt - TASK-P3-04.4)
+        /// </summary>
+        [HttpGet]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> PrintApprovalSheet(
+            int academicYearId,
+            string grade = "Rước Lễ",
+            int? classId = null,
+            int sacramentType = 2,
+            decimal minAvg = 5.0m,
+            double minAtt = 80.0,
+            bool reqExam = true,
+            decimal minExam = 5.0m,
+            long? batchId = null,
+            bool onlyApproved = true)
+        {
+            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(grade, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
+
+            var vm = await _evaluationService.EvaluateCandidatesAsync(
+                academicYearId, grade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
+
+            if (onlyApproved)
+            {
+                vm.Candidates = vm.Candidates.Where(c => c.IsApprovedForSacrament && !c.AlreadyReceivedSacrament).ToList();
+            }
+
+            return View(vm);
         }
     }
 }

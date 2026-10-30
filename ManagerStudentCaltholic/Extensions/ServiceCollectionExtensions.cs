@@ -91,6 +91,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IPromotionEvaluationService, PromotionEvaluationService>();
             // FEAT-P3-03 (TASK-P3-03.2): Đăng ký Service quản lý Sổ bộ Bí tích điện tử
             services.AddScoped<ISacramentRegistryService, SacramentRegistryService>();
+            services.AddScoped<ISacramentEvaluationService, SacramentEvaluationService>();
 
             return services;
         }

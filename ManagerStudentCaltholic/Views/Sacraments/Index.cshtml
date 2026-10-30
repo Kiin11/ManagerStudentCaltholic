@@ -77,9 +77,14 @@
                 Quản lý trọn vòng đời 4 Bí tích (Rửa Tội, Rước Lễ Lần Đầu, Thêm Sức, Bao Đồng), tra cứu số sổ bộ, Linh mục chủ sự và Người đỡ đầu.
             </p>
         </div>
-        <a asp-controller="Students" asp-action="Index" class="btn btn-outline-primary btn-sm rounded-pill px-3">
-            <i class="bi bi-people me-1"></i> Đi tới Hồ Sơ Thiếu Nhi
-        </a>
+        <div class="d-flex gap-2">
+            <a asp-controller="Sacraments" asp-action="Evaluation" class="btn btn-warning btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                <i class="bi bi-award-fill me-1"></i> Xét Duyệt Điều Kiện Bí Tích (Tờ Trình)
+            </a>
+            <a asp-controller="Students" asp-action="Index" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                <i class="bi bi-people me-1"></i> Đi tới Hồ Sơ Thiếu Nhi
+            </a>
+        </div>
     </div>
 
     <!-- 4 Thẻ Thống Kê Nhanh -->

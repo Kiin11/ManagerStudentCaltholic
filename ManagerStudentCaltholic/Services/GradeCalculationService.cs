@@ -134,8 +134,8 @@ namespace ManagerStudentCaltholic.Services
             else if (avg >= 5.0m && combinedAttendanceRate >= 60.0) rank = "Trung bình";
             else rank = "Yếu / Ở lại lớp";
 
-            // Điều kiện lãnh Bí tích / Lên lớp: ĐTB >= 5.0 và Chuyên cần >= 80%
-            bool eligible = false;//avg >= 5.0m && combinedAttendanceRate >= 80.0;
+            // FEAT-P3-04: Mở khóa chính thức điều kiện lãnh Bí tích (ĐTB >= 5.0 và Chuyên cần >= 80%)
+            bool eligible = avg >= 5.0m && combinedAttendanceRate >= 80.0;
             return (rank, eligible);
         }
     }
