@@ -18,8 +18,9 @@ namespace ManagerStudentCaltholic.Services
             var currentYear = DateTime.UtcNow.Year;
             var prefix = $"TN-{currentYear}-";
 
-            // Lấy mã lớn nhất trong năm hiện tại
+            // Dùng IgnoreQueryFilters() để tính cả các bản ghi đã xóa mềm, tránh trùng khóa Unique StudentCode
             var lastStudent = await _context.Students
+                .IgnoreQueryFilters()
                 .Where(s => s.StudentCode.StartsWith(prefix))
                 .OrderByDescending(s => s.StudentCode)
                 .Select(s => s.StudentCode)
