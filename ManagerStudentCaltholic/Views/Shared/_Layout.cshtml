@@ -348,6 +348,16 @@
                             <span class="sidebar-text">Cài Đặt Ứng Dụng</span>
                         </a>
                     </li>
+                    @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.BranchHead))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Dashboard" ? "active" : "")"
+                               asp-controller="Dashboard" asp-action="Index">
+                                <i class="bi bi-speedometer2 text-info"></i>
+                                <span class="sidebar-text">Executive Dashboard</span>
+                            </a>
+                        </li>
+                    }
                 </ul>
             </div>
 
