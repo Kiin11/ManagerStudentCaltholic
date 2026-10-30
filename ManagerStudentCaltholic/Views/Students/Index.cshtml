@@ -732,9 +732,9 @@
             box.classList.remove('d-none');
         }
 
-        async function submitSaveSacramentRecord() {
+                async function submitSaveSacramentRecord() {
             const studentId = parseInt(document.getElementById('sacInputStudentId').value);
-            const recordId = parseInt(document.getElementById('sacInputRecordId').value);
+            const recordId = parseInt(document.getElementById('sacInputRecordId').value) || 0;
             const sacType = parseInt(document.getElementById('sacInputType').value);
             const receivedDate = document.getElementById('sacInputDate').value;
             const parishName = document.getElementById('sacInputParish').value.trim();
@@ -743,17 +743,25 @@
             const bookNo = document.getElementById('sacInputBookNo').value.trim();
             const notes = document.getElementById('sacInputNotes').value.trim();
 
+            if (!studentId || studentId <= 0) {
+                showSacramentAlert('Không xác định được hồ sơ thiếu nhi cần lưu!', false);
+                return;
+            }
+
             if (!receivedDate || !parishName) {
                 showSacramentAlert('Vui lòng nhập đầy đủ Ngày lãnh nhận và Tên Giáo xứ ban Bí tích!', false);
                 return;
             }
+
+            const token = getCsrfToken();
 
             try {
                 const res = await fetch('/Sacraments/SaveRecord', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': getCsrfToken()
+                        'X-CSRF-TOKEN': token,
+                        'RequestVerificationToken': token
                     },
                     body: JSON.stringify({
                         id: recordId > 0 ? recordId : null,
@@ -768,12 +776,20 @@
                     })
                 });
 
-                const result = await res.json();
-                if (result.success) {
+                const rawText = await res.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    result = null;
+                }
+
+                if (res.ok && result && result.success) {
                     showSacramentAlert(result.message, true);
                     await loadSacramentTimeline(studentId);
                 } else {
-                    showSacramentAlert(result.message || 'Không thể lưu thông tin Bí tích.', false);
+                    const errMsg = result?.message || `Không thể lưu thông tin Bí tích (HTTP ${res.status}).`;
+                    showSacramentAlert(errMsg, false);
                 }
             } catch (err) {
                 showSacramentAlert('Lỗi kết nối máy chủ: ' + err.message, false);

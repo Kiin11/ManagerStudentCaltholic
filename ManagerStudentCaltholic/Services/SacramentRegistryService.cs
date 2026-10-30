@@ -110,65 +110,6 @@ namespace ManagerStudentCaltholic.Services
             return timeline;
         }
 
-        public async Task<StudentSacramentRecord> AddOrUpdateSacramentRecordAsync(SaveSacramentRecordRequestDto dto, string operatorName)
-        {
-            var receivedUtc = DateTime.SpecifyKind(dto.ReceivedDate.Date, DateTimeKind.Utc);
-
-            // Kiểm tra xem đã có bản ghi (kể cả bản ghi từng bị xóa mềm) của loại Bí tích này cho học sinh chưa
-            var existing = await _context.StudentSacramentRecords
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(r => r.StudentId == dto.StudentId && r.SacramentType == dto.SacramentType);
-
-            if (existing == null)
-            {
-                existing = new StudentSacramentRecord
-                {
-                    StudentId = dto.StudentId,
-                    SacramentType = dto.SacramentType,
-                    ReceivedDate = receivedUtc,
-                    ParishName = dto.ParishName.Trim(),
-                    PriestName = string.IsNullOrWhiteSpace(dto.PriestName) ? null : dto.PriestName.Trim(),
-                    GodparentName = string.IsNullOrWhiteSpace(dto.GodparentName) ? null : dto.GodparentName.Trim(),
-                    RegistryBookNumber = string.IsNullOrWhiteSpace(dto.RegistryBookNumber) ? null : dto.RegistryBookNumber.Trim(),
-                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim(),
-                    CreatedBy = operatorName,
-                    CreatedAt = DateTime.UtcNow,
-                    IsDeleted = false
-                };
-                _context.StudentSacramentRecords.Add(existing);
-            }
-            else
-            {
-                existing.ReceivedDate = receivedUtc;
-                existing.ParishName = dto.ParishName.Trim();
-                existing.PriestName = string.IsNullOrWhiteSpace(dto.PriestName) ? null : dto.PriestName.Trim();
-                existing.GodparentName = string.IsNullOrWhiteSpace(dto.GodparentName) ? null : dto.GodparentName.Trim();
-                existing.RegistryBookNumber = string.IsNullOrWhiteSpace(dto.RegistryBookNumber) ? null : dto.RegistryBookNumber.Trim();
-                existing.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? null : dto.Notes.Trim();
-                existing.UpdatedBy = operatorName;
-                existing.UpdatedAt = DateTime.UtcNow;
-                existing.IsDeleted = false;
-                existing.DeletedAt = null;
-            }
-
-            // Đồng bộ ngày Rửa Tội (1) và Thêm Sức (3) ngược về bảng Students để giữ nhất quán dữ liệu
-            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == dto.StudentId);
-            if (student != null)
-            {
-                if (dto.SacramentType == (int)SacramentTypeEnum.Baptism)
-                {
-                    student.BaptismDate = receivedUtc;
-                }
-                else if (dto.SacramentType == (int)SacramentTypeEnum.Confirmation)
-                {
-                    student.ConfirmationDate = receivedUtc;
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return existing;
-        }
-
         public async Task<bool> DeleteSacramentRecordAsync(long recordId, long studentId, string operatorName)
         {
             var record = await _context.StudentSacramentRecords
@@ -225,6 +166,68 @@ namespace ManagerStudentCaltholic.Services
             }
 
             return alerts;
+        }
+
+        public async Task<StudentSacramentRecord> AddOrUpdateSacramentRecordAsync(SaveSacramentRecordRequestDto dto, string operatorName)
+        {
+            var receivedUtc = DateTime.SpecifyKind(dto.ReceivedDate.Date, DateTimeKind.Utc);
+            var safeOperator = string.IsNullOrWhiteSpace(operatorName) ? "Staff" : operatorName.Trim();
+
+            var existing = await _context.StudentSacramentRecords
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(r => r.StudentId == dto.StudentId && r.SacramentType == dto.SacramentType);
+
+            if (existing == null)
+            {
+                existing = new StudentSacramentRecord
+                {
+                    StudentId = dto.StudentId,
+                    SacramentType = dto.SacramentType,
+                    ReceivedDate = receivedUtc,
+                    ParishName = dto.ParishName.Trim(),
+                    PriestName = string.IsNullOrWhiteSpace(dto.PriestName) ? string.Empty : dto.PriestName.Trim(),
+                    GodparentName = string.IsNullOrWhiteSpace(dto.GodparentName) ? string.Empty : dto.GodparentName.Trim(),
+                    RegistryBookNumber = string.IsNullOrWhiteSpace(dto.RegistryBookNumber) ? string.Empty : dto.RegistryBookNumber.Trim(),
+                    Notes = string.IsNullOrWhiteSpace(dto.Notes) ? string.Empty : dto.Notes.Trim(),
+                    CreatedBy = safeOperator,
+                    UpdatedBy = safeOperator,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    IsDeleted = false,
+                    DeletedAt = null
+                };
+                _context.StudentSacramentRecords.Add(existing);
+            }
+            else
+            {
+                existing.ReceivedDate = receivedUtc;
+                existing.ParishName = dto.ParishName.Trim();
+                existing.PriestName = string.IsNullOrWhiteSpace(dto.PriestName) ? string.Empty : dto.PriestName.Trim();
+                existing.GodparentName = string.IsNullOrWhiteSpace(dto.GodparentName) ? string.Empty : dto.GodparentName.Trim();
+                existing.RegistryBookNumber = string.IsNullOrWhiteSpace(dto.RegistryBookNumber) ? string.Empty : dto.RegistryBookNumber.Trim();
+                existing.Notes = string.IsNullOrWhiteSpace(dto.Notes) ? string.Empty : dto.Notes.Trim();
+                existing.UpdatedBy = safeOperator;
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+            }
+
+            // Đồng bộ ngày Rửa Tội (1) và Thêm Sức (3) ngược về bảng Students
+            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == dto.StudentId);
+            if (student != null)
+            {
+                if (dto.SacramentType == (int)SacramentTypeEnum.Baptism)
+                {
+                    student.BaptismDate = receivedUtc;
+                }
+                else if (dto.SacramentType == (int)SacramentTypeEnum.Confirmation)
+                {
+                    student.ConfirmationDate = receivedUtc;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return existing;
         }
     }
 }
