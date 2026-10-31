@@ -136,6 +136,10 @@
                                 <i class="bi bi-arrow-counterclockwise"></i> Làm mới
                             </a>
                         </div>
+                        <button type="button" class="btn btn-success btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                                onclick="enqueueBackgroundParishExport(@Model.SelectedYearId, '@Html.Raw(Model.SelectedGrade)')">
+                            <i class="bi bi-cloud-arrow-down-fill me-1"></i> Xuất Excel Toàn Xứ (Chạy Nền)
+                        </button>
                     </form>
                 </div>
             </div>

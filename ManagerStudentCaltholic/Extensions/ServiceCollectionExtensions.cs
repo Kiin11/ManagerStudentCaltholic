@@ -96,6 +96,10 @@ namespace ManagerStudentCaltholic.Extensions
             // FEAT-P3-09:RedisCache 
             services.AddScoped<ICacheService, RedisCacheService>();
 
+            // FEAT-P3-10: Hangfire Background Job Service
+            services.AddScoped<IBackgroundExportJobService, BackgroundExportJobService>();
+            services.AddSingleton<ILogMaintenanceJobService, LogRetentionBackgroundService>();
+
             return services;
         }
 
