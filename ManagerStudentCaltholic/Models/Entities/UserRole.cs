@@ -8,7 +8,7 @@
         // 2. Lãnh đạo tinh thần & phê duyệt Bí tích
         public const string SpiritualDirector = "SpiritualDirector"; // Cha Tuyên Úy / Cha Xứ
 
-        // 3. Ban Điều Hành xứ đoàn (Đoàn trưởng, Đoàn phó, Thư ký xứ đoàn)
+        // 3. Ban Điều Hành (Đoàn trưởng, Đoàn phó, Thư ký)
         public const string ExecutiveBoard = "ExecutiveBoard";
 
         // 4. Phân đoàn trưởng / Trưởng khối ngành
