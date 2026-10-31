@@ -100,6 +100,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IBackgroundExportJobService, BackgroundExportJobService>();
             services.AddSingleton<ILogMaintenanceJobService, LogRetentionBackgroundService>();
 
+            // Bổ sung vào Program.cs (cùng cụm đăng ký dịch vụ trước dòng var app = builder.Build();):
+            services.AddSingleton<ManagerStudentCaltholic.Services.SystemMetricsCollector>();
+
             return services;
         }
 
