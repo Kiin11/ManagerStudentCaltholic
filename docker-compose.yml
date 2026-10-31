@@ -1,4 +1,17 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: parish_redis
+    restart: always
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+    ports:
+      - "6379:6379"
+
+
   dotnet_app:
     build:
       context: ./ManagerStudentCaltholic
@@ -8,13 +21,15 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_HTTP_PORTS=8080
-      # Chuỗi kết nối trực tiếp đến Azure Database for PostgreSQL Flexible Server
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;
+      - ConnectionStrings__RedisConnection=parish_redis:6379,abortConnect=false,connectTimeout=3000,syncTimeout=3000
       - JwtSettings__SecretKey=${JWT_SECRET_KEY}
       - SeedSettings__AdminPassword=${SEED_ADMIN_PASSWORD}
       - SeedSettings__SpiritualDirectorPassword=${SEED_DIRECTOR_PASSWORD}
     expose:
       - "8080"
+    depends_on:
+      - redis
     networks:
       - app_network
 
@@ -30,6 +45,9 @@ services:
       - dotnet_app
     networks:
       - app_network
+
+volumes:
+  redis_data:
 
 networks:
   app_network:
