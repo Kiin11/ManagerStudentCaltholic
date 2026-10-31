@@ -101,7 +101,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddSingleton<ILogMaintenanceJobService, LogRetentionBackgroundService>();
 
             // Bổ sung vào Program.cs (cùng cụm đăng ký dịch vụ trước dòng var app = builder.Build();):
-            services.AddSingleton<ManagerStudentCaltholic.Services.SystemMetricsCollector>();
+            services.AddSingleton<SystemMetricsCollector>();
+            services.AddScoped<IRedisAttendanceService, RedisAttendanceService>();
 
             return services;
         }

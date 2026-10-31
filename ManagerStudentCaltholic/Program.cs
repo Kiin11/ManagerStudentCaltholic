@@ -142,16 +142,30 @@ app.UseHangfireDashboard("/Admin/Hangfire", new DashboardOptions
     Authorization = new[] { new HangfireAdminAuthorizationFilter() },
     DashboardTitle = "Background Task Queue Management - Phu Trung Parish"
 });
+var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+    OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
 
 // 5. TASK-P3-10.3: Register Recurring Job to automatically clean up Logs > 90 days at 02:00 AM every Sunday
-RecurringJob.AddOrUpdate<ILogMaintenanceJobService>(
-    "log-retention-cleanup-job",
-    service => service.CleanUpOldLogsAndTempExports(),
-    Cron.Weekly(DayOfWeek.Sunday, 2, 0),
-    new RecurringJobOptions
-    {
-        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time")
-    });
+// TASK-P3-12.2 (Job 1): Auto Pre-warm redis Attendence & Task class data every Sunday at 05:30 AM
+RecurringJob.AddOrUpdate<IRedisAttendanceService>(
+    "prewarm-sunday-attendance-cache",
+    service => service.PreWarmDailyAttendanceAndTasksAsync(null),
+    "30 5 * * 0", // 05:30 Sunday Morning
+    new RecurringJobOptions { TimeZone = vnTimeZone });
+
+// TASK-P3-12.2 (Job 2): Automatically Pre-warm the cache for Thursday Mass at 16:30 every Thursday
+RecurringJob.AddOrUpdate<IRedisAttendanceService>(
+    "prewarm-thursday-attendance-cache",
+    service => service.PreWarmDailyAttendanceAndTasksAsync(null),
+    "30 16 * * 4", // 16:30 Thursday Afternoon
+    new RecurringJobOptions { TimeZone = vnTimeZone });
+
+// TASK-P3-12.4 (Job 3): Automatically Sync-back (Batch Upsert) attendance results from Redis to PostgreSQL every 10 minutes
+RecurringJob.AddOrUpdate<IRedisAttendanceService>(
+    "syncback-redis-attendance-to-db",
+    service => service.SyncDirtyAttendancesToDatabaseAsync(null),
+    "*/10 * * * *", // Every 10 minutes
+    new RecurringJobOptions { TimeZone = vnTimeZone });
 
 app.MapControllerRoute(
     name: "default",

@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.InkML;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
@@ -16,12 +17,15 @@ namespace ManagerStudentCaltholic.Controllers
     public class AttendanceController : Controller
     {
         private readonly ParishDbContext _context;
-        private readonly ILogger<AttendanceController> _logger;
+        private readonly ILogger<AttendanceController> _logger; 
+        private readonly IRedisAttendanceService _redisAttendance;
 
-        public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger)
+        public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger
+            , IRedisAttendanceService redisAttendance)
         {
             _context = context;
             _logger = logger;
+            _redisAttendance = redisAttendance;
         }
 
         /// <summary>
@@ -91,53 +95,50 @@ namespace ManagerStudentCaltholic.Controllers
             ViewBag.SelectedClassId = targetClass.Id;
 
             // Lấy danh sách học sinh thuộc lớp
-            var enrollments = await _context.Enrollments
-                .Include(e => e.Student)
-                .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
-                .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
-                .AsNoTracking()
-                .ToListAsync();
-
-            var enrollmentIds = enrollments.Select(e => e.Id).ToList();
-
-            // Nạp thông tin điểm danh trong ngày đã có trong CSDL
-            var attendances = await _context.Attendances
-                .Where(a => enrollmentIds.Contains(a.EnrollmentId) && a.AttendanceDate == targetDate)
-                .AsNoTracking()
-                .ToDictionaryAsync(a => a.EnrollmentId);
-
-            var studentRows = enrollments.Select(e =>
-            {
-                attendances.TryGetValue(e.Id, out var att);
-                return new StudentAttendanceRowItem
-                {
-                    EnrollmentId = e.Id,
-                    StudentId = e.StudentId,
-                    StudentCode = e.Student.StudentCode,
-                    ChristianName = e.Student.ChristianName,
-                    FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
-                    Gender = e.Student.Gender,
-                    AttendedMass = att?.AttendedMass ?? false,
-                    MassStatus = att?.MassStatus ?? AttendanceStatus.AbsentUnpermitted,
-                    MassCheckInTime = att?.MassCheckInTime,
-                    ClassAttended = att?.ClassAttended ?? false,
-                    ClassStatus = att?.ClassStatus ?? AttendanceStatus.AbsentUnpermitted,
-                    ClassCheckInTime = att?.ClassCheckInTime,
-                    IsMakeUp = att?.IsMakeUp ?? false,
-                    Note = att?.Note
-                };
-            }).ToList();
-
-            var viewModel = new ClassAttendanceSheetViewModel
-            {
-                ClassId = targetClass.Id,
-                ClassName = targetClass.Name,
-                GradeLevel = targetClass.GradeLevel,
-                AttendanceDate = targetDate,
-                Students = studentRows
-            };
-
+            var viewModel = await _redisAttendance.GetOrLoadClassSheetAsync(targetClass.Id, targetDate);
+            ViewBag.SessionContext = await _redisAttendance.GetOrLoadSessionContextAsync(targetClass.Id, targetDate);
             return View(viewModel);
+
+            //var enrollmentIds = enrollments.Select(e => e.Id).ToList();
+
+            //// Nạp thông tin điểm danh trong ngày đã có trong CSDL
+            //var attendances = await _context.Attendances
+            //    .Where(a => enrollmentIds.Contains(a.EnrollmentId) && a.AttendanceDate == targetDate)
+            //    .AsNoTracking()
+            //    .ToDictionaryAsync(a => a.EnrollmentId);
+
+            //var studentRows = enrollments.Select(e =>
+            //{
+            //    attendances.TryGetValue(e.Id, out var att);
+            //    return new StudentAttendanceRowItem
+            //    {
+            //        EnrollmentId = e.Id,
+            //        StudentId = e.StudentId,
+            //        StudentCode = e.Student.StudentCode,
+            //        ChristianName = e.Student.ChristianName,
+            //        FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
+            //        Gender = e.Student.Gender,
+            //        AttendedMass = att?.AttendedMass ?? false,
+            //        MassStatus = att?.MassStatus ?? AttendanceStatus.AbsentUnpermitted,
+            //        MassCheckInTime = att?.MassCheckInTime,
+            //        ClassAttended = att?.ClassAttended ?? false,
+            //        ClassStatus = att?.ClassStatus ?? AttendanceStatus.AbsentUnpermitted,
+            //        ClassCheckInTime = att?.ClassCheckInTime,
+            //        IsMakeUp = att?.IsMakeUp ?? false,
+            //        Note = att?.Note
+            //    };
+            //}).ToList();
+
+            //var viewModel = new ClassAttendanceSheetViewModel
+            //{
+            //    ClassId = targetClass.Id,
+            //    ClassName = targetClass.Name,
+            //    GradeLevel = targetClass.GradeLevel,
+            //    AttendanceDate = targetDate,
+            //    Students = studentRows
+            //};
+
+            //return View(viewModel);
         }
 
 
@@ -147,7 +148,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveBatch([FromBody] AttendanceBatchSubmitDto request)
         {
             if (request == null || !request.Items.Any())
@@ -155,75 +156,29 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Không có dữ liệu điểm danh nào được gửi lên." });
             }
 
-            var targetDate = DateTime.SpecifyKind(request.AttendanceDate.Date, DateTimeKind.Utc);
-            var enrollmentIds = request.Items.Select(i => i.EnrollmentId).ToList();
-
-            var strategy = _context.Database.CreateExecutionStrategy();
+            // Kiểm tra chống IDOR theo khối nếu là Trưởng khối (BranchHead)
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.ClassId);
+                if (targetClass == null || string.IsNullOrWhiteSpace(managedGrade) ||
+                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
 
             try
             {
-                await strategy.ExecuteAsync(async () =>
-                {
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    // Lấy tất cả bản ghi điểm danh hiện có của danh sách học sinh trong ngày
-                    var existingRecords = await _context.Attendances
-                        .Where(a => enrollmentIds.Contains(a.EnrollmentId) && a.AttendanceDate == targetDate)
-                        .ToListAsync();
-
-                    var existingDict = existingRecords.ToDictionary(a => a.EnrollmentId);
-                    var newRecords = new List<Attendance>();
-
-                    foreach (var item in request.Items)
-                    {
-                        if (existingDict.TryGetValue(item.EnrollmentId, out var existing))
-                        {
-                            // Cập nhật lũy kế (Upsert)
-                            existing.AttendedMass = item.AttendedMass;
-                            existing.MassStatus = item.MassStatus;
-                            existing.ClassAttended = item.ClassAttended;
-                            existing.ClassStatus = item.ClassStatus;
-                            existing.Note = item.Note;
-                        }
-                        else
-                        {
-                            // Tạo mới bản ghi điểm danh
-                            newRecords.Add(new Attendance
-                            {
-                                EnrollmentId = item.EnrollmentId,
-                                AttendanceDate = targetDate, // targetDate lúc này đã là UTC
-                                DayOfWeek = targetDate.DayOfWeek,
-                                AttendedMass = item.AttendedMass,
-                                MassStatus = item.MassStatus,
-                                ClassAttended = item.ClassAttended,
-                                ClassStatus = item.ClassStatus,
-                                Note = item.Note,
-                                CreatedAt = DateTime.UtcNow // Luôn dùng UtcNow
-                            });
-                        }
-                    }
-
-                    if (newRecords.Any())
-                    {
-                        await _context.Attendances.AddRangeAsync(newRecords);
-                    }
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                });
-
-                _logger.LogInformation("Lưu thành công sổ điểm danh Lớp ID: {ClassId}, Ngày: {Date:dd/MM/yyyy}, Số lượng: {Count}",
-                    request.ClassId, targetDate, request.Items.Count);
-
-                return Json(new { success = true, message = $"Đã lưu sổ điểm danh ngày {targetDate:dd/MM/yyyy} thành công!" });
+                var (success, message) = await _redisAttendance.SaveBatchToRedisAsync(request);
+                return Json(new { success, message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lưu điểm danh hàng loạt Lớp ID: {ClassId}", request.ClassId);
-                return Json(new { success = false, message = "Lỗi khi lưu dữ liệu điểm danh: " + ex.Message });
+                _logger.LogError(ex, "Lỗi khi lưu điểm danh qua Redis cho Lớp ID: {ClassId}", request.ClassId);
+                return Json(new { success = false, message = "Đã xảy ra lỗi khi lưu dữ liệu điểm danh." });
             }
         }
-
         /// <summary>
         /// GET: /Attendance/ScanQr (TASK-406 - Màn hình quét QR)
         /// </summary>
@@ -242,7 +197,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> ScanCheckIn([FromBody] QrScanRequestDto request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.StudentCode))
@@ -254,131 +209,19 @@ namespace ManagerStudentCaltholic.Controllers
                 });
             }
 
-            var cleanCode = request.StudentCode.Trim().ToUpper();
-            var scanTime = request.ScanTimestamp ?? DateTime.Now;
-            var today = DateTime.SpecifyKind(scanTime.Date, DateTimeKind.Utc);
-
-            // 1. Tìm thông tin học sinh và lớp trong niên khóa hiện tại
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-            if (currentYear == null)
-            {
-                return Json(new QrScanResponseDto { Success = false, Message = "Chưa có niên khóa nào được kích hoạt!" });
-            }
-
-            var enrollment = await _context.Enrollments
-                .Include(e => e.Student)
-                .Include(e => e.ClassRoom)
-                .FirstOrDefaultAsync(e => e.Student.StudentCode.ToUpper() == cleanCode
-                                       && e.ClassRoom.AcademicYearId == currentYear.Id
-                                       && e.Student.IsActive);
-
-            if (enrollment == null)
-            {
-                return Json(new QrScanResponseDto
-                {
-                    Success = false,
-                    StudentCode = cleanCode,
-                    Message = $"Không tìm thấy thiếu nhi có mã '{cleanCode}' trong niên khóa {currentYear.Name}!"
-                });
-            }
-
-            // 2. Tự động nhận diện khung giờ và trạng thái đi trễ
-            var (isMass, isClass, status, timeOfDay, message) = AttendanceTimeHelper.EvaluateCheckIn(scanTime, enrollment.ClassRoom.GradeLevel);
-
-            if (!isMass && !isClass)
-            {
-                // Nếu quét vào ngày thường không phải T5 hay CN, mặc định tính là giờ học hoặc sự kiện
-                isClass = true;
-                status = AttendanceStatus.Present;
-            }
-
-            var studentFullName = $"{enrollment.Student.FirstName} {enrollment.Student.LastName}".Trim();
-            var isDuplicate = false;
-            var activityTitle = isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ";
-
-            // 3. Thực thi Transaction Upsert an toàn
-            var strategy = _context.Database.CreateExecutionStrategy();
             try
             {
-                await strategy.ExecuteAsync(async () =>
-                {
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    var record = await _context.Attendances
-                        .FirstOrDefaultAsync(a => a.EnrollmentId == enrollment.Id && a.AttendanceDate == today);
-
-                    if (record == null)
-                    {
-                        record = new Attendance
-                        {
-                            EnrollmentId = enrollment.Id,
-                            AttendanceDate = today,
-                            DayOfWeek = today.DayOfWeek,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        _context.Attendances.Add(record);
-                    }
-
-                    if (isMass)
-                    {
-                        if (record.AttendedMass)
-                        {
-                            isDuplicate = true; // Đã quét Lễ rồi
-                        }
-                        else
-                        {
-                            record.AttendedMass = true;
-                            record.MassStatus = status;
-                            record.MassCheckInTime = timeOfDay;
-                        }
-                    }
-
-                    if (isClass)
-                    {
-                        if (record.ClassAttended)
-                        {
-                            isDuplicate = true; // Đã điểm danh lớp rồi
-                        }
-                        else
-                        {
-                            record.ClassAttended = true;
-                            record.ClassStatus = status;
-                            record.ClassCheckInTime = timeOfDay;
-                        }
-                    }
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                });
-
-                _logger.LogInformation("Quét QR thành công: {Code} - {Name} - Lớp: {Class} - {Activity} ({Status})",
-                    cleanCode, studentFullName, enrollment.ClassRoom.Name, activityTitle, status);
-
-                return Json(new QrScanResponseDto
-                {
-                    Success = true,
-                    IsDuplicate = isDuplicate,
-                    StudentCode = cleanCode,
-                    ChristianName = enrollment.Student.ChristianName,
-                    FullName = studentFullName,
-                    ClassName = enrollment.ClassRoom.Name,
-                    GradeLevel = enrollment.ClassRoom.GradeLevel,
-                    ActivityType = activityTitle,
-                    Status = status,
-                    CheckInTimeStr = timeOfDay.ToString(@"hh\:mm\:ss"),
-                    Message = isDuplicate
-                        ? $"Thiếu nhi đã được điểm danh {activityTitle} trước đó!"
-                        : $"Điểm danh thành công: {studentFullName} ({status})"
-                });
+                var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request);
+                return Json(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi xử lý quét mã QR cho mã: {Code}", cleanCode);
+                _logger.LogError(ex, "Lỗi khi xử lý quét mã QR qua Redis cho mã: {Code}", request.StudentCode);
                 return Json(new QrScanResponseDto
                 {
                     Success = false,
-                    StudentCode = cleanCode,
-                    Message = "Lỗi hệ thống khi lưu kết quả: " + ex.Message
+                    StudentCode = request.StudentCode,
+                    Message = "Lỗi hệ thống khi lưu kết quả quét QR."
                 });
             }
         }
@@ -1797,5 +1640,37 @@ namespace ManagerStudentCaltholic.Controllers
             return Rank(incomingStatus) > Rank(currentStatus) ? incomingStatus : currentStatus;
         }
         #endregion
+
+        // 5. Thêm 2 API điều khiển Bộ đệm Redis (Pre-warm & Sync-back tức thì) vào cuối AttendanceController.cs:
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> PreWarmRedisCache(DateTime? date)
+        {
+            int count = await _redisAttendance.PreWarmDailyAttendanceAndTasksAsync(date);
+            return Json(new
+            {
+                success = true,
+                cachedCount = count,
+                message = $"Đã nạp sẵn {count} hồ sơ thiếu nhi và thông tin giờ học lên Redis thành công!"
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> FlushRedisToDatabase(DateTime? date)
+        {
+            var (classesCount, recordsCount) = await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(date);
+            return Json(new
+            {
+                success = true,
+                classesCount,
+                recordsCount,
+                message = classesCount > 0
+                    ? $"Đã đồng bộ thành công {recordsCount} bản ghi của {classesCount} lớp từ Redis xuống PostgreSQL!"
+                    : "Tất cả dữ liệu trên Redis đã được đồng bộ với PostgreSQL."
+            });
+        }
     }
 }

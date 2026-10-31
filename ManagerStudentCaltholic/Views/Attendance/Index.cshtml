@@ -2,9 +2,93 @@
 @{
     ViewData["Title"] = $"Sổ Điểm Danh - {Model.ClassName}";
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+    var sessionCtx = ViewBag.SessionContext as ManagerStudentCaltholic.Models.DTOs.ClassSessionContextDto;
+    bool canManageCache = User.IsInRole("Admin") || User.IsInRole("SpiritualDirector") || User.IsInRole("ExecutiveBoard") || User.IsInRole("BranchHead");
 }
 
 @Html.AntiForgeryToken()
+@if (sessionCtx != null)
+{
+    <!-- KHUNG THÔNG TIN GIỜ HỌC & TASK GIÁO LÝ VIÊN TỪ REDIS (FEAT-P3-12) -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-start border-primary border-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3 align-items-center">
+                <!-- Cột trái: Thông tin Phòng học, Ca học & Bài giảng hôm nay -->
+                <div class="col-lg-6 border-end-lg">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary rounded-pill px-3 py-1">
+                            <i class="bi bi-lightning-charge-fill me-1"></i>Redis High-Throughput Active
+                        </span>
+                        <span class="badge bg-info-subtle text-primary border px-2 py-1">
+                            <i class="bi bi-geo-alt-fill me-1"></i>Phòng: @sessionCtx.RoomName (@sessionCtx.TimeSlotDisplay)
+                        </span>
+                        @if (sessionCtx.HasUnsyncedChanges)
+                        {
+                            <span class="badge bg-warning text-dark" id="badgeRedisDirtyState">
+                                <i class="bi bi-clock-history me-1"></i>Đang chờ Sync-back về DB (10p/lần)
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success-subtle text-success border" id="badgeRedisDirtyState">
+                                <i class="bi bi-check2-all me-1"></i>Đã đồng bộ PostgreSQL
+                            </span>
+                        }
+                    </div>
+
+                    <h6 class="fw-bold text-dark mb-1">
+                        <i class="bi bi-book-half text-primary me-2"></i>Nội dung Giờ học: @sessionCtx.TopicTitle
+                    </h6>
+
+                    @if (!string.IsNullOrWhiteSpace(sessionCtx.LatestPinnedAnnouncementTitle))
+                    {
+                        <div class="small text-danger fw-semibold mt-1">
+                            <i class="bi bi-pin-angle-fill me-1"></i>Thông báo ghim: @sessionCtx.LatestPinnedAnnouncementTitle
+                        </div>
+                    }
+
+                    @if (canManageCache)
+                    {
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="triggerPreWarmRedis()">
+                                <i class="bi bi-fire me-1"></i> Nạp Đệm Redis (Pre-warm)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3" onclick="triggerFlushRedisToDb()">
+                                <i class="bi bi-database-fill-up me-1"></i> Đồng Bộ Redis Xuống DB Ngay
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <!-- Cột phải: Checklist Nhiệm vụ của GLV trong giờ học -->
+                <div class="col-lg-6">
+                    <div class="small fw-bold text-secondary text-uppercase mb-2">
+                        <i class="bi bi-list-check me-1 text-success"></i>Checklist Công Việc Trong Giờ Sinh Hoạt:
+                    </div>
+                    <div class="list-group list-group-flush small">
+                        @foreach (var task in sessionCtx.Tasks)
+                        {
+                            <div class="list-group-item px-0 py-1 border-0 d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi @(task.IsCompleted ? "bi-check-circle-fill text-success" : "bi-circle text-secondary")"></i>
+                                    @if (!string.IsNullOrWhiteSpace(task.ActionUrl))
+                                    {
+                                        <a href="@task.ActionUrl" class="text-decoration-none fw-semibold text-dark">@task.Title</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="@(task.IsCompleted ? "text-decoration-line-through text-muted" : "fw-semibold text-dark")">@task.Title</span>
+                                    }
+                                </div>
+                                <span class="badge @task.BadgeColor rounded-pill">@task.BadgeText</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 <div class="container-fluid py-4">
     <!-- Header & Bộ Lọc Lớp / Ngày -->
@@ -354,6 +438,7 @@
         </div>
     </div>
 </div>
+
 <!-- MODAL CẤU HÌNH QUY ƯỚC TÍNH ĐIỂM CHUYÊN CẦN (TASK-1014) -->
 <div class="modal fade" id="attendanceRuleModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -428,6 +513,7 @@
         </div>
     </div>
 </div>
+
 @section Scripts {
     <script>
         function onFilterChange() {
@@ -1041,6 +1127,50 @@
                 }, 2200);
             } catch (err) {
                 showAlert('Không thể tự động sao chép vào Clipboard: ' + err.message, false);
+            }
+        }
+        async function triggerPreWarmRedis() {
+            const date = document.getElementById('inputDate')?.value || '';
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            if (date) formData.append('date', date);
+
+            try {
+                const res = await fetch('/Attendance/PreWarmRedisCache', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': token },
+                    body: formData
+                });
+                const data = await res.json();
+                showAlert(data.message, data.success);
+            } catch (err) {
+                showAlert('Lỗi khi nạp bộ đệm Redis: ' + err.message, false);
+            }
+        }
+
+        async function triggerFlushRedisToDb() {
+            const date = document.getElementById('inputDate')?.value || '';
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            if (date) formData.append('date', date);
+
+            try {
+                const res = await fetch('/Attendance/FlushRedisToDatabase', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': token },
+                    body: formData
+                });
+                const data = await res.json();
+                showAlert(data.message, data.success);
+                if (data.success) {
+                    const dirtyBadge = document.getElementById('badgeRedisDirtyState');
+                    if (dirtyBadge) {
+                        dirtyBadge.className = 'badge bg-success-subtle text-success border';
+                        dirtyBadge.innerHTML = '<i class="bi bi-check2-all me-1"></i>Đã đồng bộ PostgreSQL';
+                    }
+                }
+            } catch (err) {
+                showAlert('Lỗi khi đồng bộ xuống CSDL: ' + err.message, false);
             }
         }
     </script>
