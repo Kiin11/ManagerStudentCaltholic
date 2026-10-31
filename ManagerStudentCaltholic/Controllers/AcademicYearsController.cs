@@ -1,4 +1,5 @@
 ﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,34 +12,32 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ILogger<AcademicYearsController> _logger;
         private readonly ParishDbContext _dbContext;
-        public AcademicYearsController(ILogger<AcademicYearsController> logger, ParishDbContext dbContext)
+        private readonly ICacheService _cache;
+
+        public AcademicYearsController(
+            ILogger<AcademicYearsController> logger,
+            ParishDbContext dbContext,
+            ICacheService cache)
         {
             _logger = logger;
             _dbContext = dbContext;
+            _cache = cache;
         }
 
-        /// <summary>
-        /// 1. GET: /AcademicYears (Danh sách niên khóa)
-        /// </summary>
-        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> Index()
         {
-            _logger.LogInformation("Truy xuất danh sách niên khóa giáo lý");
-
-            var academicYears = await _dbContext.AcademicYears
-                .OrderByDescending(y => y.StartDate)
-                .AsNoTracking()
-                .ToListAsync();
+            var academicYears = await _cache.GetOrSetAsync(
+                CacheKeys.AllAcademicYears,
+                async () => await _dbContext.AcademicYears
+                    .OrderByDescending(y => y.StartDate)
+                    .AsNoTracking()
+                    .ToListAsync(),
+                TimeSpan.FromHours(24));
 
             return View(academicYears);
         }
 
-        /// <summary>
-        /// 2. POST: /AcademicYears/Create (Thêm niên khóa mới)
-        /// </summary>
-        /// <param name="academicYear"></param>
-        /// <returns></returns>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(AcademicYear academicYear)
@@ -59,7 +58,7 @@ namespace ManagerStudentCaltholic.Controllers
             if (!ModelState.IsValid)
             {
                 TempData["ErrorMessage"] = "Dữ liệu nhập không hợp lệ, vui lòng kiểm tra lại.";
-                var list = await _dbContext.AcademicYears.OrderByDescending(y => y.StartDate).ToListAsync();
+                var list = await _dbContext.AcademicYears.OrderByDescending(y => y.StartDate).AsNoTracking().ToListAsync();
                 return View(nameof(Index), list);
             }
 
@@ -67,7 +66,6 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 academicYear.StartDate = DateTime.SpecifyKind(academicYear.StartDate, DateTimeKind.Utc);
                 academicYear.EndDate = DateTime.SpecifyKind(academicYear.EndDate, DateTimeKind.Utc);
-                // Sử dụng ExecutionStrategy để tương thích với cơ chế Retry của PostgreSQL
                 var strategy = _dbContext.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -90,6 +88,9 @@ namespace ManagerStudentCaltholic.Controllers
                     await _dbContext.SaveChangesAsync();
                     await transaction.CommitAsync();
                 });
+
+                // TASK-P3-09.4: Xóa Cache Niên khóa ngay sau khi tạo mới
+                await _cache.InvalidateAcademicYearsCacheAsync();
 
                 _logger.LogInformation("Tạo mới thành công niên khóa: {Name} (Current={IsCurrent})",
                     academicYear.Name, academicYear.IsCurrent);
@@ -129,6 +130,9 @@ namespace ManagerStudentCaltholic.Controllers
                     await _dbContext.SaveChangesAsync();
                     await transaction.CommitAsync();
                 });
+
+                // TASK-P3-09.4: Xóa Cache Niên khóa ngay khi đổi niên khóa hiện hành
+                await _cache.InvalidateAcademicYearsCacheAsync();
 
                 TempData["SuccessMessage"] = "Đã kích hoạt niên khóa thành công!";
                 return RedirectToAction(nameof(Index));

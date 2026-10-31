@@ -15,15 +15,18 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly IGradeCalculationService _gradeService;
         private readonly ILogger<GradesController> _logger;
+        private readonly ICacheService _cacheService;
 
         public GradesController(
             ParishDbContext context,
             IGradeCalculationService gradeService,
-            ILogger<GradesController> logger)
+            ILogger<GradesController> logger,
+            ICacheService cacheService)
         {
             _context = context;
             _gradeService = gradeService;
             _logger = logger;
+            _cacheService = cacheService;
         }
 
         private long CurrentUserId
@@ -125,14 +128,17 @@ namespace ManagerStudentCaltholic.Controllers
             ViewBag.CurrentSemester = semester;
 
             // Lấy toàn bộ cấu hình cột điểm của lớp trong năm học
-            var allYearConfigs = await _context.GradeConfigurations
-                .Where(g => g.AcademicYearId == currentYear.Id &&
-                            (g.GradeLevel == "ALL" || g.GradeLevel == targetClass.GradeLevel) &&
-                            (g.ClassRoomId == null || g.ClassRoomId == targetClass.Id))
-                .OrderBy(g => g.Semester)
-                .ThenBy(g => g.ColumnIndex)
-                .AsNoTracking()
-                .ToListAsync();
+            var allYearConfigs = await _cacheService.GetOrSetAsync(
+                CacheKeys.GradeConfigsByClass(currentYear.Id, targetClass.GradeLevel, targetClass.Id),
+                async () => await _context.GradeConfigurations
+                    .Where(g => g.AcademicYearId == currentYear.Id &&
+                                (g.GradeLevel == "ALL" || g.GradeLevel == targetClass.GradeLevel) &&
+                                (g.ClassRoomId == null || g.ClassRoomId == targetClass.Id))
+                    .OrderBy(g => g.Semester)
+                    .ThenBy(g => g.ColumnIndex)
+                    .AsNoTracking()
+                    .ToListAsync(),
+                TimeSpan.FromHours(3));
 
             var displayColumns = semester == 0
                 ? allYearConfigs
@@ -381,6 +387,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             _context.GradeConfigurations.Add(config);
             await _context.SaveChangesAsync();
+            await _cacheService.InvalidateGradeConfigsCacheAsync(targetClass.AcademicYearId, targetClass.GradeLevel, targetClass.Id);
 
             return Json(new { success = true, message = "Thêm cột điểm thành công!" });
         }
@@ -407,6 +414,8 @@ namespace ManagerStudentCaltholic.Controllers
 
             _context.GradeConfigurations.Remove(config);
             await _context.SaveChangesAsync();
+            await _cacheService.InvalidateGradeConfigsCacheAsync(config.ClassRoom.AcademicYearId, config.ClassRoom.GradeLevel, config.ClassRoom.Id);
+
             return Json(new { success = true, message = "Đã xóa cột điểm." });
         }
     }
