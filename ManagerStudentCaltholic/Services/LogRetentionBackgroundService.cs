@@ -1,13 +1,15 @@
-﻿namespace ManagerStudentCaltholic.Services
+﻿using ManagerStudentCaltholic.Interface.Services;
+
+namespace ManagerStudentCaltholic.Services
 {
     /// <summary>
-    /// TASK-804: Dịch vụ chạy ngầm tự động quét và xóa các file Serilog cũ hơn 90 ngày
+    /// TASK-804 & TASK-P3-10.3: Dịch vụ dọn dẹp file Serilog quá 90 ngày và file Export tạm quá 24 giờ (Hỗ trợ Hangfire Recurring Job)
     /// </summary>
-    public class LogRetentionBackgroundService : BackgroundService
+    public class LogRetentionBackgroundService : BackgroundService, ILogMaintenanceJobService
     {
         private readonly ILogger<LogRetentionBackgroundService> _logger;
         private readonly IWebHostEnvironment _env;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromHours(24); // Chạy định kỳ mỗi 24 giờ
+        private readonly TimeSpan _checkInterval = TimeSpan.FromHours(24);
 
         public LogRetentionBackgroundService(ILogger<LogRetentionBackgroundService> logger, IWebHostEnvironment env)
         {
@@ -17,18 +19,14 @@
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("LogRetentionBackgroundService đã khởi chạy. Định kỳ kiểm tra: {Hours} giờ.", _checkInterval.TotalHours);
-
-            // Chờ 1 phút sau khi khởi động app rồi mới chạy quét lần đầu
             await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-
             using var timer = new PeriodicTimer(_checkInterval);
 
             do
             {
                 try
                 {
-                    CleanUpOldLogs();
+                    CleanUpOldLogsAndTempExports();
                 }
                 catch (Exception ex)
                 {
@@ -38,45 +36,68 @@
             while (await timer.WaitForNextTickAsync(stoppingToken));
         }
 
-        private void CleanUpOldLogs()
+        /// <summary>
+        /// Hàm public được Hangfire Recurring Job kích hoạt định kỳ lúc 02:00 sáng Chúa Nhật hàng tuần
+        /// </summary>
+        public void CleanUpOldLogsAndTempExports()
         {
+            // 1. Dọn dẹp file log cũ hơn 90 ngày
             var logsDirectory = Path.Combine(_env.ContentRootPath, "logs");
-            if (!Directory.Exists(logsDirectory))
+            if (Directory.Exists(logsDirectory))
             {
-                _logger.LogInformation("Thư mục logs chưa tồn tại, bỏ qua đợt dọn dẹp.");
-                return;
-            }
+                var logCutoffDate = DateTime.UtcNow.Date.AddDays(-90);
+                var logFiles = Directory.GetFiles(logsDirectory, "*.log");
+                int deletedLogs = 0;
 
-            var cutoffDate = DateTime.UtcNow.Date.AddDays(-90);
-            var logFiles = Directory.GetFiles(logsDirectory, "*.log");
-            int deletedCount = 0;
-
-            foreach (var filePath in logFiles)
-            {
-                var fileInfo = new FileInfo(filePath);
-
-                // Kiểm tra tuổi file theo LastWriteTime hoặc bóc tách ngày từ tên file
-                if (fileInfo.LastWriteTimeUtc.Date < cutoffDate)
+                foreach (var filePath in logFiles)
                 {
-                    try
+                    var fileInfo = new FileInfo(filePath);
+                    if (fileInfo.LastWriteTimeUtc.Date < logCutoffDate)
                     {
-                        fileInfo.Delete();
-                        deletedCount++;
-                        _logger.LogInformation("Đã xóa file log cũ: {FileName} (Cập nhật lần cuối: {LastWrite})",
-                            fileInfo.Name, fileInfo.LastWriteTimeUtc);
+                        try
+                        {
+                            fileInfo.Delete();
+                            deletedLogs++;
+                        }
+                        catch (IOException ioEx)
+                        {
+                            _logger.LogWarning("Không thể xóa file log {FileName}: {Message}", fileInfo.Name, ioEx.Message);
+                        }
                     }
-                    catch (IOException ioEx)
-                    {
-                        _logger.LogWarning("Không thể xóa file log {FileName} vì đang bị khóa bởi tiến trình khác: {Message}",
-                            fileInfo.Name, ioEx.Message);
-                    }
+                }
+
+                if (deletedLogs > 0)
+                {
+                    _logger.LogInformation("[Hangfire Maintenance] Đã xóa {Count} file log cũ hơn 90 ngày.", deletedLogs);
                 }
             }
 
-            if (deletedCount > 0)
+            // 2. Dọn dẹp các file báo cáo Excel tạm quá 24 giờ trong PrivateUploads/exports
+            var exportsDirectory = Path.Combine(_env.ContentRootPath, "PrivateUploads", "exports");
+            if (Directory.Exists(exportsDirectory))
             {
-                _logger.LogInformation("Hoàn tất dọn dẹp log: Đã xóa {Count} file log cũ hơn 90 ngày (trước ngày {CutoffDate:dd/MM/yyyy}).",
-                    deletedCount, cutoffDate);
+                var exportCutoff = DateTime.UtcNow.AddHours(-24);
+                var exportFiles = Directory.GetFiles(exportsDirectory, "*.xlsx");
+                int deletedExports = 0;
+
+                foreach (var filePath in exportFiles)
+                {
+                    var info = new FileInfo(filePath);
+                    if (info.LastWriteTimeUtc < exportCutoff)
+                    {
+                        try
+                        {
+                            info.Delete();
+                            deletedExports++;
+                        }
+                        catch { }
+                    }
+                }
+
+                if (deletedExports > 0)
+                {
+                    _logger.LogInformation("[Hangfire Maintenance] Đã dọn dẹp {Count} file báo cáo Excel tạm quá hạn 24h.", deletedExports);
+                }
             }
         }
     }
