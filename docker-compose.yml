@@ -8,9 +8,6 @@ services:
       - redis_data:/data
     networks:
       - app_network
-    ports:
-      - "6379:6379"
-
 
   dotnet_app:
     build:
@@ -21,6 +18,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_HTTP_PORTS=8080
+       # Chuỗi kết nối trực tiếp đến Azure Database for PostgreSQL Flexible Server
       - ConnectionStrings__DefaultConnection=Host=${DB_HOST};Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;
       - ConnectionStrings__RedisConnection=parish_redis:6379,abortConnect=false,connectTimeout=3000,syncTimeout=3000
       - JwtSettings__SecretKey=${JWT_SECRET_KEY}
@@ -39,8 +37,10 @@ services:
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - dotnet_app
     networks:
