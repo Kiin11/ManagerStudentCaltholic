@@ -93,6 +93,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<ISacramentRegistryService, SacramentRegistryService>();
             services.AddScoped<ISacramentEvaluationService, SacramentEvaluationService>();
 
+            // FEAT-P3-09:RedisCache 
+            services.AddScoped<ICacheService, RedisCacheService>();
+
             return services;
         }
 
