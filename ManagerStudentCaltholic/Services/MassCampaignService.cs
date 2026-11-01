@@ -77,7 +77,7 @@ namespace ManagerStudentCaltholic.Services
             }
 
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (int.TryParse(userIdStr, out int userId))
+            if (long.TryParse(userIdStr, out long userId))
             {
                 return await _context.ClassTeachers
                     .AsNoTracking()
@@ -114,7 +114,7 @@ namespace ManagerStudentCaltholic.Services
 
             // Lọc danh sách lớp theo quyền của người dùng và chỉ lấy các lớp chuẩn bị Bí tích
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            int.TryParse(userIdStr, out int currentUserId);
+            long.TryParse(userIdStr, out long currentUserId);
             bool isFullScope = user.IsInRole(UserRole.Admin) ||
                                user.IsInRole(UserRole.SpiritualDirector) ||
                                user.IsInRole(UserRole.ExecutiveBoard);
@@ -140,9 +140,10 @@ namespace ManagerStudentCaltholic.Services
                 .ToListAsync();
             var activeCampaignSet = activeCampaignClassIds.ToHashSet();
 
+            var yearClassIds = allYearClasses.Select(c => c.Id).ToList();
             var enrollmentCounts = await _context.Enrollments
                 .AsNoTracking()
-                .Where(e => e.AcademicYearId == currentYear.Id)
+                .Where(e => yearClassIds.Contains(e.ClassRoomId) && e.Student.IsActive)
                 .GroupBy(e => e.ClassRoomId)
                 .Select(g => new { ClassId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.ClassId, x => x.Count);
@@ -453,7 +454,7 @@ namespace ManagerStudentCaltholic.Services
 
             var enrollments = await _context.Enrollments
                 .AsNoTracking()
-                .Where(e => e.ClassRoomId == campaign.ClassRoomId && e.AcademicYearId == campaign.AcademicYearId)
+                .Where(e => e.ClassRoomId == campaign.ClassRoomId && e.Student.IsActive)
                 .ToListAsync();
 
             var existingRecords = await _context.MassCampaignRecords
@@ -533,13 +534,13 @@ namespace ManagerStudentCaltholic.Services
             var targetDateUtc = DateTime.SpecifyKind(scanDateLocal, DateTimeKind.Utc);
             if (targetDateUtc < campaign.StartDate.Date || targetDateUtc > campaign.EndDate.Date)
                 return (false, $"Ngày {targetDateUtc:dd/MM/yyyy} không nằm trong khung thời gian chiến dịch ({campaign.StartDate:dd/MM} - {campaign.EndDate:dd/MM}).", null);
-
+            
             var cleanCode = dto.StudentCode.Trim().ToUpperInvariant();
             var enrollment = await _context.Enrollments
                 .Include(e => e.Student)
                 .FirstOrDefaultAsync(e => e.ClassRoomId == campaign.ClassRoomId
-                                       && e.AcademicYearId == campaign.AcademicYearId
                                        && e.Student != null
+                                       && e.Student.IsActive
                                        && e.Student.StudentCode.ToUpper() == cleanCode);
 
             if (enrollment?.Student == null)
@@ -729,8 +730,8 @@ namespace ManagerStudentCaltholic.Services
                 .AsNoTracking()
                 .Include(e => e.Student)
                 .Where(e => e.ClassRoomId == campaign.ClassRoomId
-                         && e.AcademicYearId == campaign.AcademicYearId
                          && e.Student != null
+                         && e.Student.IsActive
                          && !e.Student.IsDeleted)
                 .OrderBy(e => e.Student!.StudentCode)
                 .ToListAsync();

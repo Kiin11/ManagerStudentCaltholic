@@ -349,7 +349,8 @@ namespace ManagerStudentCaltholic.Controllers
                     if (existingTargetEnrollment != null)
                     {
                         // Nếu bản ghi cũ từng bị xóa mềm (IsDeleted = true), khôi phục và cập nhật lớp đích
-                        existingTargetEnrollment.ClassRoomId = targetClassId.Value;
+                        existingTargetEnrollment.ClassRoomId = targetClassId.Value; 
+                        existingTargetEnrollment.AcademicYearId = request.TargetAcademicYearId; // Bổ sung đồng bộ
                         existingTargetEnrollment.IsDeleted = false;
                         existingTargetEnrollment.DeletedAt = null;
                     }
@@ -359,6 +360,7 @@ namespace ManagerStudentCaltholic.Controllers
                         {
                             StudentId = decision.StudentId,
                             ClassRoomId = targetClassId.Value,
+                            AcademicYearId = request.TargetAcademicYearId, // Bổ sung gán AcademicYearId
                             IsDeleted = false
                         });
                     }

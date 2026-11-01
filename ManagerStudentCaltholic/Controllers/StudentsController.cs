@@ -468,5 +468,30 @@ namespace ManagerStudentCaltholic.Controllers
 
             return View(viewModel);
         }
+
+        /// <summary>
+        /// Bổ sung 2 API Preview 
+        /// </summary>
+        /// <param name="classId"></param>
+        /// <returns></returns>& Kiểm tra trùng mã trong Controllers/StudentsController.cs:
+        [HttpGet]
+        public async Task<IActionResult> PreviewNextCode(int? classId)
+        {
+            var suggestedCode = await _codeGenerator.GenerateByClassIdAsync(classId);
+            return Json(new { success = true, suggestedCode });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> CheckCodeUnique(string code, long? excludeId = null)
+        {
+            var (isUnique, normalizedCode, conflictMessage) = await _codeGenerator.ValidateCodeUniquenessAsync(code, excludeId);
+            return Json(new
+            {
+                success = true,
+                isUnique,
+                normalizedCode,
+                message = isUnique ? $"Mã '{normalizedCode}' hợp lệ và có thể sử dụng." : conflictMessage
+            });
+        }
     }
 }

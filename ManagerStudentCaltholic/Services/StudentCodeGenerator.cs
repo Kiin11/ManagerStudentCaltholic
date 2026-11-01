@@ -1,6 +1,4 @@
-﻿using System.Globalization;
-using System.Text;
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +8,7 @@ namespace ManagerStudentCaltholic.Services
     public class StudentCodeGenerator : IStudentCodeGenerator
     {
         private readonly ParishDbContext _context;
+        private static readonly Regex ValidManualCodeRegex = new(@"^[A-Z0-9_-]{3,20}$", RegexOptions.Compiled);
 
         public StudentCodeGenerator(ParishDbContext context)
         {
@@ -29,28 +28,39 @@ namespace ManagerStudentCaltholic.Services
         {
             if (string.IsNullOrWhiteSpace(className))
             {
-                return $"TN{DateTime.UtcNow.AddHours(7):yy}";
+                return $"TN{DateTime.UtcNow:yy}";
             }
 
-            var ascii = RemoveDiacritics(className).ToUpperInvariant();
+            var clean = VietnameseStringHelper.RemoveDiacritics(className)
+                .ToUpperInvariant()
+                .Trim();
 
-            // Loại bỏ từ "LOP" ở đầu nếu người dùng đặt tên lớp là "Lớp Thêm Sức 3A"
-            ascii = Regex.Replace(ascii, @"^\s*LOP\s+", "", RegexOptions.IgnoreCase);
+            var words = clean.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => Regex.Replace(w, @"[^A-Z0-9]", ""))
+                .Where(w => !string.IsNullOrEmpty(w))
+                .ToArray();
 
-            // Tách các cụm chữ-số
-            var tokens = Regex.Matches(ascii, @"[A-Z0-9]+")
-                .Select(m => m.Value)
-                .Where(t => !string.IsNullOrWhiteSpace(t))
-                .ToList();
+            if (words.Length == 0)
+            {
+                return $"TN{DateTime.UtcNow:yy}";
+            }
 
-            if (tokens.Count == 0)
-                return $"TN{DateTime.UtcNow.AddHours(7):yy}";
+            if (words.Length == 1)
+            {
+                return words[0];
+            }
 
-            if (tokens.Count == 1)
-                return tokens[0];
+            // Nếu từ cuối chỉ có 1 chữ cái (VD: "Khai Tâm 1 A") và từ kế cuối là số ("1"), gộp thành "1A"
+            if (words.Length >= 3 &&
+                words[^1].Length == 1 && char.IsLetter(words[^1][0]) &&
+                words[^2].All(char.IsDigit))
+            {
+                var initialsMerged = string.Concat(words.Take(words.Length - 2).Select(w => w[0]));
+                return $"{initialsMerged}{words[^2]}{words[^1]}";
+            }
 
-            var initials = string.Concat(tokens.Take(tokens.Count - 1).Select(w => w[0]));
-            var lastSegment = tokens.Last();
+            var initials = string.Concat(words.Take(words.Length - 1).Select(w => w[0]));
+            var lastSegment = words[^1];
 
             return $"{initials}{lastSegment}";
         }
@@ -59,27 +69,36 @@ namespace ManagerStudentCaltholic.Services
             string manualCode,
             long? excludeStudentId = null)
         {
-            var normalized = NormalizeManualCode(manualCode);
-            if (string.IsNullOrWhiteSpace(normalized))
+            if (string.IsNullOrWhiteSpace(manualCode))
             {
                 return (false, string.Empty, "Mã thiếu nhi không được để trống.");
             }
 
-            if (!Regex.IsMatch(normalized, @"^[A-Z0-9\-_]{3,30}$"))
+            var normalized = manualCode.Trim().ToUpperInvariant();
+            if (!ValidManualCodeRegex.IsMatch(normalized))
             {
-                return (false, normalized, "Mã thiếu nhi chỉ được chứa chữ cái, chữ số, dấu gạch ngang (-) hoặc gạch dưới (_), độ dài 3-30 ký tự.");
+                return (false, normalized, "Mã thiếu nhi chỉ được chứa chữ cái, chữ số, dấu gạch ngang hoặc gạch dưới (từ 3 đến 20 ký tự).");
             }
 
-            // IgnoreQueryFilters() để kiểm tra cả các hồ sơ đã xóa mềm tránh đụng Unique Index trong PostgreSQL
-            var existsInStudents = await _context.Students
+            // Dùng IgnoreQueryFilters() để kiểm tra cả các hồ sơ đã xóa mềm
+            var query = _context.Students
                 .IgnoreQueryFilters()
                 .AsNoTracking()
-                .AnyAsync(s => s.StudentCode.ToUpper() == normalized
-                            && (!excludeStudentId.HasValue || s.Id != excludeStudentId.Value));
+                .Where(s => s.StudentCode.ToUpper() == normalized);
 
-            if (existsInStudents)
+            if (excludeStudentId.HasValue && excludeStudentId.Value > 0)
             {
-                return (false, normalized, $"Mã thiếu nhi '{normalized}' đã tồn tại trong hồ sơ hệ thống.");
+                query = query.Where(s => s.Id != excludeStudentId.Value);
+            }
+
+            var existingStudent = await query
+                .Select(s => new { s.StudentCode, s.ChristianName, s.FirstName, s.LastName, s.IsDeleted })
+                .FirstOrDefaultAsync();
+
+            if (existingStudent != null)
+            {
+                var statusNote = existingStudent.IsDeleted ? " (hồ sơ đã lưu trữ/xóa mềm)" : "";
+                return (false, normalized, $"Mã '{normalized}' đã được cấp cho em {existingStudent.ChristianName} {existingStudent.FirstName} {existingStudent.LastName}{statusNote}.");
             }
 
             return (true, normalized, null);
@@ -90,20 +109,17 @@ namespace ManagerStudentCaltholic.Services
             string? manualCode = null,
             long? excludeStudentId = null)
         {
-            // 1. Nếu có truyền mã thủ công -> kiểm tra tính duy nhất rồi trả về
             if (!string.IsNullOrWhiteSpace(manualCode))
             {
-                var (isUnique, normalized, errorMsg) = await ValidateCodeUniquenessAsync(manualCode, excludeStudentId);
+                var (isUnique, normalized, conflictMsg) = await ValidateCodeUniquenessAsync(manualCode, excludeStudentId);
                 if (!isUnique)
                 {
-                    throw new InvalidOperationException(errorMsg ?? $"Mã thiếu nhi '{normalized}' đã tồn tại.");
+                    throw new InvalidOperationException(conflictMsg ?? $"Mã thiếu nhi '{normalized}' đã tồn tại.");
                 }
                 return normalized;
             }
 
-            // 2. Nếu không truyền mã -> sinh tự động theo công thức tên lớp: T + S + 3A + STT
             var prefix = BuildClassPrefix(className);
-
             var existingCodes = await _context.Students
                 .IgnoreQueryFilters()
                 .AsNoTracking()
@@ -111,18 +127,20 @@ namespace ManagerStudentCaltholic.Services
                 .Select(s => s.StudentCode)
                 .ToListAsync();
 
-            int maxSeq = ExtractMaxSequenceForPrefix(existingCodes, prefix);
+            // Chỉ lấy những mã có phần đuôi sau prefix hoàn toàn là chữ số (tránh nhầm RL2 với RL2A)
+            var seqRegex = new Regex($"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+            int maxSeq = 0;
 
-            string candidate;
-            int nextSeq = maxSeq + 1;
-            do
+            foreach (var code in existingCodes)
             {
-                candidate = $"{prefix}{nextSeq:D3}";
-                nextSeq++;
+                var match = seqRegex.Match(code.Trim());
+                if (match.Success && int.TryParse(match.Groups[1].Value, out int seq) && seq > maxSeq)
+                {
+                    maxSeq = seq;
+                }
             }
-            while (existingCodes.Any(c => string.Equals(c, candidate, StringComparison.OrdinalIgnoreCase)));
 
-            return candidate;
+            return $"{prefix}{(maxSeq + 1):D3}";
         }
 
         public async Task<string> GenerateByClassIdAsync(int? classId, string? manualCode = null)
@@ -143,44 +161,6 @@ namespace ManagerStudentCaltholic.Services
         public async Task<string> GenerateUniqueCodeAsync()
         {
             return await GenerateOrValidateStudentCodeAsync(null, null);
-        }
-
-        public static int ExtractMaxSequenceForPrefix(IEnumerable<string> codes, string prefix)
-        {
-            int maxSeq = 0;
-            foreach (var rawCode in codes)
-            {
-                if (string.IsNullOrWhiteSpace(rawCode)) continue;
-                var code = rawCode.Trim().ToUpperInvariant();
-                if (!code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
-
-                // Bỏ qua các mã đã gắn đuôi năm học cũ (VD: TS3A001_2425 hoặc TS3A001-2024)
-                var remainder = code.Substring(prefix.Length);
-                if (int.TryParse(remainder, out int seq) && seq > maxSeq)
-                {
-                    maxSeq = seq;
-                }
-            }
-            return maxSeq;
-        }
-
-        private static string NormalizeManualCode(string input)
-        {
-            var noDiacritics = RemoveDiacritics(input ?? string.Empty);
-            return Regex.Replace(noDiacritics.Trim().ToUpperInvariant(), @"\s+", "");
-        }
-
-        private static string RemoveDiacritics(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-            var normalized = text.Normalize(NormalizationForm.FormD);
-            var sb = new StringBuilder();
-            foreach (var c in normalized)
-            {
-                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-                    sb.Append(c);
-            }
-            return sb.ToString().Normalize(NormalizationForm.FormC).Replace('đ', 'd').Replace('Đ', 'D');
         }
     }
 }

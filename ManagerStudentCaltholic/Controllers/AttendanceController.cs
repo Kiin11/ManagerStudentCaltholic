@@ -813,8 +813,32 @@ namespace ManagerStudentCaltholic.Controllers
                 classesQuery = classesQuery.Where(c => c.AcademicYearId == currentYear.Id);
             }
 
-            var classes = await classesQuery.OrderBy(c => c.Name).ToListAsync();
+            // FIX SEC-08: Phải lọc theo khối phụ trách của BranchHead TRƯỚC khi gọi ToListAsync()
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    classesQuery = classesQuery.Where(_ => false);
+                }
+                else
+                {
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                }
+            }
+
+            var classes = await classesQuery
+                .OrderBy(c => c.GradeLevel)
+                .ThenBy(c => c.Name)
+                .AsNoTracking()
+                .ToListAsync();
+
             ViewBag.Classes = classes;
+
+            if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
+            {
+                return Forbid();
+            }
 
             if (User.IsInRole(UserRole.BranchHead))
             {
