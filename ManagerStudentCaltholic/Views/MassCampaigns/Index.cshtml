@@ -1,0 +1,680 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.MassCampaignDashboardViewModel
+@{
+    ViewData["Title"] = "Chiến Dịch Đi Lễ 1 Tháng - Lớp Bí Tích";
+    var matrix = Model.ActiveCampaignMatrix;
+}
+
+<style>
+    .campaign-matrix-wrapper {
+        overflow-x: auto;
+        max-height: 72vh;
+        position: relative;
+        border-radius: 0.75rem;
+    }
+
+    .campaign-table th.sticky-col-1,
+    .campaign-table td.sticky-col-1 {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        background-color: #ffffff;
+        min-width: 90px;
+    }
+
+    .campaign-table th.sticky-col-2,
+    .campaign-table td.sticky-col-2 {
+        position: sticky;
+        left: 90px;
+        z-index: 3;
+        background-color: #ffffff;
+        min-width: 210px;
+        box-shadow: 2px 0 5px rgba(15, 23, 42, 0.06);
+    }
+
+    .campaign-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        background-color: #1e3a8a;
+        color: #fff;
+    }
+
+        .campaign-table thead th.sticky-col-1,
+        .campaign-table thead th.sticky-col-2 {
+            z-index: 5;
+            background-color: #1e3a8a;
+        }
+
+    .cell-day-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.82rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        user-select: none;
+    }
+
+        .cell-day-btn:hover {
+            transform: scale(1.08);
+        }
+
+    .cell-status-NONE {
+        background-color: #f8fafc;
+        color: #94a3b8;
+    }
+
+    .cell-status-PRESENT {
+        background-color: #dcfce7;
+        color: #15803d;
+        border-color: #86efac;
+    }
+
+    .cell-status-LATE {
+        background-color: #fef9c3;
+        color: #a16207;
+        border-color: #fde047;
+    }
+
+    .cell-status-EXCUSED {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        border-color: #7dd3fc;
+    }
+
+    .cell-status-ABSENT {
+        background-color: #fee2e2;
+        color: #b91c1c;
+        border-color: #fca5a5;
+    }
+
+    .col-today {
+        background-color: rgba(254, 243, 199, 0.35) !important;
+    }
+</style>
+
+<div class="container-fluid py-3">
+    @Html.AntiForgeryToken()
+
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h4 class="fw-bold mb-1 text-primary">
+                <i class="bi bi-calendar2-heart-fill me-2"></i>Chiến Dịch Đi Lễ 1 Tháng (Lớp Chuẩn Bị Bí Tích)
+            </h4>
+            <div class="text-muted small">
+                Niên khóa: <strong>@Model.AcademicYearName</strong>
+                @if (!string.IsNullOrEmpty(Model.SacramentClassBadge))
+                {
+                    <span class="badge bg-warning text-dark ms-2">@Model.SacramentClassBadge</span>
+                }
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            @if (Model.AvailableClasses.Any() && Model.CanManageCampaign)
+            {
+                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 fw-semibold shadow-sm"
+                        data-bs-toggle="modal" data-bs-target="#modalCreateCampaign">
+                    <i class="bi bi-plus-circle me-1"></i> Tạo Chiến Dịch Đi Lễ Mới
+                </button>
+            }
+            @if (matrix != null)
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 fw-semibold"
+                        data-bs-toggle="modal" data-bs-target="#modalQuickQrCampaign">
+                    <i class="bi bi-qr-code-scan me-1"></i> Quét QR Chiến Dịch
+                </button>
+                <a asp-action="ExportExcel" asp-route-campaignId="@matrix.CampaignId"
+                   class="btn btn-success btn-sm rounded-pill px-3 fw-semibold shadow-sm">
+                    <i class="bi bi-file-earmark-excel me-1"></i> Xuất Excel 30 Ngày
+                </a>
+            }
+            <a asp-controller="Attendance" asp-action="Index" asp-route-classId="@Model.SelectedClassId"
+               class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Về Sổ Điểm Danh Thường Kỳ
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.AvailableClasses.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm rounded-4 p-4">
+            <h6 class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-2"></i>Chưa có lớp thuộc diện Chiến dịch Bí tích trong phạm vi phụ trách</h6>
+            <p class="mb-0 small">
+                Tính năng Chiến dịch đi lễ 1 tháng chỉ áp dụng cho các lớp chuẩn bị lãnh nhận Bí tích hoặc Tuyên hứa gồm:
+                <strong>Rước Lễ 2 (RL2), Thêm Sức 3 (TS3), Bao Đồng 3 (BĐ3) và Dự Bị 4 (DB4)</strong>.
+            </p>
+        </div>
+    }
+    else
+    {
+        <!-- Thanh chọn Lớp Bí Tích & Chiến Dịch -->
+        <div class="card border-0 shadow-sm rounded-4 mb-3">
+            <div class="card-body py-2 px-3">
+                <form method="get" asp-action="Index" class="row g-2 align-items-center">
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold mb-1">Lớp chuẩn bị Bí tích:</label>
+                        <select name="classId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            @foreach (var cls in Model.AvailableClasses)
+                            {
+                                <option value="@cls.ClassId" selected="@(cls.ClassId == Model.SelectedClassId)">
+                                    @cls.ClassName — @cls.SacramentLabel (@cls.StudentCount TN)
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold mb-1">Đợt chiến dịch đi lễ:</label>
+                        <select name="campaignId" class="form-select form-select-sm" onchange="this.form.submit()">
+                            @if (!Model.ClassCampaigns.Any())
+                            {
+                                <option value="">-- Chưa có chiến dịch nào cho lớp này --</option>
+                            }
+                            else
+                            {
+                                @foreach (var camp in Model.ClassCampaigns)
+                                {
+                                    <option value="@camp.CampaignId" selected="@(matrix != null && camp.CampaignId == matrix.CampaignId)">
+                                        [@camp.Status] @camp.Title (@camp.StartDate.ToString("dd/MM") - @camp.EndDate.ToString("dd/MM/yyyy"))
+                                    </option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2 text-end pt-3">
+                        @if (matrix != null && Model.CanManageCampaign)
+                        {
+                            <button type="button" class="btn btn-outline-secondary btn-sm w-100"
+                                    data-bs-toggle="modal" data-bs-target="#modalEditCampaignConfig">
+                                <i class="bi bi-gear me-1"></i> Cấu hình đợt
+                            </button>
+                        }
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        @if (matrix == null)
+        {
+            <div class="card border-0 shadow-sm rounded-4 text-center py-5">
+                <div class="card-body">
+                    <i class="bi bi-calendar-range text-primary display-4"></i>
+                    <h5 class="fw-bold mt-3">Lớp @Model.SelectedClassName chưa khởi tạo Chiến dịch đi lễ 1 tháng</h5>
+                    <p class="text-muted small mb-3">
+                        Giáo lý viên chủ nhiệm có thể tự thiết lập chiến dịch 28 - 31 ngày liên tục để điểm danh và theo dõi chuỗi ngày đi lễ chuẩn bị lãnh nhận Bí tích.
+                    </p>
+                    <button type="button" class="btn btn-primary rounded-pill px-4"
+                            data-bs-toggle="modal" data-bs-target="#modalCreateCampaign">
+                        <i class="bi bi-plus-lg me-1"></i> Thiết Lập Chiến Dịch Ngay
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- 4 Thẻ KPI Tổng hợp Chiến dịch -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-3 col-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                        <div class="card-body py-3">
+                            <div class="text-muted small">Thời gian & Chỉ tiêu</div>
+                            <div class="fs-5 fw-bold text-primary">Cần đạt @matrix.TargetDaysCount / @matrix.TotalApplicableDays ngày</div>
+                            <div class="small text-secondary">@matrix.StartDate.ToString("dd/MM/yyyy") → @matrix.EndDate.ToString("dd/MM/yyyy")</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                        <div class="card-body py-3">
+                            <div class="text-muted small">Tiến độ ngày chiến dịch</div>
+                            <div class="fs-5 fw-bold text-info">Đã qua @matrix.ElapsedApplicableDays / @matrix.TotalApplicableDays ngày</div>
+                            <div class="small text-secondary">Khởi tạo bởi: @matrix.CreatedBy</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                        <div class="card-body py-3">
+                            <div class="text-muted small">Thiếu nhi đạt chỉ tiêu</div>
+                            <div class="fs-5 fw-bold text-success">@matrix.TargetMetStudentsCount / @matrix.TotalStudents em</div>
+                            <div class="small text-secondary">Đạt đủ từ @matrix.TargetDaysCount buổi lễ trở lên</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100">
+                        <div class="card-body py-3">
+                            <div class="text-muted small">Tỷ lệ hoàn thành TB</div>
+                            <div class="fs-5 fw-bold text-warning">@matrix.AverageCompletionRate%</div>
+                            <div class="small text-secondary">Trạng thái: <span class="badge bg-success">@matrix.Status</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Thanh chú thích & Điểm danh nhanh theo ngày -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2 px-1">
+                <div class="small d-flex flex-wrap align-items-center gap-2">
+                    <span class="fw-bold text-secondary">Chạm vào ô ngày để đổi nhanh:</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle">✔ Có mặt (PRESENT)</span>
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">T Đi trễ (LATE)</span>
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">P Có phép (EXCUSED)</span>
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">V Vắng (ABSENT)</span>
+                    <span class="text-muted">(Giữ phím Shift + Click vào ô để nhập ghi chú lý do chỉnh sửa)</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <input type="date" id="bulkDateInput" class="form-control form-control-sm"
+                           value="@DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd")"
+                           min="@matrix.StartDate.ToString("yyyy-MM-dd")"
+                           max="@matrix.EndDate.ToString("yyyy-MM-dd")" style="width: 145px;" />
+                    <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3"
+                            onclick="bulkMarkSelectedDay('PRESENT')">
+                        <i class="bi bi-check2-all me-1"></i> Điểm danh cả lớp Có mặt ngày này
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bảng Ma Trận 30 Ngày Liên Tục -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="campaign-matrix-wrapper">
+                    <table class="table table-bordered table-hover align-middle mb-0 campaign-table small">
+                        <thead>
+                            <tr class="text-center">
+                                <th class="sticky-col-1">Mã TN</th>
+                                <th class="sticky-col-2 text-start">Họ và Tên Thiếu Nhi</th>
+                                @foreach (var col in matrix.DateColumns)
+                                {
+                                    <th class="@(col.IsToday ? "bg-warning text-dark" : (col.IsSunday ? "bg-primary" : ""))"
+                                        style="min-width: 46px;"
+                                        title="Ngày @col.Date.ToString("dd/MM/yyyy") - Có mặt: @col.PresentCount em">
+                                        <div>@col.DayNumberText</div>
+                                        <div style="font-size: 0.7rem;">@col.DayOfWeekShort</div>
+                                    </th>
+                                }
+                                <th style="min-width: 65px;">Đã đi</th>
+                                <th style="min-width: 75px;">Chuỗi (Max)</th>
+                                <th style="min-width: 90px;">Tiến độ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in matrix.StudentRows)
+                            {
+                                <tr id="row-env-@row.EnrollmentId">
+                                    <td class="sticky-col-1 fw-bold text-center text-primary">@row.StudentCode</td>
+                                    <td class="sticky-col-2">
+                                        <div class="fw-semibold text-dark">@row.ChristianName @row.FullName</div>
+                                    </td>
+
+                                    @foreach (var col in matrix.DateColumns)
+                                    {
+                                        var dateKey = col.Date.ToString("yyyy-MM-dd");
+                                        var cell = row.DailyCells.ContainsKey(dateKey)
+                                        ? row.DailyCells[dateKey]
+                                        : new ManagerStudentCaltholic.Models.ViewModels.CampaignCellStatusDto();
+
+                                        string symbol = cell.Status switch
+                                        {
+                                            "PRESENT" => "✔",
+                                            "LATE" => "T",
+                                            "EXCUSED" => "P",
+                                            "ABSENT" => "V",
+                                            _ => "·"
+                                        };
+
+                                        var tooltip = string.IsNullOrWhiteSpace(cell.LastModifiedBy)
+                                        ? $"{row.FullName} - {col.Date:dd/MM/yyyy}"
+                                        : $"{row.FullName} ({col.Date:dd/MM}): {cell.Status} - Sửa bởi {cell.LastModifiedBy} {(string.IsNullOrEmpty(cell.Note) ? "" : $"[{cell.Note}]")}";
+
+                                        <td class="text-center p-1 @(col.IsToday ? "col-today" : "")">
+                                            <div class="cell-day-btn cell-status-@cell.Status"
+                                                 id="cell-@row.EnrollmentId-@dateKey"
+                                                 data-campaign-id="@matrix.CampaignId"
+                                                 data-enrollment-id="@row.EnrollmentId"
+                                                 data-date="@dateKey"
+                                                 data-status="@cell.Status"
+                                                 data-note="@(cell.Note ?? "")"
+                                                 title="@tooltip"
+                                                 onclick="handleCampaignCellClick(event, this)">
+                                                @symbol
+                                            </div>
+                                        </td>
+                                    }
+
+                                    <td class="text-center fw-bold" id="stat-attended-@row.EnrollmentId">
+                                        @row.TotalAttendedDays/@matrix.TargetDaysCount
+                                    </td>
+                                    <td class="text-center" id="stat-streak-@row.EnrollmentId">
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                            <i class="bi bi-fire"></i> @row.CurrentStreak (Max: @row.MaxStreak)
+                                        </span>
+                                    </td>
+                                    <td class="text-center" id="stat-target-@row.EnrollmentId">
+                                        @if (row.IsTargetMet)
+                                        {
+                                            <span class="badge bg-success rounded-pill">Đạt (@row.CompletionPercentage%)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary rounded-pill">@row.CompletionPercentage%</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<!-- Modal Tạo Chiến Dịch Đi Lễ 1 Tháng -->
+<div class="modal fade" id="modalCreateCampaign" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="ClassRoomId" value="@Model.SelectedClassId" />
+                <div class="modal-header bg-primary text-white rounded-top-4">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-calendar-plus me-2"></i>Thiết Lập Chiến Dịch Đi Lễ 1 Tháng
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning small py-2 mb-3">
+                        Lớp áp dụng: <strong>@Model.SelectedClassName</strong> (@Model.SacramentClassBadge)
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Tên chiến dịch đi lễ <span class="text-danger">*</span></label>
+                        <input type="text" name="Title" class="form-control" required
+                               placeholder="VD: Chiến dịch 30 ngày Hoa Thiêng chuẩn bị Lãnh Bí Tích" />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">Từ ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="StartDate" class="form-control" required
+                                   value="@DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small">Đến ngày <span class="text-danger">*</span></label>
+                            <input type="date" name="EndDate" class="form-control" required
+                                   value="@DateTime.UtcNow.AddHours(7).AddDays(29).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small">Chỉ tiêu số ngày đi lễ tối thiểu cần đạt <span class="text-danger">*</span></label>
+                        <input type="number" name="TargetDaysCount" class="form-control" value="25" min="1" max="45" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small d-block">Các ngày áp dụng trong tuần:</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            @{
+                                var days = new (int Val, string Text)[] {
+                                                        (1, "Thứ 2"), (2, "Thứ 3"), (3, "Thứ 4"),
+                                                        (4, "Thứ 5"), (5, "Thứ 6"), (6, "Thứ 7"), (0, "Chúa Nhật")
+                                                        };
+                            }
+                            @foreach (var d in days)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="ApplicableDays" value="@d.Val" id="chkDay_@d.Val" checked />
+                                    <label class="form-check-label small" for="chkDay_@d.Val">@d.Text</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold small">Ghi chú dặn dò thiếu nhi & phụ huynh</label>
+                        <textarea name="Description" class="form-control" rows="2"
+                                  placeholder="VD: Điểm danh liên tục 30 ngày lễ sáng/chiều để xét điều kiện lãnh Bí tích..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Khởi Tạo Chiến Dịch</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@if (matrix != null)
+{
+    <!-- Modal Cấu Hình Đợt Chiến Dịch -->
+    <div class="modal fade" id="modalEditCampaignConfig" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow">
+                <form asp-action="UpdateConfig" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="CampaignId" value="@matrix.CampaignId" />
+                    <input type="hidden" name="classRoomId" value="@Model.SelectedClassId" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">Cập Nhật Cấu Hình Chiến Dịch</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Tên chiến dịch</label>
+                            <input type="text" name="Title" class="form-control" value="@matrix.Title" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Chỉ tiêu số ngày cần đạt</label>
+                            <input type="number" name="TargetDaysCount" class="form-control" value="@matrix.TargetDaysCount" min="1" max="45" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Trạng thái chiến dịch</label>
+                            <select name="Status" class="form-select">
+                                <option value="ACTIVE" selected="@(matrix.Status == "ACTIVE")">ACTIVE (Đang diễn ra)</option>
+                                <option value="COMPLETED" selected="@(matrix.Status == "COMPLETED")">COMPLETED (Đã hoàn tất & Khóa sổ)</option>
+                                <option value="CANCELLED" selected="@(matrix.Status == "CANCELLED")">CANCELLED (Tạm hủy)</option>
+                            </select>
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label small fw-semibold">Ghi chú</label>
+                            <textarea name="Description" class="form-control" rows="2">@matrix.Description</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4">Lưu Thay Đổi</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Nhập Mã / Quét QR Nhanh Chiến Dịch -->
+    <div class="modal fade" id="modalQuickQrCampaign" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow">
+                <div class="modal-header bg-dark text-white rounded-top-4">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-qr-code-scan me-2"></i>Điểm Danh QR Chiến Dịch Hàng Ngày</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Ngày đi lễ chiến dịch:</label>
+                        <input type="date" id="qrCampaignDate" class="form-control"
+                               value="@DateTime.UtcNow.AddHours(7).ToString("yyyy-MM-dd")"
+                               min="@matrix.StartDate.ToString("yyyy-MM-dd")"
+                               max="@matrix.EndDate.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Quét thẻ QR hoặc nhập Mã Thiếu Nhi rồi nhấn Enter:</label>
+                        <div class="input-group">
+                            <input type="text" id="qrCampaignStudentCode" class="form-control form-control-lg fw-bold text-uppercase"
+                                   placeholder="VD: TS3A001 hoặc TN-2026-0001"
+                                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); submitCampaignQrCode(); }" />
+                            <button type="button" class="btn btn-primary px-4 fw-bold" onclick="submitCampaignQrCode()">
+                                Ghi Nhận
+                            </button>
+                        </div>
+                    </div>
+                    <div id="qrCampaignFeedback" class="alert d-none mb-0 small"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        const STATUS_CYCLE = ['NONE', 'PRESENT', 'LATE', 'EXCUSED', 'ABSENT'];
+        const STATUS_SYMBOL = {
+            'NONE': '·',
+            'PRESENT': '✔',
+            'LATE': 'T',
+            'EXCUSED': 'P',
+            'ABSENT': 'V'
+        };
+
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        async function handleCampaignCellClick(event, el) {
+            const campaignId = parseInt(el.getAttribute('data-campaign-id'));
+            const enrollmentId = parseInt(el.getAttribute('data-enrollment-id'));
+            const dateIso = el.getAttribute('data-date');
+            const currentStatus = el.getAttribute('data-status') || 'NONE';
+            const currentNote = el.getAttribute('data-note') || '';
+
+            let nextStatus = 'PRESENT';
+            let note = currentNote;
+
+            if (event.shiftKey) {
+                const inputNote = prompt(`Nhập ghi chú chỉnh sửa ngày ${dateIso} (Đang ở trạng thái ${currentStatus}):`, currentNote);
+                if (inputNote === null) return;
+                note = inputNote;
+                nextStatus = currentStatus === 'NONE' ? 'PRESENT' : currentStatus;
+            } else {
+                const idx = STATUS_CYCLE.indexOf(currentStatus);
+                nextStatus = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+            }
+
+            const payload = {
+                campaignId: campaignId,
+                enrollmentId: enrollmentId,
+                dateIso: dateIso,
+                status: nextStatus === 'NONE' ? 'CLEAR' : nextStatus,
+                note: note
+            };
+
+            try {
+                const res = await fetch('/MassCampaigns/UpdateCell', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': getCsrfToken()
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    alert(data.message || 'Không thể lưu trạng thái điểm danh.');
+                    return;
+                }
+
+                el.className = `cell-day-btn cell-status-${nextStatus}`;
+                el.setAttribute('data-status', nextStatus);
+                el.setAttribute('data-note', note || '');
+                el.textContent = STATUS_SYMBOL[nextStatus] || '·';
+
+                if (data.rowStats) {
+                    const s = data.rowStats;
+                    const targetCount = @(matrix?.TargetDaysCount ?? 25);
+                    document.getElementById(`stat-attended-${enrollmentId}`).textContent = `${s.totalAttendedDays}/${targetCount}`;
+                    document.getElementById(`stat-streak-${enrollmentId}`).innerHTML =
+                        `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-fire"></i> ${s.currentStreak} (Max: ${s.maxStreak})</span>`;
+                    document.getElementById(`stat-target-${enrollmentId}`).innerHTML = s.isTargetMet
+                        ? `<span class="badge bg-success rounded-pill">Đạt (${s.completionPercentage}%)</span>`
+                        : `<span class="badge bg-secondary rounded-pill">${s.completionPercentage}%</span>`;
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Lỗi kết nối máy chủ khi cập nhật ô điểm danh.');
+            }
+        }
+
+        async function bulkMarkSelectedDay(status) {
+            const dateIso = document.getElementById('bulkDateInput')?.value;
+            if (!dateIso) return;
+
+            if (!confirm(`Bạn có chắc muốn đánh dấu "${status}" cho toàn bộ học sinh chưa điểm danh trong ngày ${dateIso}?`)) {
+                return;
+            }
+
+            const res = await fetch('/MassCampaigns/BulkMarkDay', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    campaignId: @(matrix?.CampaignId ?? 0),
+                    dateIso: dateIso,
+                    status: status,
+                    overwriteExisting: false
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success) {
+                location.reload();
+            } else {
+                alert(data.message || 'Lỗi khi điểm danh hàng loạt.');
+            }
+        }
+
+        async function submitCampaignQrCode() {
+            const codeInput = document.getElementById('qrCampaignStudentCode');
+            const dateInput = document.getElementById('qrCampaignDate');
+            const feedback = document.getElementById('qrCampaignFeedback');
+            const studentCode = (codeInput.value || '').trim();
+            if (!studentCode) return;
+
+            const res = await fetch('/MassCampaigns/ScanCampaignQr', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    campaignId: @(matrix?.CampaignId ?? 0),
+                    studentCode: studentCode,
+                    dateIso: dateInput.value
+                })
+            });
+
+            const result = await res.json();
+            feedback.classList.remove('d-none', 'alert-success', 'alert-danger');
+            if (res.ok && result.success) {
+                feedback.classList.add('alert-success');
+                feedback.textContent = result.message;
+                codeInput.value = '';
+                codeInput.focus();
+
+                if (result.data) {
+                    const cell = document.getElementById(`cell-${result.data.enrollmentId}-${result.data.dateIso}`);
+                    if (cell) {
+                        cell.className = 'cell-day-btn cell-status-PRESENT';
+                        cell.setAttribute('data-status', 'PRESENT');
+                        cell.textContent = '✔';
+                    }
+                }
+            } else {
+                feedback.classList.add('alert-danger');
+                feedback.textContent = result.message || 'Không tìm thấy học sinh.';
+                codeInput.select();
+            }
+        }
+    </script>
+}

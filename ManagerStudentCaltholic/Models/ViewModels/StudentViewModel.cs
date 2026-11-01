@@ -50,5 +50,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         [Display(Name = "Trạng Thái")]
         public bool IsActive { get; set; } = true;
+
+        // Bổ sung vào class StudentViewModel:
+        public int? InitialClassId { get; set; }
     }
 }
