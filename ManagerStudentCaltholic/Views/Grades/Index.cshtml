@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = $"Sổ Điểm - {Model.ClassName}";
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+    var evalAction = Model.EvaluationAction;
 }
 @Html.AntiForgeryToken()
 
@@ -107,6 +108,29 @@ else
                                 @(Model.IsLocked ? "Sổ Đang Khóa" : "Khóa Sổ Điểm")
                             </button>
                         }
+                        <!-- FEAT-P4-02: Nút Xét Duyệt Động theo Loại Lớp (Lên lớp / Bí tích RL2-TS3 / Tuyên hứa BĐ3-DB4) -->
+                        <button type="button"
+                                class="btn @evalAction.ButtonCssClass btn-sm rounded-pill px-3 shadow-sm d-inline-flex align-items-center gap-2"
+                                onclick="openClassEvaluationModal(@Model.ClassId)">
+                            <i class="bi @evalAction.IconClass"></i>
+                            <span>@evalAction.ButtonLabel</span>
+                            @if (evalAction.SubmittedCount > 0)
+                            {
+                                <span class="badge bg-dark bg-opacity-25 rounded-pill">
+                                    Đã xét @evalAction.SubmittedCount/@evalAction.TotalStudents
+                                </span>
+                            }
+                        </button>
+                        @if (evalAction.LinkedApprovalBatchId.HasValue)
+                        {
+                            <a asp-controller="Sacraments"
+                               asp-action="Evaluation"
+                               asp-route-batchId="@evalAction.LinkedApprovalBatchId"
+                               class="btn btn-outline-dark btn-sm rounded-pill px-3"
+                               title="Xem tờ trình Bí tích/Tuyên hứa đã đồng bộ">
+                                <i class="bi bi-file-earmark-check me-1"></i> Tờ Trình (@evalAction.LinkedBatchStatus)
+                            </a>
+                        }
                     </div>
                 </div>
             </div>
@@ -151,6 +175,8 @@ else
                             <th rowspan="2" class="align-middle" style="width: 80px;">% Chuyên Cần</th>
                             <th rowspan="2" class="align-middle" style="width: 120px;">Xếp Loại</th>
                             <th rowspan="2" class="align-middle" style="width: 110px;">Xét Bí Tích</th>
+                            <th class="text-center" style="min-width: 125px;">@Model.EvaluationAction.ButtonLabel</th>
+
                         </tr>
                         <tr>
                             @foreach (var col in Model.Columns)
@@ -207,6 +233,31 @@ else
                                                    onfocus="this.select()"
                                                    onchange="onScoreChange(this)"
                                                    onkeydown="handleKeyNavigation(event, this)" />
+                                        </td>
+                                        <td class="text-center" id="eval-badge-@s.EnrollmentId">
+                                            @switch (s.TeacherProposalStatus)
+                                            {
+                                                case "PROPOSED_PASS":
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">
+                                                        <i class="bi bi-check-circle-fill me-1"></i>Đạt chuẩn
+                                                    </span>
+                                                    break;
+                                                case "PROPOSED_SPECIAL":
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1"
+                                                          title="Lý do đặc cách: @s.TeacherProposalNote">
+                                                        <i class="bi bi-star-fill me-1"></i>Đề xuất đặc cách
+                                                    </span>
+                                                    break;
+                                                case "PROPOSED_RETAIN":
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1"
+                                                          title="@s.TeacherProposalNote">
+                                                        <i class="bi bi-x-circle-fill me-1"></i>Chưa đạt
+                                                    </span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-light text-secondary border rounded-pill px-2 py-1">Chưa xét</span>
+                                                    break;
+                                            }
                                         </td>
                                         colIdx++;
                                     }
@@ -468,5 +519,312 @@ else
                 alert(data.message);
             }
         }
+
+                <!-- FEAT-P4-02: Modal Xét Duyệt Cuối Năm Theo Loại Lớp -->
+        <div class="modal fade" id="modalClassEvaluation" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content rounded-4 border-0 shadow-lg">
+                    <div class="modal-header bg-primary text-white rounded-top-4">
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" id="evalModalTitle">
+                                <i class="bi @Model.EvaluationAction.IconClass me-2"></i>@Model.EvaluationAction.ModalTitle
+                            </h5>
+                            <div class="small opacity-75" id="evalModalSubtitle">@Model.EvaluationAction.TargetDescription</div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body p-3">
+                        <!-- Thẻ KPI Tóm tắt -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3 col-6">
+                                <div class="p-2 rounded-3 bg-light border text-center">
+                                    <div class="text-muted small">Tổng sĩ số lớp</div>
+                                    <div class="fs-5 fw-bold text-dark" id="evalKpiTotal">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="p-2 rounded-3 bg-success-subtle border border-success-subtle text-center">
+                                    <div class="text-success small">Đạt tự động</div>
+                                    <div class="fs-5 fw-bold text-success" id="evalKpiAutoPass">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="p-2 rounded-3 bg-warning-subtle border border-warning-subtle text-center">
+                                    <div class="text-warning-emphasis small">Đề xuất đặc cách</div>
+                                    <div class="fs-5 fw-bold text-warning-emphasis" id="evalKpiSpecial">0</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6">
+                                <div class="p-2 rounded-3 bg-danger-subtle border border-danger-subtle text-center">
+                                    <div class="text-danger small">Chưa đạt / Ở lại</div>
+                                    <div class="fs-5 fw-bold text-danger" id="evalKpiRetain">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Thông báo Chiến dịch đi lễ 1 tháng nếu là lớp RL2 / TS3 / BĐ3 / DB4 -->
+                        <div id="evalCampaignBanner" class="alert alert-info py-2 px-3 small d-none mb-3"></div>
+
+                        <!-- Bộ lọc nhanh trong Modal -->
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary active" onclick="filterEvaluationRows('ALL', this)">Tất cả</button>
+                                <button type="button" class="btn btn-outline-success" onclick="filterEvaluationRows('ELIGIBLE', this)">Đủ điều kiện</button>
+                                <button type="button" class="btn btn-outline-danger" onclick="filterEvaluationRows('INELIGIBLE', this)">Thiếu điều kiện (Cần xem xét)</button>
+                            </div>
+                            <div class="small text-muted">
+                                Ngưỡng chuẩn: ĐTB Năm ≥ <strong id="lblMinAvg">5.0</strong> | Chuyên cần ≥ <strong id="lblMinAtt">80%</strong>
+                            </div>
+                        </div>
+
+                        <!-- Bảng danh sách xét duyệt từng thiếu nhi -->
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-hover align-middle small mb-0">
+                                <thead class="table-light text-center">
+                                    <tr>
+                                        <th>Mã TN</th>
+                                        <th class="text-start">Tên Thánh & Họ Tên</th>
+                                        <th>ĐTB HK1</th>
+                                        <th>ĐTB HK2</th>
+                                        <th>ĐTB Năm</th>
+                                        <th class="col-sacrament-only d-none">Khảo Hạch</th>
+                                        <th>Chuyên Cần</th>
+                                        <th class="col-campaign-only d-none">Chiến Dịch Lễ</th>
+                                        <th>Đánh Giá Hệ Thống</th>
+                                        <th style="min-width: 170px;">Đề Xuất Của GLV</th>
+                                        <th class="col-sacrament-only d-none" style="min-width: 150px;">Người Đỡ Đầu</th>
+                                        <th style="min-width: 190px;">Ghi Chú / Lý Do Đặc Cách</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="evalTableBody">
+                                    <tr>
+                                        <td colspan="12" class="text-center py-4 text-muted">Đang tải dữ liệu xét duyệt của lớp...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer justify-content-between">
+                        <div class="small text-muted">
+                            <i class="bi bi-shield-check me-1"></i>Mọi đề xuất và ghi chú đặc cách đều được lưu vết kiểm toán (Audit Log).
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btnSubmitClassEvaluation" onclick="submitClassEvaluation()">
+                                <i class="bi bi-send-check-fill me-1"></i> Lưu & Trình Kết Quả Xét Duyệt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let currentEvaluationSheet = null;
+
+            function getGradeCsrfToken() {
+                return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            }
+
+            async function openClassEvaluationModal(classId) {
+                const modalEl = document.getElementById('modalClassEvaluation');
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+
+                const tbody = document.getElementById('evalTableBody');
+                tbody.innerHTML = '<tr><td colspan="12" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Đang tổng hợp điểm số, chuyên cần và chiến dịch đi lễ...</td></tr>';
+
+                try {
+                    const res = await fetch(`/Grades/GetClassEvaluationSheet?classId=${classId}`);
+                    if (!res.ok) {
+                        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-danger py-4">Không thể tải dữ liệu xét duyệt của lớp.</td></tr>';
+                        return;
+                    }
+
+                    const result = await res.json();
+                    currentEvaluationSheet = result.data;
+                    renderClassEvaluationSheet(currentEvaluationSheet);
+                } catch (err) {
+                    console.error(err);
+                    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-danger py-4">Lỗi kết nối máy chủ.</td></tr>';
+                }
+            }
+
+            function renderClassEvaluationSheet(sheet) {
+                document.getElementById('lblMinAvg').textContent = sheet.minYearAverage.toFixed(1);
+                document.getElementById('lblMinAtt').textContent = `${sheet.minAttendanceRate}%`;
+
+                const isSacramentOrPromise = sheet.descriptor.sacramentType !== null;
+                const showCampaign = sheet.descriptor.requireCampaignCheck && sheet.hasActiveMassCampaign;
+
+                document.querySelectorAll('.col-sacrament-only').forEach(el => {
+                    el.classList.toggle('d-none', !isSacramentOrPromise);
+                });
+                document.querySelectorAll('.col-campaign-only').forEach(el => {
+                    el.classList.toggle('d-none', !showCampaign);
+                });
+
+                const banner = document.getElementById('evalCampaignBanner');
+                if (sheet.descriptor.requireCampaignCheck) {
+                    banner.classList.remove('d-none');
+                    if (sheet.hasActiveMassCampaign) {
+                        banner.innerHTML = `<i class="bi bi-calendar2-heart-fill me-2"></i><strong>Chiến dịch đi lễ 1 tháng đang liên kết:</strong> ${sheet.massCampaignTitle} (Chỉ tiêu tối thiểu: <strong>${sheet.massCampaignTargetDays} ngày</strong>).`;
+                    } else {
+                        banner.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>Lớp chưa khởi tạo Chiến dịch đi lễ 1 tháng. <a href="/MassCampaigns/Index?classId=${sheet.classId}" class="fw-bold">Thiết lập tại đây</a>.`;
+                    }
+                } else {
+                    banner.classList.add('d-none');
+                }
+
+                const tbody = document.getElementById('evalTableBody');
+                tbody.innerHTML = '';
+
+                sheet.students.forEach(st => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'eval-student-row';
+                    tr.setAttribute('data-enrollment-id', st.enrollmentId);
+                    tr.setAttribute('data-eligible', st.isAutoEligible ? 'true' : 'false');
+
+                    const autoBadge = st.isAutoEligible
+                        ? `<span class="badge bg-success-subtle text-success border border-success-subtle">Đủ ĐK chuẩn</span>`
+                        : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="${st.autoIneligibleReason}">${st.autoIneligibleReason}</span>`;
+
+                    const campaignCellHtml = showCampaign
+                        ? `<td class="text-center ${st.isCampaignTargetMet ? 'text-success fw-bold' : 'text-danger fw-bold'}">${st.campaignAttendedDays}/${st.campaignTargetDays}</td>`
+                        : `<td class="d-none"></td>`;
+
+                    const sacramentExamHtml = isSacramentOrPromise
+                        ? `<td class="text-center fw-semibold">${st.sacramentExamScore !== null ? st.sacramentExamScore.toFixed(1) : '-'}</td>`
+                        : `<td class="d-none"></td>`;
+
+                    const godparentInputHtml = isSacramentOrPromise
+                        ? `<td><input type="text" class="form-control form-control-sm inp-godparent" value="${st.godparentName || ''}" placeholder="Tên Thánh & Họ tên..." /></td>`
+                        : `<td class="d-none"><input type="hidden" class="inp-godparent" value="" /></td>`;
+
+                    tr.innerHTML = `
+                        <td class="text-center fw-bold text-primary">${st.studentCode}</td>
+                        <td><div class="fw-semibold">${st.christianName} ${st.fullName}</div></td>
+                        <td class="text-center">${st.semester1Avg !== null ? st.semester1Avg.toFixed(1) : '-'}</td>
+                        <td class="text-center">${st.semester2Avg !== null ? st.semester2Avg.toFixed(1) : '-'}</td>
+                        <td class="text-center fw-bold ${st.yearAvg !== null && st.yearAvg >= sheet.minYearAverage ? 'text-primary' : 'text-danger'}">
+                            ${st.yearAvg !== null ? st.yearAvg.toFixed(2) : '-'}
+                        </td>
+                        ${sacramentExamHtml}
+                        <td class="text-center ${st.combinedAttendanceRate >= sheet.minAttendanceRate ? 'text-success' : 'text-danger'} fw-semibold">
+                            ${st.combinedAttendanceRate}%
+                        </td>
+                        ${campaignCellHtml}
+                        <td class="text-center">${autoBadge}</td>
+                        <td>
+                            <select class="form-select form-select-sm sel-proposal-status" onchange="recalculateEvalModalKpis()">
+                                <option value="PROPOSED_PASS" ${st.proposalStatus === 'PROPOSED_PASS' ? 'selected' : ''}>✔ Đạt chuẩn</option>
+                                <option value="PROPOSED_SPECIAL" ${st.proposalStatus === 'PROPOSED_SPECIAL' ? 'selected' : ''}>★ Đề xuất đặc cách</option>
+                                <option value="PROPOSED_RETAIN" ${st.proposalStatus === 'PROPOSED_RETAIN' ? 'selected' : ''}>✘ Chưa đạt / Ở lại</option>
+                            </select>
+                        </td>
+                        ${godparentInputHtml}
+                        <td>
+                            <input type="text" class="form-control form-control-sm inp-proposal-note"
+                                   value="${st.proposalNote || ''}"
+                                   placeholder="${st.isAutoEligible ? 'Nhận xét thêm...' : 'Nhập lý do xin đặc cách...'}" />
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                recalculateEvalModalKpis();
+            }
+
+            function recalculateEvalModalKpis() {
+                const rows = document.querySelectorAll('#evalTableBody .eval-student-row');
+                let total = rows.length;
+                let pass = 0, special = 0, retain = 0;
+
+                rows.forEach(r => {
+                    const val = r.querySelector('.sel-proposal-status')?.value;
+                    if (val === 'PROPOSED_PASS') pass++;
+                    else if (val === 'PROPOSED_SPECIAL') special++;
+                    else retain++;
+                });
+
+                document.getElementById('evalKpiTotal').textContent = total;
+                document.getElementById('evalKpiAutoPass').textContent = pass;
+                document.getElementById('evalKpiSpecial').textContent = special;
+                document.getElementById('evalKpiRetain').textContent = retain;
+            }
+
+            function filterEvaluationRows(mode, btn) {
+                btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                document.querySelectorAll('#evalTableBody .eval-student-row').forEach(row => {
+                    const isEligible = row.getAttribute('data-eligible') === 'true';
+                    if (mode === 'ALL') row.classList.remove('d-none');
+                    else if (mode === 'ELIGIBLE') row.classList.toggle('d-none', !isEligible);
+                    else if (mode === 'INELIGIBLE') row.classList.toggle('d-none', isEligible);
+                });
+            }
+
+            async function submitClassEvaluation() {
+                if (!currentEvaluationSheet) return;
+
+                const rows = document.querySelectorAll('#evalTableBody .eval-student-row');
+                const items = [];
+
+                for (const r of rows) {
+                    const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
+                    const isEligible = r.getAttribute('data-eligible') === 'true';
+                    const status = r.querySelector('.sel-proposal-status').value;
+                    const note = r.querySelector('.inp-proposal-note').value.trim();
+                    const godparent = r.querySelector('.inp-godparent')?.value.trim() || '';
+
+                    if (status === 'PROPOSED_SPECIAL' && !note) {
+                        alert('Vui lòng nhập lý do xin đặc cách (chuẩn chước) cho các em được đề xuất đặc cách.');
+                        r.querySelector('.inp-proposal-note').focus();
+                        return;
+                    }
+
+                    items.push({
+                        enrollmentId: enrollmentId,
+                        proposalStatus: (!isEligible && status === 'PROPOSED_PASS') ? 'PROPOSED_SPECIAL' : status,
+                        proposalNote: note,
+                        godparentName: godparent
+                    });
+                }
+
+                const btn = document.getElementById('btnSubmitClassEvaluation');
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/Grades/SubmitClassEvaluation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': getGradeCsrfToken(),
+                            'RequestVerificationToken': getGradeCsrfToken()
+                        },
+                        body: JSON.stringify({
+                            classId: currentEvaluationSheet.classId,
+                            items: items
+                        })
+                    });
+
+                    const result = await res.json();
+                    if (res.ok && result.success) {
+                        alert(result.message);
+                        location.reload();
+                    } else {
+                        alert(result.message || 'Không thể lưu danh sách xét duyệt.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Lỗi kết nối máy chủ khi gửi kết quả xét duyệt.');
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+    </script>
     </script>
 }

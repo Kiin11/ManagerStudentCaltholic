@@ -90,6 +90,7 @@
     </div>
 }
 
+
 <div class="container-fluid py-4">
     <!-- Header & Bộ Lọc Lớp / Ngày -->
     <div class="card border-0 shadow-sm rounded-3 mb-4">
@@ -162,6 +163,14 @@
                     onclick="downloadOfflineClassCache()">
                 <i class="bi bi-cloud-arrow-down me-1"></i> Tải Dữ Liệu Offline
             </button>
+            <button type="button" id="btnMassCampaigns" class="btn btn-warning btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                    onclick="openMassCampaigns()">
+                <a asp-controller="MassCampaigns" asp-action="Index" asp-route-classId="@ViewBag.SelectedClassId"
+                   class="btn btn-warning btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                    <i class="bi bi-calendar2-heart-fill me-1"></i> Chiến Dịch Đi Lễ 1 Tháng (Lớp Bí Tích)
+                </a>
+            </button>
+            
         </div>
     </div>
 
@@ -1012,6 +1021,12 @@
             const enrollmentId = parseInt(btn.getAttribute('data-enrollment-id'));
             const studentName = btn.getAttribute('data-student-name') || '';
             openMakeUpModal(enrollmentId, studentName);
+        }
+
+        function openMassCampaigns(btn) 
+        {
+            const classId = @ViewBag.SelectedClassId;
+            window.location.href = `/MassCampaigns/Index?classId=${studentId}`;
         }
 
         function openAuditTimelineFromBtn(btn) {

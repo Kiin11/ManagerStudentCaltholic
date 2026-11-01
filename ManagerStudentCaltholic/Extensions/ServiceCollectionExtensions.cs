@@ -104,6 +104,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddSingleton<SystemMetricsCollector>();
             services.AddScoped<IRedisAttendanceService, RedisAttendanceService>();
 
+            services.AddScoped<IMassCampaignService, MassCampaignService>();
+            services.AddScoped<IClassEvaluationService, ClassEvaluationService>();
+
             return services;
         }
 

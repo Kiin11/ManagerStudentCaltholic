@@ -172,6 +172,12 @@ namespace ManagerStudentCaltholic.Controllers
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
+            var activeClasses = await _context.Classes
+                .AsNoTracking()
+                .Where(c => c.AcademicYearId == yearId)
+                .OrderBy(c => c.GradeLevel)
+                .ThenBy(c => c.Name)
+                .ToListAsync();                           
 
             ViewBag.SearchKeyword = searchKeyword;
             ViewBag.Gender = gender ?? "ALL";
@@ -179,6 +185,7 @@ namespace ManagerStudentCaltholic.Controllers
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalCount = totalCount;
+            ViewBag.ActiveClasses = activeClasses;
 
             return View(students);
         }
@@ -188,32 +195,39 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(StudentViewModel model)
         {
-            if (ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                if (string.IsNullOrWhiteSpace(model.StudentCode))
+                TempData["ErrorMessage"] = "Thông tin hồ sơ không hợp lệ, vui lòng kiểm tra lại.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                ClassRoom? selectedClass = null;
+                if (model.InitialClassId.HasValue && model.InitialClassId.Value > 0)
                 {
-                    model.StudentCode = await _codeGenerator.GenerateUniqueCodeAsync();
+                    selectedClass = await _context.Classes
+                        .FirstOrDefaultAsync(c => c.Id == model.InitialClassId.Value);
                 }
-                else
-                {
-                    var exists = await _context.Students.AnyAsync(s => s.StudentCode.ToLower() == model.StudentCode.Trim().ToLower());
-                    if (exists)
-                    {
-                        TempData["ErrorMessage"] = $"Mã thiếu nhi '{model.StudentCode}' đã tồn tại.";
-                        return RedirectToAction(nameof(Index));
-                    }
-                }
+
+                // FEAT-P4-03: Sinh mã tự động theo công thức tên lớp (VD: Thêm Sức 3A -> TS3A001)
+                // hoặc kiểm tra tính duy nhất nếu người dùng nhập sẵn StudentCode
+                string finalStudentCode = await _codeGenerator.GenerateOrValidateStudentCodeAsync(
+                    selectedClass?.Name,
+                    model.StudentCode);
 
                 var entity = new Student
                 {
-                    StudentCode = model.StudentCode.Trim().ToUpper(),
-                    ChristianName = model.ChristianName.Trim(),
+                    StudentCode = finalStudentCode,
+                    ChristianName = (model.ChristianName ?? string.Empty).Trim(),
                     FirstName = model.FirstName.Trim(),
                     LastName = model.LastName.Trim(),
+                    Id = model.Id,
                     Gender = model.Gender,
-                    DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth, DateTimeKind.Utc),
-                    BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value, DateTimeKind.Utc) : null,
-                    ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value, DateTimeKind.Utc) : null,
+                    DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc),
+                    BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value.Date, DateTimeKind.Utc) : null,
+                    ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value.Date, DateTimeKind.Utc) : null,
                     ParentPhone = model.ParentPhone?.Trim(),
                     IsActive = true
                 };
@@ -221,12 +235,34 @@ namespace ManagerStudentCaltholic.Controllers
                 _context.Students.Add(entity);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Đã thêm thiếu nhi: {Code} - {Christian} {First} {Last}", entity.StudentCode, entity.ChristianName, entity.FirstName, entity.LastName);
-                TempData["SuccessMessage"] = $"Thêm mới thiếu nhi {entity.ChristianName} {entity.FirstName} {entity.LastName} thành công!";
+                // Nếu có chọn lớp khi tạo mới -> Tự động ghi danh vào lớp đó luôn
+                if (selectedClass != null)
+                {
+                    _context.Enrollments.Add(new Enrollment
+                    {
+                        StudentId = entity.Id,
+                        ClassRoomId = selectedClass.Id,
+                        //AcademicYearId = selectedClass.AcademicYearId,
+                        //EnrollDate = DateTime.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
+
+                TempData["SuccessMessage"] = $"Đã thêm thiếu nhi {entity.ChristianName} {entity.FirstName} {entity.LastName} với mã '{entity.StudentCode}'" +
+                                             (selectedClass != null ? $" vào lớp {selectedClass.Name}!" : "!");
             }
-            else
+            catch (InvalidOperationException ex)
             {
-                TempData["ErrorMessage"] = "Thông tin không hợp lệ, vui lòng kiểm tra lại.";
+                await transaction.RollbackAsync();
+                TempData["ErrorMessage"] = ex.Message;
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Lỗi khi tạo mới hồ sơ thiếu nhi");
+                TempData["ErrorMessage"] = "Đã xảy ra lỗi khi lưu hồ sơ thiếu nhi. Vui lòng thử lại.";
             }
 
             return RedirectToAction(nameof(Index));

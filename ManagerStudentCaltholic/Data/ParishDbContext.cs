@@ -54,6 +54,10 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<SacramentApprovalBatch> SacramentApprovalBatches => Set<SacramentApprovalBatch>();
         public DbSet<SacramentApprovalItem> SacramentApprovalItems => Set<SacramentApprovalItem>();
 
+        // --- Mass Campaign (Phase 3: FEAT-P4-01) ---
+        public DbSet<MassCampaign> MassCampaigns => Set<MassCampaign>();
+        public DbSet<MassCampaignRecord> MassCampaignRecords => Set<MassCampaignRecord>();
+        
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -560,6 +564,51 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasOne(i => i.Enrollment)
                       .WithMany()
                       .HasForeignKey(i => i.EnrollmentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Thêm cấu hình vào cuối hàm OnModelCreating(ModelBuilder modelBuilder):
+            modelBuilder.Entity<MassCampaign>(entity =>
+            {
+                entity.ToTable("MassCampaigns");
+                entity.HasKey(c => c.Id);
+                entity.HasQueryFilter(c => !c.IsDeleted);
+
+                entity.HasIndex(c => new { c.AcademicYearId, c.ClassRoomId, c.Status });
+                entity.HasIndex(c => c.IsDeleted);
+
+                entity.HasOne(c => c.AcademicYear)
+                      .WithMany()
+                      .HasForeignKey(c => c.AcademicYearId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(c => c.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(c => c.ClassRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<MassCampaignRecord>(entity =>
+            {
+                entity.ToTable("MassCampaignRecords");
+                entity.HasKey(r => r.Id);
+
+                entity.HasIndex(r => new { r.CampaignId, r.EnrollmentId, r.AttendanceDate }).IsUnique();
+                entity.HasIndex(r => new { r.StudentId, r.AttendanceDate });
+
+                entity.HasOne(r => r.Campaign)
+                      .WithMany(c => c.Records)
+                      .HasForeignKey(r => r.CampaignId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(r => r.Student)
+                      .WithMany()
+                      .HasForeignKey(r => r.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(r => r.Enrollment)
+                      .WithMany()
+                      .HasForeignKey(r => r.EnrollmentId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
         }

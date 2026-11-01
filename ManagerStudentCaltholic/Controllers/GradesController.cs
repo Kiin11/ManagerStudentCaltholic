@@ -16,17 +16,20 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IGradeCalculationService _gradeService;
         private readonly ILogger<GradesController> _logger;
         private readonly ICacheService _cacheService;
+        private readonly IClassEvaluationService _classEvaluationService;
 
         public GradesController(
             ParishDbContext context,
             IGradeCalculationService gradeService,
             ILogger<GradesController> logger,
-            ICacheService cacheService)
+            ICacheService cacheService,
+            IClassEvaluationService classEvaluationService)
         {
             _context = context;
             _gradeService = gradeService;
             _logger = logger;
             _cacheService = cacheService;
+            _classEvaluationService = classEvaluationService;
         }
 
         private long CurrentUserId
@@ -68,6 +71,7 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> Index(int? classId, int semester = 1)
         {
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+
             if (currentYear == null)
             {
                 TempData["ErrorMessage"] = "Chưa có niên khóa nào được kích hoạt.";
@@ -196,6 +200,7 @@ namespace ManagerStudentCaltholic.Controllers
                 };
 
                 var (rank, eligible) = _gradeService.EvaluateStudent(activeAvg, attRate, targetClass.GradeLevel, semester);
+                
 
                 return new StudentGradeRowItem
                 {
@@ -224,7 +229,8 @@ namespace ManagerStudentCaltholic.Controllers
                 CurrentSemester = semester,
                 IsLocked = targetClass.IsGradeLocked,
                 Columns = displayColumns,
-                Rows = rows
+                Rows = rows,
+                EvaluationAction = await _classEvaluationService.GetClassEvaluationHeaderAsync(targetClassId)
             };
 
             return View(viewModel);
@@ -418,5 +424,43 @@ namespace ManagerStudentCaltholic.Controllers
 
             return Json(new { success = true, message = "Đã xóa cột điểm." });
         }
+
+        #region FEAT-P4-02: Smart Class Evaluation Endpoints (Xét Lên Lớp / Bí Tích / Tuyên Hứa)
+
+        [HttpGet]
+        public async Task<IActionResult> GetClassEvaluationSheet(int classId)
+        {
+            if (!await _classEvaluationService.CanUserEvaluateClassAsync(User, classId))
+                return Forbid();
+
+            var sheet = await _classEvaluationService.BuildEvaluationSheetAsync(classId);
+            return Ok(new { success = true, data = sheet });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitClassEvaluation([FromBody] SubmitClassEvaluationRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new { success = false, message = "Dữ liệu xét duyệt không hợp lệ." });
+
+            if (!await _classEvaluationService.CanUserEvaluateClassAsync(User, dto.ClassId))
+                return Forbid();
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var (success, message, batchId) = await _classEvaluationService.SubmitClassEvaluationAsync(dto, User, ip);
+
+            if (!success)
+                return BadRequest(new { success = false, message });
+
+            return Ok(new
+            {
+                success = true,
+                message,
+                batchId
+            });
+        }
+
+        #endregion
     }
 }
