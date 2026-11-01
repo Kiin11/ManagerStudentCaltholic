@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    [Authorize]
+    [Authorize(Policy = "RequireStaff")]
     public class MassCampaignsController : Controller
     {
         private readonly IMassCampaignService _campaignService;
@@ -124,9 +124,20 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> ExportExcel(long campaignId)
         {
-            var bytes = await _campaignService.ExportCampaignMatrixToExcelAsync(campaignId, User);
-            var fileName = $"ChienDichDiLe_{campaignId}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            try
+            {
+                var bytes = await _campaignService.ExportCampaignMatrixToExcelAsync(campaignId, User);
+                var fileName = $"ChienDichDiLe_{campaignId}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound("Không tìm thấy chiến dịch đi lễ yêu cầu.");
+            }
         }
     }
 }

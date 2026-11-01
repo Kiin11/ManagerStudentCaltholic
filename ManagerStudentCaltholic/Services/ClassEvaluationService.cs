@@ -127,7 +127,7 @@ namespace ManagerStudentCaltholic.Services
             }
 
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (int.TryParse(userIdStr, out int userId))
+            if (long.TryParse(userIdStr, out long userId))
             {
                 return await _context.ClassTeachers
                     .AsNoTracking()
@@ -150,7 +150,7 @@ namespace ManagerStudentCaltholic.Services
 
             var enrollments = await _context.Enrollments
                 .AsNoTracking()
-                .Where(e => e.ClassRoomId == classId && e.AcademicYearId == classRoom.AcademicYearId)
+                .Where(e => e.ClassRoomId == classId && e.Student != null && e.Student.IsActive)
                 .Select(e => e.TeacherProposalStatus)
                 .ToListAsync();
 
@@ -250,8 +250,8 @@ namespace ManagerStudentCaltholic.Services
                     .ThenInclude(gr => gr.GradeConfiguration)
                 .Include(e => e.Attendances)
                 .Where(e => e.ClassRoomId == classRoom.Id
-                         && e.AcademicYearId == classRoom.AcademicYearId
                          && e.Student != null
+                         && e.Student.IsActive
                          && !e.Student.IsDeleted)
                 .OrderBy(e => e.Student!.StudentCode)
                 .ToListAsync();
@@ -358,7 +358,7 @@ namespace ManagerStudentCaltholic.Services
             try
             {
                 var enrollments = await _context.Enrollments
-                    .Where(e => e.ClassRoomId == dto.ClassId && e.AcademicYearId == sheet.AcademicYearId)
+                    .Where(e => e.ClassRoomId == dto.ClassId)
                     .ToDictionaryAsync(e => e.Id);
 
                 var itemMap = dto.Items.ToDictionary(i => i.EnrollmentId);
@@ -466,13 +466,13 @@ namespace ManagerStudentCaltholic.Services
                             MassAttendanceRate = s.MassAttendanceRate,
                             ClassAttendanceRate = s.ClassAttendanceRate,
                             CombinedAttendanceRate = s.CombinedAttendanceRate,
-                            //AcademicRank = s.AcademicRank,
-                            //IsAutoEligible = s.IsAutoEligible,
-                            //IneligibleReason = s.AutoIneligibleReason,
-                            //IsSpecialApproved = isSpecial,
-                            //SpecialApprovalReason = env.TeacherProposalNote,
-                            //IsFinalApproved = isApproved,
-                            GodparentName = env.ProposedGodparentName
+                            IsSystemEligible = s.IsAutoEligible,
+                            IsSpecialExemption = isSpecial,
+                            IsApprovedForSacrament = isApproved,
+                            GodparentName = env.ProposedGodparentName,
+                            EvaluationNote = !string.IsNullOrWhiteSpace(env.TeacherProposalNote)
+                                ? env.TeacherProposalNote
+                                : s.AutoIneligibleReason
                         });
                     }
 

@@ -6,6 +6,7 @@
     var totalCount = (int)ViewBag.TotalCount;
     var searchKeyword = (string)ViewBag.SearchKeyword;
     var currentGender = (string)ViewBag.Gender;
+    var availableClasses = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
 }
 
 <style>
@@ -75,16 +76,153 @@
         }
 </style>
 
-<div class="d-flex gap-2">
-    <a asp-action="DownloadTemplate" class="btn btn-outline-secondary shadow-sm">
-        <i class="bi bi-file-earmark-arrow-down me-1"></i> File Mẫu Excel
-    </a>
-    <button type="button" class="btn btn-success shadow-sm" data-bs-toggle="modal" data-bs-target="#importExcelModal">
-        <i class="bi bi-file-earmark-excel me-1"></i> Nạp Excel (Hàng loạt)
-    </button>
-    <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createStudentModal">
-        <i class="bi bi-person-plus-fill me-1"></i> Thêm Thiếu Nhi
-    </button>
+<!-- MODAL THÊM THIẾU NHI (Tích hợp FEAT-P4-03) -->
+<div class="modal fade" id="createStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form asp-action="Create" method="post" id="formCreateStudent" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary"><i class="bi bi-person-plus me-2"></i>Thêm Hồ Sơ Thiếu Nhi Mới</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <!-- FEAT-P4-03: Chọn lớp để sinh mã theo công thức T + S + 3A + STT -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Xếp Vào Lớp Học (Tùy chọn)</label>
+                        <select name="InitialClassId" id="create_InitialClassId" class="form-select" onchange="previewStudentCodeByClass()">
+                            <option value="">-- Chưa xếp lớp (Sinh mã chung) --</option>
+                            @foreach (var cls in availableClasses)
+                            {
+                                <option value="@cls.Id">[@cls.GradeLevel] @cls.Name</option>
+                            }
+                        </select>
+                        <small class="text-muted">Chọn lớp để tự động sinh mã theo tên lớp (VD: TS3A001).</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Mã Thiếu Nhi / QR (Tự động hoặc Nhập tay)</label>
+                        <div class="input-group">
+                            <input type="text" name="StudentCode" id="create_StudentCode"
+                                   class="form-control font-monospace text-uppercase fw-bold"
+                                   placeholder="Để trống sẽ tự sinh..." maxlength="20"
+                                   onblur="validateManualStudentCode(this, null, 'createCodeFeedback')" />
+                            <button type="button" class="btn btn-outline-primary" onclick="previewStudentCodeByClass(true)" title="Lấy mã gợi ý tiếp theo">
+                                <i class="bi bi-magic"></i> Gợi ý
+                            </button>
+                        </div>
+                        <small id="createCodeFeedback" class="d-block mt-1 text-muted">Hệ thống sẽ kiểm tra tính duy nhất trước khi lưu.</small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên Thánh <span class="text-danger">*</span></label>
+                        <input type="text" name="ChristianName" class="form-control" placeholder="Maria, Giuse..." required maxlength="50" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold">Họ và Tên Đệm <span class="text-danger">*</span></label>
+                        <input type="text" name="FirstName" class="form-control" placeholder="Nguyễn Văn" required maxlength="90" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">Tên <span class="text-danger">*</span></label>
+                        <input type="text" name="LastName" class="form-control" placeholder="An" required maxlength="10" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Giới Tính <span class="text-danger">*</span></label>
+                        <select name="Gender" class="form-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Ngày Sinh <span class="text-danger">*</span></label>
+                        <input type="date" name="DateOfBirth" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">SĐT Phụ Huynh</label>
+                        <input type="tel" name="ParentPhone" class="form-control" placeholder="0912345678" maxlength="15" />
+                    </div>
+                    <div class="col-12"><hr class="my-2 text-muted" /></div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Rửa Tội</label>
+                        <input type="date" name="BaptismDate" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Thêm Sức</label>
+                        <input type="date" name="ConfirmationDate" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" id="btnSubmitCreateStudent" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Lưu Hồ Sơ</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MODAL SỬA THIẾU NHI -->
+<div class="modal fade" id="editStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form asp-action="Edit" method="post" class="modal-content border-0 shadow">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="Id" id="edit_Id" />
+            <div class="modal-header bg-light">
+                <h5 class="modal-title fw-bold text-primary"><i class="bi bi-pencil-square me-2"></i>Chỉnh Sửa Hồ Sơ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Mã Thiếu Nhi <span class="text-danger">*</span></label>
+                        <input type="text" name="StudentCode" id="edit_StudentCode"
+                               class="form-control font-monospace text-uppercase fw-bold"
+                               required maxlength="20"
+                               onblur="validateManualStudentCode(this, document.getElementById('edit_Id').value, 'editCodeFeedback')" />
+                        <small id="editCodeFeedback" class="d-block mt-1 text-muted"></small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên Thánh <span class="text-danger">*</span></label>
+                        <input type="text" name="ChristianName" id="edit_ChristianName" class="form-control" required maxlength="50" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Họ và Tên Đệm <span class="text-danger">*</span></label>
+                        <input type="text" name="FirstName" id="edit_FirstName" class="form-control" required maxlength="90" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Tên <span class="text-danger">*</span></label>
+                        <input type="text" name="LastName" id="edit_LastName" class="form-control" required maxlength="10" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Giới Tính</label>
+                        <select name="Gender" id="edit_Gender" class="form-select">
+                            <option value="Nam">Nam</option>
+                            <option value="Nữ">Nữ</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Ngày Sinh</label>
+                        <input type="date" name="DateOfBirth" id="edit_DateOfBirth" class="form-control" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">SĐT Phụ Huynh</label>
+                        <input type="tel" name="ParentPhone" id="edit_ParentPhone" class="form-control" maxlength="15" />
+                    </div>
+                    <div class="col-12"><hr class="my-2 text-muted" /></div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Rửa Tội</label>
+                        <input type="date" name="BaptismDate" id="edit_BaptismDate" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted">Ngày Thêm Sức</label>
+                        <input type="date" name="ConfirmationDate" id="edit_ConfirmationDate" class="form-control" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" id="btnSubmitEditStudent" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Cập Nhật</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <!-- Modal Nạp Excel -->
@@ -821,6 +959,83 @@
                 }
             } catch (err) {
                 showSacramentAlert('Lỗi kết nối máy chủ: ' + err.message, false);
+            }
+        }
+
+                async function onCreateModalOpen() {
+            const codeInput = document.getElementById('create_StudentCode');
+            if (codeInput && !codeInput.value.trim()) {
+                await previewStudentCodeByClass(true);
+            }
+        }
+
+        async function previewStudentCodeByClass(forceOverwrite = false) {
+            const classId = document.getElementById('create_InitialClassId')?.value || '';
+            const codeInput = document.getElementById('create_StudentCode');
+            const feedback = document.getElementById('createCodeFeedback');
+
+            if (!codeInput) return;
+
+            try {
+                const res = await fetch(`/Students/PreviewNextCode?classId=${encodeURIComponent(classId)}`);
+                const data = await res.json();
+                if (data.success && data.suggestedCode) {
+                    if (forceOverwrite || !codeInput.value.trim() || codeInput.dataset.autoGenerated === 'true') {
+                        codeInput.value = data.suggestedCode;
+                        codeInput.dataset.autoGenerated = 'true';
+                        codeInput.classList.remove('is-invalid');
+                        codeInput.classList.add('is-valid');
+                        if (feedback) {
+                            feedback.className = 'd-block mt-1 text-success small fw-semibold';
+                            feedback.textContent = `Mã gợi ý tự động: ${data.suggestedCode}`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Không thể tải mã gợi ý:', err);
+            }
+        }
+
+        async function validateManualStudentCode(inputEl, excludeId, feedbackId) {
+            const rawCode = inputEl.value.trim().toUpperCase();
+            const feedback = document.getElementById(feedbackId);
+            inputEl.value = rawCode;
+
+            if (!rawCode) {
+                inputEl.classList.remove('is-invalid', 'is-valid');
+                if (feedback) {
+                    feedback.className = 'd-block mt-1 text-muted small';
+                    feedback.textContent = 'Để trống hệ thống sẽ tự động cấp mã mới.';
+                }
+                return true;
+            }
+
+            try {
+                let url = `/Students/CheckCodeUnique?code=${encodeURIComponent(rawCode)}`;
+                if (excludeId) url += `&excludeId=${encodeURIComponent(excludeId)}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.isUnique) {
+                    inputEl.classList.remove('is-invalid');
+                    inputEl.classList.add('is-valid');
+                    if (feedback) {
+                        feedback.className = 'd-block mt-1 text-success small fw-semibold';
+                        feedback.textContent = data.message;
+                    }
+                    return true;
+                } else {
+                    inputEl.classList.remove('is-valid');
+                    inputEl.classList.add('is-invalid');
+                    if (feedback) {
+                        feedback.className = 'd-block mt-1 text-danger small fw-semibold';
+                        feedback.textContent = data.message || 'Mã thiếu nhi đã tồn tại!';
+                    }
+                    return false;
+                }
+            } catch (err) {
+                return true;
             }
         }
     </script>

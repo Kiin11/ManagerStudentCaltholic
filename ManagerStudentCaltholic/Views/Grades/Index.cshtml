@@ -175,8 +175,7 @@ else
                             <th rowspan="2" class="align-middle" style="width: 80px;">% Chuyên Cần</th>
                             <th rowspan="2" class="align-middle" style="width: 120px;">Xếp Loại</th>
                             <th rowspan="2" class="align-middle" style="width: 110px;">Xét Bí Tích</th>
-                            <th class="text-center" style="min-width: 125px;">@Model.EvaluationAction.ButtonLabel</th>
-
+                            <th rowspan="2" class="align-middle text-center" style="min-width: 125px;">@Model.EvaluationAction.ButtonLabel</th>
                         </tr>
                         <tr>
                             @foreach (var col in Model.Columns)
@@ -234,31 +233,6 @@ else
                                                    onchange="onScoreChange(this)"
                                                    onkeydown="handleKeyNavigation(event, this)" />
                                         </td>
-                                        <td class="text-center" id="eval-badge-@s.EnrollmentId">
-                                            @switch (s.TeacherProposalStatus)
-                                            {
-                                                case "PROPOSED_PASS":
-                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">
-                                                        <i class="bi bi-check-circle-fill me-1"></i>Đạt chuẩn
-                                                    </span>
-                                                    break;
-                                                case "PROPOSED_SPECIAL":
-                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1"
-                                                          title="Lý do đặc cách: @s.TeacherProposalNote">
-                                                        <i class="bi bi-star-fill me-1"></i>Đề xuất đặc cách
-                                                    </span>
-                                                    break;
-                                                case "PROPOSED_RETAIN":
-                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1"
-                                                          title="@s.TeacherProposalNote">
-                                                        <i class="bi bi-x-circle-fill me-1"></i>Chưa đạt
-                                                    </span>
-                                                    break;
-                                                default:
-                                                    <span class="badge bg-light text-secondary border rounded-pill px-2 py-1">Chưa xét</span>
-                                                    break;
-                                            }
-                                        </td>
                                         colIdx++;
                                     }
 
@@ -295,6 +269,31 @@ else
                                             </span>
                                         }
                                     </td>
+                                    <td class="text-center" id="eval-badge-@s.EnrollmentId">
+                                        @switch (s.TeacherProposalStatus)
+                                        {
+                                            case "PROPOSED_PASS":
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Đạt chuẩn
+                                                </span>
+                                                break;
+                                            case "PROPOSED_SPECIAL":
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1"
+                                                      title="Lý do đặc cách: @s.TeacherProposalNote">
+                                                    <i class="bi bi-star-fill me-1"></i>Đề xuất đặc cách
+                                                </span>
+                                                break;
+                                            case "PROPOSED_RETAIN":
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1"
+                                                      title="@s.TeacherProposalNote">
+                                                    <i class="bi bi-x-circle-fill me-1"></i>Chưa đạt
+                                                </span>
+                                                break;
+                                            default:
+                                                <span class="badge bg-light text-secondary border rounded-pill px-2 py-1">Chưa xét</span>
+                                                break;
+                                        }
+                                    </td>
                                 </tr>
                                 rowIdx++;
                             }
@@ -302,7 +301,7 @@ else
                         else
                         {
                             <tr>
-                                <td colspan="@(8 + Model.Columns.Count)" class="py-5 text-muted">
+                                <td colspan="@((Model.CurrentSemester == 0 ? 10 : 8) + Model.Columns.Count)" class="py-5 text-muted">
                                     <i class="bi bi-inbox fs-2 d-block mb-2"></i> Lớp chưa có học sinh hoặc chưa được phân công.
                                 </td>
                             </tr>
@@ -825,6 +824,5 @@ else
                     btn.disabled = false;
                 }
             }
-    </script>
     </script>
 }

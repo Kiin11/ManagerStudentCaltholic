@@ -158,6 +158,7 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         StudentId = sid,
                         ClassRoomId = targetClass.Id,
+                        AcademicYearId = targetClass.AcademicYearId, // Bổ sung gán AcademicYearId
                         EnrolledAt = DateTime.UtcNow
                     }).ToList();
 
