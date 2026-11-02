@@ -18,14 +18,15 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly ILogger<AttendanceController> _logger; 
-        private readonly IRedisAttendanceService _redisAttendance;
+        private readonly IRedisAttendanceService _redisAttendance; private readonly IAttendanceDisputeService _disputeService;
 
         public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger
-            , IRedisAttendanceService redisAttendance)
+            , IRedisAttendanceService redisAttendance, IAttendanceDisputeService disputeService)
         {
             _context = context;
             _logger = logger;
             _redisAttendance = redisAttendance;
+            _disputeService = disputeService;
         }
 
         /// <summary>
@@ -97,6 +98,7 @@ namespace ManagerStudentCaltholic.Controllers
             // Lấy danh sách học sinh thuộc lớp
             var viewModel = await _redisAttendance.GetOrLoadClassSheetAsync(targetClass.Id, targetDate);
             ViewBag.SessionContext = await _redisAttendance.GetOrLoadSessionContextAsync(targetClass.Id, targetDate);
+            ViewBag.PendingDisputesCount = await _disputeService.GetPendingDisputeCountForClassAsync(targetClass.Id);
             return View(viewModel);
 
             //var enrollmentIds = enrollments.Select(e => e.Id).ToList();
@@ -1696,5 +1698,36 @@ namespace ManagerStudentCaltholic.Controllers
                     : "Tất cả dữ liệu trên Redis đã được đồng bộ với PostgreSQL."
             });
         }
+
+        #region FEAT-P4-05: Parent Attendance Dispute Review APIs
+
+        [HttpGet]
+        public async Task<IActionResult> GetClassDisputes(int classId, string status = "PENDING")
+        {
+            var list = await _disputeService.GetDisputesForClassAsync(classId, status, User);
+            return Ok(new { success = true, data = list });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReviewDispute([FromBody] ReviewAttendanceDisputeRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { success = false, message = "Dữ liệu xét duyệt không hợp lệ." });
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var (success, message) = await _disputeService.ReviewDisputeByTeacherAsync(dto, User, ip);
+
+            if (!success)
+            {
+                return BadRequest(new { success = false, message });
+            }
+
+            return Ok(new { success = true, message });
+        }
+
+        #endregion
     }
 }

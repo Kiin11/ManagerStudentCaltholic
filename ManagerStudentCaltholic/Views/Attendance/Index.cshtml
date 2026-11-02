@@ -4,6 +4,7 @@
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
     var sessionCtx = ViewBag.SessionContext as ManagerStudentCaltholic.Models.DTOs.ClassSessionContextDto;
     bool canManageCache = User.IsInRole("Admin") || User.IsInRole("SpiritualDirector") || User.IsInRole("ExecutiveBoard") || User.IsInRole("BranchHead");
+    int pendingDisputes = ViewBag.PendingDisputesCount != null ? (int)ViewBag.PendingDisputesCount : 0;
 }
 
 @Html.AntiForgeryToken()
@@ -55,6 +56,14 @@
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3" onclick="triggerFlushRedisToDb()">
                                 <i class="bi bi-database-fill-up me-1"></i> Đồng Bộ Redis Xuống DB Ngay
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                                    onclick="openClassDisputesModal(@Model.ClassId)">
+                                <i class="bi bi-flag-fill me-1"></i> Duyệt Báo Sai Sót PH
+                                @if (pendingDisputes > 0)
+                                {
+                                    <span class="badge bg-danger text-white rounded-pill ms-1">@pendingDisputes</span>
+                                }
                             </button>
                         </div>
                     }
@@ -514,6 +523,38 @@
                 <button type="button" id="btnSaveRule" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold" onclick="saveClassRule()">
                     <i class="bi bi-check2-circle me-1"></i> Lưu Quy Ước
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Duyệt Báo Sai Sót  -->
+<div class="modal fade" id="modalClassDisputes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold mb-0">
+                    <i class="bi bi-inbox-fill me-2"></i>Duyệt Yêu Cầu Đính Chính Điểm Danh Từ Phụ Huynh (@Model.ClassName)
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle small mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Thiếu Nhi</th>
+                                <th>Ngày &amp; Buổi</th>
+                                <th>Đề Nghị Đính Chính</th>
+                                <th>Lý Do Phụ Huynh Gửi</th>
+                                <th style="min-width: 195px;">Xử Lý Của GLV</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classDisputesTableBody">
+                            <tr><td colspan="5" class="text-center py-3">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -1181,6 +1222,85 @@
                 }
             } catch (err) {
                 showAlert('Lỗi khi đồng bộ xuống CSDL: ' + err.message, false);
+            }
+        }
+
+        async function openClassDisputesModal(classId) {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalClassDisputes')).show();
+            const tbody = document.getElementById('classDisputesTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3">Đang tải danh sách báo sai sót...</td></tr>';
+
+            try {
+                const res = await fetch(`/Attendance/GetClassDisputes?classId=${classId}&status=PENDING`);
+                const result = await res.json();
+                if (!result.success || !result.data || result.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có yêu cầu báo sai sót nào đang chờ duyệt.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                result.data.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>
+                            <div class="fw-bold text-primary font-monospace">${item.studentCode}</div>
+                            <div class="fw-semibold text-dark">${item.studentName}</div>
+                        </td>
+                        <td>
+                            <div class="fw-bold">${item.attendanceDate}</div>
+                            <span class="badge bg-info-subtle text-primary border">${item.sessionScopeLabel}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary">${item.currentStatusLabel}</span>
+                            <i class="bi bi-arrow-right mx-1"></i>
+                            <span class="badge bg-success">${item.requestedStatusLabel}</span>
+                        </td>
+                        <td class="text-break">${item.reason}</td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm mb-1" id="disp-note-${item.id}"
+                                   placeholder="Ghi chú phản hồi PH..." />
+                            <div class="d-flex gap-1">
+                                <button type="button" class="btn btn-success btn-sm w-50 fw-bold"
+                                        onclick="reviewParentDispute(${item.id}, 'APPROVED')">
+                                    ✔ Duyệt
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm w-50 fw-bold"
+                                        onclick="reviewParentDispute(${item.id}, 'REJECTED')">
+                                    ✘ Từ chối
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Lỗi tải dữ liệu.</td></tr>';
+            }
+        }
+
+        async function reviewParentDispute(disputeId, decision) {
+            const note = document.getElementById(`disp-note-${disputeId}`)?.value || '';
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            const res = await fetch('/Attendance/ReviewDispute', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': token
+                },
+                body: JSON.stringify({
+                    disputeId: disputeId,
+                    decision: decision,
+                    teacherResponseNote: note
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showAlert(data.message, true);
+                setTimeout(() => location.reload(), 900);
+            } else {
+                alert(data.message || 'Không thể xử lý yêu cầu.');
             }
         }
     </script>
