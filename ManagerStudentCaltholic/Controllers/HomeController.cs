@@ -1,44 +1,43 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿using ManagerStudentCaltholic.Interface.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly ParishDbContext _context;
+        private readonly IFeatureNavigationService _navService;
+        private readonly IDeviceStudentRecognitionService _deviceRecognitionService;
 
-        public HomeController(ParishDbContext context)
+        public HomeController(
+            IFeatureNavigationService navService,
+            IDeviceStudentRecognitionService deviceRecognitionService)
         {
-            _context = context;
+            _navService = navService;
+            _deviceRecognitionService = deviceRecognitionService;
         }
 
-        public async Task<IActionResult> Index()
+        [HttpGet]
+        public async Task<IActionResult> Index(string? master = "COMMON")
         {
-            // Lấy niên khóa hiện hành
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var workspace = await _navService.GetAuthorizedWorkspaceAsync(User, master);
 
-            int totalStudents = await _context.Students.CountAsync(s => s.IsActive);
-            int totalClasses = 0;
-            int totalEnrolled = 0;
+            // FEAT-P4-07: Tự động nhận diện (Detect) thiết bị đã tra cứu học sinh nào để hiển thị thông báo của lớp đó
+            workspace.DeviceStudentContext = await _deviceRecognitionService.DetectStudentsAndLoadAnnouncementsAsync(HttpContext);
 
-            if (currentYear != null)
-            {
-                totalClasses = await _context.Classes.CountAsync(c => c.AcademicYearId == currentYear.Id);
-                totalEnrolled = await _context.Enrollments.CountAsync(e => e.ClassRoom.AcademicYearId == currentYear.Id);
-            }
+            return View(workspace);
+        }
 
-            // Đếm số lượng đơn đăng ký tuyển sinh đang chờ BĐH xét duyệt (FEAT-P3-02)
-            int pendingRegistrations = await _context.StudentRegistrationRequests
-                .CountAsync(r => r.Status == "PENDING");
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult DetachRememberedStudent(string? studentCode)
+        {
+            _deviceRecognitionService.DetachStudentFromDevice(HttpContext, studentCode);
 
-            ViewBag.CurrentYearName = currentYear?.Name ?? "Chưa thiết lập";
-            ViewBag.TotalStudents = totalStudents;
-            ViewBag.TotalClasses = totalClasses;
-            ViewBag.TotalEnrolled = totalEnrolled;
-            ViewBag.PendingRegistrations = pendingRegistrations;
+            TempData["SuccessMessage"] = string.IsNullOrWhiteSpace(studentCode)
+                ? "Đã gỡ toàn bộ thông tin thiếu nhi ghi nhớ trên thiết bị này."
+                : $"Đã gỡ ghi nhớ mã thiếu nhi {studentCode} khỏi thiết bị.";
 
-            return View();
+            return RedirectToAction(nameof(Index), new { master = "COMMON" });
         }
 
         public IActionResult Privacy()

@@ -23,6 +23,7 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IAttendanceDisputeService _disputeService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<LookupController> _logger;
+        private readonly IDeviceStudentRecognitionService _deviceRecognitionService;
 
         public LookupController(
             ParishDbContext context,
@@ -30,11 +31,13 @@ namespace ManagerStudentCaltholic.Controllers
             IStudentCodeRolloverService codeRolloverService,
             IAttendanceDisputeService disputeService,
             IMemoryCache cache,
+            IDeviceStudentRecognitionService deviceRecognitionService,
             ILogger<LookupController> logger)
         {
             _context = context;
             _gradeService = gradeService;
             _codeRolloverService = codeRolloverService;
+            _deviceRecognitionService = deviceRecognitionService;
             _disputeService = disputeService;
             _cache = cache;
             _logger = logger;
@@ -130,6 +133,11 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
+
+            if (model.RememberOnDevice)
+            {
+                _deviceRecognitionService.RememberStudentOnDevice(HttpContext, student, enrollment?.ClassRoom);
+            }
 
             // 5. Thống kê số buổi Đi Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý + Nhật ký từng ngày (FEAT-P4-05)
             int totalSunMass = 0, attendedSunMass = 0, sunLinedUp = 0, sunPresent = 0, sunLate = 0, sunAbsent = 0;
@@ -467,6 +475,41 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             return Ok(new { success = true, message });
+        }
+
+        [HttpGet("QuickView")]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
+        public async Task<IActionResult> QuickView(string studentCode)
+        {
+            var remembered = _deviceRecognitionService.TryGetRememberedStudent(HttpContext, studentCode);
+            if (remembered == null)
+            {
+                TempData["ErrorMessage"] = "Phiên ghi nhớ trên thiết bị đã hết hạn hoặc đã được gỡ. Vui lòng nhập thông tin để tra cứu lại.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var student = await _context.Students
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == remembered.StudentId && s.IsActive);
+
+            if (student == null || string.IsNullOrWhiteSpace(student.ParentPhone))
+            {
+                return RedirectToAction(nameof(Index));
+            }
+
+            var digits = new string(student.ParentPhone.Where(char.IsDigit).ToArray());
+            if (digits.Length < 4)
+            {
+                return RedirectToAction(nameof(Index));
+            }
+
+            return await Search(new StudentLookupRequestDto
+            {
+                StudentCode = student.StudentCode,
+                DateOfBirth = student.DateOfBirth,
+                PhoneLast4Digits = digits[^4..],
+                RememberOnDevice = true
+            });
         }
 
         private static string GetVnDayShort(DayOfWeek dow) => dow switch
