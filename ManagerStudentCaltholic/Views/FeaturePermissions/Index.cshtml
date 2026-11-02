@@ -1,0 +1,168 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.FeaturePermissionManageViewModel
+@using ManagerStudentCaltholic.Models.Entities
+@{
+    ViewData["Title"] = "Phân Quyền Hiển Thị Nút Chức Năng (Master UI)";
+    var masterGroups = Model.Rules.GroupBy(r => r.MasterCode).ToList();
+    var allRoles = new[]
+    {
+        (Code: "ALL", Label: "Công khai (Mọi người)"),
+        (Code: UserRole.Admin, Label: "Admin"),
+        (Code: UserRole.SpiritualDirector, Label: "Cha Tuyên Úy"),
+        (Code: UserRole.ExecutiveBoard, Label: "Ban Điều Hành"),
+        (Code: UserRole.BranchHead, Label: "Trưởng Khối"),
+        (Code: UserRole.Teacher, Label: "Giáo Lý Viên")
+    };
+}
+@Html.AntiForgeryToken()
+
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-2 border-bottom">
+        <div>
+            <h4 class="fw-bold text-primary mb-1">
+                <i class="bi bi-sliders2-vertical me-2"></i>Cấu Hình Phân Quyền Hiển Thị Nút Chức Năng (Master UI)
+            </h4>
+            <p class="text-muted small mb-0">
+                Bật/tắt các nút chức năng trên thanh Master Taskbar và Trang chủ theo từng Vai trò hoặc giới hạn riêng cho các lớp Bí tích.
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Về Trang Chủ
+            </a>
+            <button type="button" id="btnSavePermRules" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm" onclick="saveAllFeaturePermissions()">
+                <i class="bi bi-floppy-fill me-1"></i> Lưu Toàn Bộ Cấu Hình
+            </button>
+        </div>
+    </div>
+
+    @foreach (var grp in masterGroups)
+    {
+        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+            <div class="card-header bg-dark text-white py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="fw-bold small text-uppercase">
+                    <i class="bi bi-folder2-open text-warning me-2"></i>Phân Khu Master: @grp.Key
+                </span>
+                <span class="badge bg-secondary">@grp.Count() nút chức năng</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3" style="width: 75px;">Thứ tự</th>
+                            <th style="min-width: 220px;">Nút Chức Năng</th>
+                            <th>Các Vai Trò Được Phép Hiển Thị</th>
+                            <th class="text-center" style="width: 150px;">Chỉ Lớp Bí Tích</th>
+                            <th style="width: 170px;">Giới Hạn ID Lớp</th>
+                            <th class="text-center pe-3" style="width: 100px;">Kích Hoạt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var rule in grp.OrderBy(r => r.SortOrder))
+                        {
+                            var activeRoles = rule.AllowedRolesCsv
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(s => s.Trim())
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                            <tr class="perm-rule-row" data-rule-id="@rule.Id">
+                                <td class="ps-3">
+                                    <input type="number" class="form-control form-control-sm text-center inp-sort-order" value="@rule.SortOrder" min="1" max="99" />
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">
+                                        <i class="bi @rule.IconClass text-@rule.BadgeColor me-1"></i>@rule.DisplayName
+                                    </div>
+                                    <small class="text-muted font-monospace">@rule.FeatureCode &rarr; @rule.TargetUrl</small>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var rl in allRoles)
+                                        {
+                                            bool isChecked = activeRoles.Contains(rl.Code);
+                                            <div class="form-check form-check-inline m-0">
+                                                <input class="form-check-input chk-role" type="checkbox" value="@rl.Code"
+                                                       id="role_@(rule.Id)_@(rl.Code)" @(isChecked ? "checked" : "") />
+                                                <label class="form-check-label" for="role_@(rule.Id)_@(rl.Code)">@rl.Label</label>
+                                            </div>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <div class="form-check form-switch d-inline-block mb-0">
+                                        <input class="form-check-input chk-sacrament-only" type="checkbox"
+                                               @(rule.SacramentClassesOnly ? "checked" : "")
+                                               title="Chỉ hiện cho GLV dạy lớp RL2, TS3, BĐ3, DB4" />
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm inp-specific-classes font-monospace"
+                                           value="@rule.SpecificClassIdsCsv" placeholder="VD: 12,15 (Tùy chọn)" />
+                                </td>
+                                <td class="text-center pe-3">
+                                    <div class="form-check form-switch d-inline-block mb-0">
+                                        <input class="form-check-input chk-is-enabled" type="checkbox" @(rule.IsEnabled ? "checked" : "") />
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        function getCsrfToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        async function saveAllFeaturePermissions() {
+            const payload = [];
+            document.querySelectorAll('.perm-rule-row').forEach(row => {
+                const id = parseInt(row.getAttribute('data-rule-id'));
+                const sortOrder = parseInt(row.querySelector('.inp-sort-order').value) || 1;
+                const sacOnly = row.querySelector('.chk-sacrament-only').checked;
+                const specificCsv = row.querySelector('.inp-specific-classes').value.trim();
+                const isEnabled = row.querySelector('.chk-is-enabled').checked;
+
+                const roles = [];
+                row.querySelectorAll('.chk-role:checked').forEach(chk => roles.push(chk.value));
+
+                payload.push({
+                    id: id,
+                    allowedRoles: roles,
+                    sacramentClassesOnly: sacOnly,
+                    specificClassIdsCsv: specificCsv,
+                    isEnabled: isEnabled,
+                    sortOrder: sortOrder
+                });
+            });
+
+            const btn = document.getElementById('btnSavePermRules');
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/FeaturePermissions/SaveBatch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                alert(data.message);
+                if (res.ok && data.success) {
+                    location.reload();
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ: ' + err.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+}

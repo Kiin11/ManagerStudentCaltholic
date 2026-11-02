@@ -103,12 +103,12 @@ namespace ManagerStudentCaltholic.Extensions
             // Bổ sung vào Program.cs (cùng cụm đăng ký dịch vụ trước dòng var app = builder.Build();):
             services.AddSingleton<SystemMetricsCollector>();
             services.AddScoped<IRedisAttendanceService, RedisAttendanceService>();
-
             services.AddScoped<IMassCampaignService, MassCampaignService>();
             services.AddScoped<IClassEvaluationService, ClassEvaluationService>();
-
             services.AddScoped<IStudentCodeRolloverService, StudentCodeRolloverService>();
             services.AddScoped<IAttendanceDisputeService, AttendanceDisputeService>();
+            services.AddScoped<IFeatureNavigationService, FeatureNavigationService>();
+            services.AddScoped<IDeviceStudentRecognitionService, DeviceStudentRecognitionService>();
 
             return services;
         }

@@ -61,6 +61,7 @@ namespace ManagerStudentCaltholic.Data
         // --- Student Code History (Phase 3: FEAT-P4-04) ---
         public DbSet<StudentCodeHistory> StudentCodeHistories => Set<StudentCodeHistory>();
         public DbSet<AttendanceDisputeRequest> AttendanceDisputeRequests => Set<AttendanceDisputeRequest>();
+        public DbSet<FeaturePermissionRule> FeaturePermissionRules => Set<FeaturePermissionRule>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -663,6 +664,14 @@ namespace ManagerStudentCaltholic.Data
                       .WithMany()
                       .HasForeignKey(d => d.CampaignId)
                       .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<FeaturePermissionRule>(entity =>
+            {
+                entity.ToTable("FeaturePermissionRules");
+                entity.HasKey(r => r.Id);
+                entity.HasIndex(r => r.FeatureCode).IsUnique();
+                entity.HasIndex(r => new { r.MasterCode, r.IsEnabled, r.SortOrder });
             });
         }
 
