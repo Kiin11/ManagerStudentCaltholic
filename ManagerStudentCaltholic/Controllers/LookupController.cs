@@ -6,7 +6,7 @@ using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting; // SEC-07 FIX: Thêm RateLimiting
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using QRCoder;
@@ -19,22 +19,25 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly IGradeCalculationService _gradeService;
+        private readonly IStudentCodeRolloverService _codeRolloverService;
+        private readonly IAttendanceDisputeService _disputeService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<LookupController> _logger;
-        private readonly IStudentCodeRolloverService _codeRolloverService;
 
         public LookupController(
             ParishDbContext context,
             IGradeCalculationService gradeService,
-            IMemoryCache cache,
             IStudentCodeRolloverService codeRolloverService,
+            IAttendanceDisputeService disputeService,
+            IMemoryCache cache,
             ILogger<LookupController> logger)
         {
             _context = context;
             _gradeService = gradeService;
+            _codeRolloverService = codeRolloverService;
+            _disputeService = disputeService;
             _cache = cache;
             _logger = logger;
-            _codeRolloverService = codeRolloverService;
         }
 
         // GET: /TraCuu
@@ -47,7 +50,7 @@ namespace ManagerStudentCaltholic.Controllers
         // POST: /TraCuu/Search
         [HttpPost("Search")]
         [ValidateAntiForgeryToken]
-        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)] // SEC-07 FIX: Giới hạn tối đa 10 request/phút/IP cho cả tra cứu đúng và sai
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
         public async Task<IActionResult> Search([FromForm] StudentLookupRequestDto model)
         {
             if (!ModelState.IsValid)
@@ -73,8 +76,9 @@ namespace ManagerStudentCaltholic.Controllers
             var startDob = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
             var endDob = startDob.AddDays(1);
 
-            // 2. Tìm kiếm học sinh khớp Mã HS và Ngày Sinh
-            var (resolvedStudent, isHistoricalCode, matchedOldCode) = await _codeRolloverService.ResolveStudentByAnyCodeAsync(cleanCode);
+            // 2. Tìm học sinh theo mã hiện hành hoặc mã lịch sử năm cũ (FEAT-P4-04)
+            var (resolvedStudent, isHistoricalCode, matchedOldCode) =
+                await _codeRolloverService.ResolveStudentByAnyCodeAsync(cleanCode);
 
             Student? student = null;
             if (resolvedStudent != null &&
@@ -83,11 +87,6 @@ namespace ManagerStudentCaltholic.Controllers
                 resolvedStudent.IsActive)
             {
                 student = resolvedStudent;
-            }
-
-            if (student != null && isHistoricalCode)
-            {
-                ViewBag.CodeRolloverNotice = $"Bạn vừa tra cứu bằng mã năm học cũ ({matchedOldCode}). Mã định danh hiện hành của em là: {student.StudentCode}.";
             }
 
             // 3. Kiểm tra khớp 4 số cuối SĐT Phụ huynh
@@ -103,7 +102,6 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (student == null || !isPhoneValid)
             {
-                // Tăng bộ đếm lỗi trên cả IP và Mã thiếu nhi
                 _cache.Set(ipRateKey, ipFailed + 1, TimeSpan.FromMinutes(15));
                 _cache.Set(studentRateKey, codeFailed + 1, TimeSpan.FromMinutes(30));
 
@@ -112,15 +110,18 @@ namespace ManagerStudentCaltholic.Controllers
                 return View("Index", model);
             }
 
-            // Xóa bộ đếm lỗi khi xác thực thành công
             _cache.Remove(ipRateKey);
             _cache.Remove(studentRateKey);
 
-            // 3. Lấy niên khóa hiện hành
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent)
-                           ?? await _context.AcademicYears.OrderByDescending(y => y.StartDate).FirstOrDefaultAsync();
+            if (isHistoricalCode)
+            {
+                ViewBag.CodeRolloverNotice = $"Bạn vừa tra cứu bằng mã năm học cũ ({matchedOldCode}). Mã thiếu nhi hiện hành trong niên khóa mới của em là: {student.StudentCode}.";
+            }
 
-            // 4. Lấy lớp học hiện tại của học sinh
+            // 4. Lấy niên khóa hiện hành & lớp học của thiếu nhi
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent)
+                           ?? await _context.AcademicYears.AsNoTracking().OrderByDescending(y => y.StartDate).FirstOrDefaultAsync();
+
             var enrollment = await _context.Enrollments
                 .Include(e => e.ClassRoom)
                     .ThenInclude(c => c.ClassTeachers)
@@ -130,43 +131,191 @@ namespace ManagerStudentCaltholic.Controllers
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
 
-            // 5. Thống kê số buổi Đi Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý (Bỏ tính %)
+            // 5. Thống kê số buổi Đi Lễ Chúa Nhật, Lễ Thứ Năm & Học Giáo Lý + Nhật ký từng ngày (FEAT-P4-05)
             int totalSunMass = 0, attendedSunMass = 0, sunLinedUp = 0, sunPresent = 0, sunLate = 0, sunAbsent = 0;
             int totalThuMass = 0, attendedThuMass = 0, thuAbsent = 0;
             int totalClass = 0, attendedClass = 0, classPresent = 0, classLate = 0, classAbsent = 0;
+
+            var dayLogs = new List<AttendanceDayLogItem>();
+            MassCampaignLookupSummary? activeCampaignSummary = null;
+            var submittedDisputes = new List<DisputeHistoryItemDto>();
 
             if (enrollment != null)
             {
                 var attendances = await _context.Attendances
                     .Where(a => a.EnrollmentId == enrollment.Id)
+                    .OrderByDescending(a => a.AttendanceDate)
                     .AsNoTracking()
                     .ToListAsync();
+
+                var disputes = await _context.AttendanceDisputeRequests
+                    .Where(d => d.EnrollmentId == enrollment.Id)
+                    .OrderByDescending(d => d.CreatedAt)
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                submittedDisputes = disputes.Select(d => new DisputeHistoryItemDto
+                {
+                    Id = d.Id,
+                    AttendanceDate = d.AttendanceDate,
+                    SessionScope = d.SessionScope,
+                    SessionScopeLabel = AttendanceDisputeService.GetScopeDisplayLabel(d.SessionScope),
+                    CurrentRecordedStatus = d.CurrentRecordedStatus,
+                    RequestedStatus = d.RequestedStatus,
+                    Reason = d.Reason,
+                    Status = d.Status,
+                    TeacherResponseNote = d.TeacherResponseNote,
+                    ReviewedBy = d.ReviewedBy,
+                    CreatedAt = d.CreatedAt,
+                    ReviewedAt = d.ReviewedAt
+                }).ToList();
 
                 // 5.1. Thánh Lễ Chúa Nhật
                 var sunRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Sunday).ToList();
                 totalSunMass = sunRecords.Count;
-                attendedSunMass = sunRecords.Count(a => a.AttendedMass);
+                attendedSunMass = sunRecords.Count(a => a.AttendedMass || a.IsMakeUp);
                 sunLinedUp = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp);
                 sunLate = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
-                // Đảm bảo mọi buổi có AttendedMass = true (ngoài XH và Trễ) đều được tính vào Có mặt
                 sunPresent = Math.Max(0, attendedSunMass - sunLinedUp - sunLate);
                 sunAbsent = Math.Max(0, totalSunMass - attendedSunMass);
 
                 // 5.2. Thánh Lễ Thứ Năm
                 var thuRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Thursday).ToList();
                 totalThuMass = thuRecords.Count;
-                attendedThuMass = thuRecords.Count(a => a.AttendedMass);
+                attendedThuMass = thuRecords.Count(a => a.AttendedMass || a.IsMakeUp);
                 thuAbsent = Math.Max(0, totalThuMass - attendedThuMass);
 
                 // 5.3. Giờ Học Giáo Lý (Chúa Nhật)
                 totalClass = sunRecords.Count;
-                attendedClass = sunRecords.Count(a => a.ClassAttended);
+                attendedClass = sunRecords.Count(a => a.ClassAttended || a.IsMakeUp);
                 classLate = sunRecords.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
                 classPresent = Math.Max(0, attendedClass - classLate);
                 classAbsent = Math.Max(0, totalClass - attendedClass);
+
+                // 5.4. Xây dựng Nhật ký chi tiết từng ngày sinh hoạt
+                foreach (var att in attendances)
+                {
+                    var dateOnly = att.AttendanceDate.Date;
+                    var massDispute = disputes.FirstOrDefault(d =>
+                        d.AttendanceDate.Date == dateOnly &&
+                        (d.SessionScope == "REGULAR_MASS_SUN" || d.SessionScope == "REGULAR_MASS_THU"));
+
+                    var classDispute = disputes.FirstOrDefault(d =>
+                        d.AttendanceDate.Date == dateOnly &&
+                        d.SessionScope == "REGULAR_CLASS");
+
+                    dayLogs.Add(new AttendanceDayLogItem
+                    {
+                        AttendanceId = att.Id,
+                        Date = dateOnly,
+                        DayLabel = att.DayOfWeek == DayOfWeek.Sunday
+                            ? "Chúa Nhật"
+                            : (att.DayOfWeek == DayOfWeek.Thursday ? "Thứ Năm" : GetVnDayShort(att.DayOfWeek)),
+                        IsCampaignDay = false,
+                        AttendedMass = att.AttendedMass || att.IsMakeUp,
+                        MassStatus = att.IsMakeUp ? "MAKE_UP" : att.MassStatus,
+                        MassCheckInTime = att.MassCheckInTime.HasValue ? att.MassCheckInTime.Value.ToString(@"hh\:mm") : null,
+                        HasClassSession = att.DayOfWeek == DayOfWeek.Sunday,
+                        AttendedClass = att.ClassAttended || att.IsMakeUp,
+                        ClassStatus = att.IsMakeUp ? "MAKE_UP" : att.ClassStatus,
+                        ClassCheckInTime = att.ClassCheckInTime.HasValue ? att.ClassCheckInTime.Value.ToString(@"hh\:mm") : null,
+                        IsMakeUp = att.IsMakeUp,
+                        Note = att.Note,
+                        MassCorrectionStatus = massDispute?.Status,
+                        ClassCorrectionStatus = classDispute?.Status,
+                        TeacherNote = massDispute?.TeacherResponseNote ?? classDispute?.TeacherResponseNote
+                    });
+                }
+
+                // 5.5. Nạp Lịch Chiến dịch đi lễ 1 tháng (nếu lớp có chiến dịch)
+                if (currentYear != null)
+                {
+                    var activeCampaign = await _context.MassCampaigns
+                        .AsNoTracking()
+                        .Where(mc => mc.ClassRoomId == enrollment.ClassRoomId && mc.AcademicYearId == currentYear.Id)
+                        .OrderByDescending(mc => mc.Status == "ACTIVE")
+                        .ThenByDescending(mc => mc.StartDate)
+                        .FirstOrDefaultAsync();
+
+                    if (activeCampaign != null)
+                    {
+                        var campRecords = await _context.MassCampaignRecords
+                            .AsNoTracking()
+                            .Where(r => r.CampaignId == activeCampaign.Id && r.EnrollmentId == enrollment.Id)
+                            .ToDictionaryAsync(r => r.AttendanceDate.Date.ToString("yyyy-MM-dd"));
+
+                        var allowedDays = activeCampaign.ApplicableDaysCsv
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(s => int.TryParse(s.Trim(), out int d) ? d : -1)
+                            .Where(d => d >= 0 && d <= 6)
+                            .ToHashSet();
+
+                        if (!allowedDays.Any())
+                        {
+                            allowedDays = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6 };
+                        }
+
+                        activeCampaignSummary = new MassCampaignLookupSummary
+                        {
+                            CampaignId = activeCampaign.Id,
+                            CampaignName = activeCampaign.Title,
+                            Description = activeCampaign.Description,
+                            StartDate = activeCampaign.StartDate,
+                            EndDate = activeCampaign.EndDate,
+                            TargetDaysCount = activeCampaign.TargetDaysCount
+                        };
+
+                        var todayVn = DateTime.UtcNow.AddHours(7).Date;
+                        int runningStreak = 0, maxStreak = 0, currentStreak = 0;
+
+                        for (var dt = activeCampaign.StartDate.Date; dt <= activeCampaign.EndDate.Date; dt = dt.AddDays(1))
+                        {
+                            if (!allowedDays.Contains((int)dt.DayOfWeek))
+                                continue;
+
+                            var key = dt.ToString("yyyy-MM-dd");
+                            campRecords.TryGetValue(key, out var cRec);
+                            var campDispute = disputes.FirstOrDefault(d =>
+                                d.AttendanceDate.Date == dt && d.SessionScope == "CAMPAIGN_MASS");
+
+                            string st = cRec?.Status ?? (dt > todayVn ? "FUTURE" : "ABSENT");
+                            bool attended = st == "PRESENT" || st == "LATE";
+
+                            if (st == "PRESENT") { activeCampaignSummary.AttendedDays++; runningStreak++; }
+                            else if (st == "LATE") { activeCampaignSummary.AttendedDays++; activeCampaignSummary.LateDays++; runningStreak++; }
+                            else if (st == "EXCUSED") { activeCampaignSummary.ExcusedDays++; }
+                            else if (dt <= todayVn) { activeCampaignSummary.AbsentDays++; runningStreak = 0; }
+
+                            if (runningStreak > maxStreak) maxStreak = runningStreak;
+                            if (dt <= todayVn) currentStreak = runningStreak;
+
+                            activeCampaignSummary.CampaignDays.Add(new AttendanceDayLogItem
+                            {
+                                AttendanceId = cRec?.Id,
+                                Date = dt,
+                                DayLabel = $"{GetVnDayShort(dt.DayOfWeek)}",
+                                IsCampaignDay = true,
+                                CampaignId = activeCampaign.Id,
+                                AttendedMass = attended,
+                                MassStatus = st,
+                                MassCheckInTime = cRec?.CheckInTime?.AddHours(7).ToString("HH:mm"),
+                                HasClassSession = false,
+                                Note = cRec?.Note,
+                                MassCorrectionStatus = campDispute?.Status,
+                                TeacherNote = campDispute?.TeacherResponseNote
+                            });
+                        }
+
+                        activeCampaignSummary.TotalDays = activeCampaignSummary.CampaignDays.Count;
+                        activeCampaignSummary.CurrentStreak = currentStreak;
+                        activeCampaignSummary.MaxStreak = maxStreak;
+                        activeCampaignSummary.CompletionPercentage = activeCampaign.TargetDaysCount > 0
+                            ? Math.Min(100.0, Math.Round(activeCampaignSummary.AttendedDays * 100.0 / activeCampaign.TargetDaysCount, 1))
+                            : 0.0;
+                    }
+                }
             }
 
-            // Tính tỷ lệ % (Đi trễ tính hệ số 0.8 đồng bộ với AttendanceController.Statistics)
             var sunMassRate = totalSunMass > 0
                 ? Math.Min(100.0, Math.Round(((sunLinedUp + sunPresent + sunLate * 0.8) / (double)totalSunMass) * 100, 1))
                 : 100.0;
@@ -175,9 +324,8 @@ namespace ManagerStudentCaltholic.Controllers
                 ? Math.Min(100.0, Math.Round((attendedThuMass / (double)totalThuMass) * 100, 1))
                 : 0.0;
 
-            var classPresentOnTime = Math.Max(0, attendedClass - classLate);
             var classRate = totalClass > 0
-                ? Math.Min(100.0, Math.Round(((classPresentOnTime + classLate * 0.8) / (double)totalClass) * 100, 1))
+                ? Math.Min(100.0, Math.Round(((classPresent + classLate * 0.8) / (double)totalClass) * 100, 1))
                 : 100.0;
 
             var combinedAttendanceRate = Math.Round((sunMassRate + classRate) / 2.0, 1);
@@ -196,7 +344,6 @@ namespace ManagerStudentCaltholic.Controllers
                     .AsNoTracking()
                     .ToListAsync();
 
-                // Điểm HK1
                 var hk1Configs = gradeConfigs.Where(g => g.Semester == 1).ToList();
                 var hk1Scores = new Dictionary<int, decimal?>();
                 foreach (var cfg in hk1Configs)
@@ -215,7 +362,6 @@ namespace ManagerStudentCaltholic.Controllers
                 hk1Detail.SemesterAverage = _gradeService.CalculateSemesterAverage(hk1Scores, hk1Configs);
                 hk1Detail.Rank = _gradeService.EvaluateStudent(hk1Detail.SemesterAverage, combinedAttendanceRate, enrollment.ClassRoom.GradeLevel, 1).AcademicRank;
 
-                // Điểm HK2
                 var hk2Configs = gradeConfigs.Where(g => g.Semester == 2).ToList();
                 var hk2Scores = new Dictionary<int, decimal?>();
                 foreach (var cfg in hk2Configs)
@@ -236,21 +382,19 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var yearAverage = _gradeService.CalculateYearAverage(hk1Detail.SemesterAverage, hk2Detail.SemesterAverage);
-            var (overallRank, _) = _gradeService.EvaluateStudent(yearAverage, combinedAttendanceRate, enrollment?.ClassRoom?.GradeLevel ?? "ALL", 0);
-
-            string qrBase64 = GenerateQrBase64(student.StudentCode);
+            var (overallRank, isSacramentEligible) = _gradeService.EvaluateStudent(yearAverage, combinedAttendanceRate, enrollment?.ClassRoom?.GradeLevel ?? "ALL", 0);
 
             var result = new StudentLookupResultViewModel
             {
                 StudentId = student.Id,
+                EnrollmentId = enrollment?.Id ?? 0,
+                ClassRoomId = enrollment?.ClassRoomId ?? 0,
                 StudentCode = student.StudentCode,
                 ChristianName = student.ChristianName,
                 FullName = $"{student.FirstName} {student.LastName}".Trim(),
                 Gender = student.Gender ?? "Nam",
                 DateOfBirth = student.DateOfBirth,
-
                 MaskedParentPhone = MaskPhoneNumber(student.ParentPhone),
-
                 ClassName = enrollment?.ClassRoom?.Name ?? "Chưa xếp lớp",
                 GradeLevel = enrollment?.ClassRoom?.GradeLevel ?? "Chưa có",
                 AcademicYearName = currentYear?.Name ?? "",
@@ -275,6 +419,7 @@ namespace ManagerStudentCaltholic.Controllers
                 // Học Giáo Lý
                 TotalClassSessions = totalClass,
                 AttendedClassCount = attendedClass,
+                ClassPresentCount = classPresent,
                 ClassLateCount = classLate,
                 ClassAbsentCount = classAbsent,
                 ClassAttendanceRate = classRate,
@@ -288,12 +433,53 @@ namespace ManagerStudentCaltholic.Controllers
                 HK2 = hk2Detail,
                 YearAverage = yearAverage,
                 OverallRank = overallRank,
-                IsEligibleForSacrament = false, // Tạm để false theo yêu cầu
-                QrCodeBase64 = qrBase64
+                IsEligibleForSacrament = isSacramentEligible,
+                QrCodeBase64 = GenerateQrBase64(student.StudentCode),
+
+                // FEAT-P4-05
+                ActiveCampaign = activeCampaignSummary,
+                AttendanceHistoryLogs = dayLogs,
+                SubmittedDisputes = submittedDisputes
             };
 
             return View("Result", result);
         }
+
+        // POST: /TraCuu/SubmitDispute (FEAT-P4-05)
+        [HttpPost("SubmitDispute")]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
+        public async Task<IActionResult> SubmitDispute([FromBody] SubmitAttendanceDisputeRequestDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                var firstErr = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage
+                               ?? "Vui lòng điền đầy đủ thông tin và 4 số cuối SĐT Phụ huynh.";
+                return BadRequest(new { success = false, message = firstErr });
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var (success, message) = await _disputeService.SubmitDisputeFromParentAsync(dto, ip);
+
+            if (!success)
+            {
+                return BadRequest(new { success = false, message });
+            }
+
+            return Ok(new { success = true, message });
+        }
+
+        private static string GetVnDayShort(DayOfWeek dow) => dow switch
+        {
+            DayOfWeek.Sunday => "CN",
+            DayOfWeek.Monday => "T2",
+            DayOfWeek.Tuesday => "T3",
+            DayOfWeek.Wednesday => "T4",
+            DayOfWeek.Thursday => "T5",
+            DayOfWeek.Friday => "T6",
+            DayOfWeek.Saturday => "T7",
+            _ => ""
+        };
 
         private static string GenerateQrBase64(string studentCode)
         {
@@ -316,7 +502,7 @@ namespace ManagerStudentCaltholic.Controllers
             if (string.IsNullOrWhiteSpace(phone)) return "Chưa cập nhật";
             var clean = phone.Trim();
             if (clean.Length <= 6) return "******";
-            return $"{clean[..3]}****{clean[^3..]}"; // Ví dụ: 091****678
+            return $"{clean[..3]}****{clean[^3..]}";
         }
     }
 }

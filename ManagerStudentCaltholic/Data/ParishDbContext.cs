@@ -60,6 +60,7 @@ namespace ManagerStudentCaltholic.Data
 
         // --- Student Code History (Phase 3: FEAT-P4-04) ---
         public DbSet<StudentCodeHistory> StudentCodeHistories => Set<StudentCodeHistory>();
+        public DbSet<AttendanceDisputeRequest> AttendanceDisputeRequests => Set<AttendanceDisputeRequest>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -633,6 +634,35 @@ namespace ManagerStudentCaltholic.Data
                       .WithMany()
                       .HasForeignKey(h => h.SourceAcademicYearId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<AttendanceDisputeRequest>(entity =>
+            {
+                entity.ToTable("AttendanceDisputeRequests");
+                entity.HasKey(d => d.Id);
+
+                entity.HasIndex(d => new { d.ClassRoomId, d.Status, d.CreatedAt });
+                entity.HasIndex(d => new { d.EnrollmentId, d.AttendanceDate, d.SessionScope });
+
+                entity.HasOne(d => d.Enrollment)
+                      .WithMany()
+                      .HasForeignKey(d => d.EnrollmentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(d => d.Student)
+                      .WithMany()
+                      .HasForeignKey(d => d.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(d => d.ClassRoom)
+                      .WithMany()
+                      .HasForeignKey(d => d.ClassRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(d => d.Campaign)
+                      .WithMany()
+                      .HasForeignKey(d => d.CampaignId)
+                      .OnDelete(DeleteBehavior.SetNull);
             });
         }
 
