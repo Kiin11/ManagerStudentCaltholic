@@ -356,6 +356,23 @@
                         <span class="badge bg-secondary rounded-pill fs-6" id="modalCountSkip">0</span>
                     </li>
                 </ul>
+                <div class="mb-3 p-3 rounded-3 bg-light border">
+                    <label class="form-label fw-bold small text-primary mb-2">
+                        <i class="bi bi-upc-scan me-1"></i>Chế độ chuyển đổi Mã Thiếu Nhi (StudentCode) khi đổi năm học (FEAT-P4-04):
+                    </label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="codeTransitionMode" id="modeSuffixOnly" value="SUFFIX_ONLY" checked />
+                        <label class="form-check-label small" for="modeSuffixOnly">
+                            <strong>Chuyển StudentCode thành dạng gắn đuôi năm học cũ</strong> (VD: <code>TS3A001</code> &rarr; <code>TS3A001_2526</code>)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="codeTransitionMode" id="modeSuffixAndNew" value="SUFFIX_AND_NEW_CLASS_CODE" />
+                        <label class="form-check-label small" for="modeSuffixAndNew">
+                            <strong>Lưu mã gắn đuôi năm học cũ vào Lịch sử &amp; Cấp mã mới theo tên lớp mới</strong> (VD: Lưu <code>TS2A001_2526</code>, cấp mới <code>TS3A001</code>)
+                        </label>
+                    </div>
+                </div>
                 <div class="alert alert-info small mb-0">
                     <i class="bi bi-shield-lock-fill me-1"></i> Toàn bộ tiến trình được bảo vệ bằng giao dịch <strong>ACID Transaction</strong>. Nếu có bất kỳ lỗi nào xảy ra, dữ liệu sẽ được hoàn tác nguyên trạng.
                 </div>
@@ -516,5 +533,15 @@
                 btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Xác Nhận Thực Thi';
             }
         }
+
+        const selectedMode = document.querySelector('input[name="codeTransitionMode"]:checked')?.value || 'SUFFIX_ONLY';
+        const payload = {
+            sourceAcademicYearId: @Model.SourceYearId,
+            sourceClassId: @Model.SelectedClassId,
+            targetAcademicYearId: @Model.TargetYearId,
+            useSmartBalancing: document.getElementById('chkSmartBalancing').checked,
+            codeTransitionMode: selectedMode,
+            decisions: decisions
+        };
     </script>
 }

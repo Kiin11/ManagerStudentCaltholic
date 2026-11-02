@@ -18,6 +18,14 @@ namespace ManagerStudentCaltholic.Models.DTOs
         /// </summary>
         public bool UseSmartBalancing { get; set; } = true;
 
+        /// <summary>
+        /// FEAT-P4-04:
+        /// - "SUFFIX_ONLY": Chuyển StudentCode hiện tại thành dạng gắn đuôi năm học cũ (VD: TS3A001 -> TS3A001_2526)
+        /// - "SUFFIX_AND_NEW_CLASS_CODE": Lưu mã gắn đuôi năm cũ (_2526) vào lịch sử & cấp mã mới theo tên lớp mới
+        /// </summary>
+        [MaxLength(40)]
+        public string CodeTransitionMode { get; set; } = "SUFFIX_ONLY";
+
         [Required]
         public List<StudentRolloverDecisionDto> Decisions { get; set; } = new();
     }
