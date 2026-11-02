@@ -1,6 +1,7 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -20,17 +21,20 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IGradeCalculationService _gradeService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<LookupController> _logger;
+        private readonly IStudentCodeRolloverService _codeRolloverService;
 
         public LookupController(
             ParishDbContext context,
             IGradeCalculationService gradeService,
             IMemoryCache cache,
+            IStudentCodeRolloverService codeRolloverService,
             ILogger<LookupController> logger)
         {
             _context = context;
             _gradeService = gradeService;
             _cache = cache;
             _logger = logger;
+            _codeRolloverService = codeRolloverService;
         }
 
         // GET: /TraCuu
@@ -70,11 +74,21 @@ namespace ManagerStudentCaltholic.Controllers
             var endDob = startDob.AddDays(1);
 
             // 2. Tìm kiếm học sinh khớp Mã HS và Ngày Sinh
-            var student = await _context.Students
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode &&
-                                          s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
-                                          s.IsActive);
+            var (resolvedStudent, isHistoricalCode, matchedOldCode) = await _codeRolloverService.ResolveStudentByAnyCodeAsync(cleanCode);
+
+            Student? student = null;
+            if (resolvedStudent != null &&
+                resolvedStudent.DateOfBirth >= startDob &&
+                resolvedStudent.DateOfBirth < endDob &&
+                resolvedStudent.IsActive)
+            {
+                student = resolvedStudent;
+            }
+
+            if (student != null && isHistoricalCode)
+            {
+                ViewBag.CodeRolloverNotice = $"Bạn vừa tra cứu bằng mã năm học cũ ({matchedOldCode}). Mã định danh hiện hành của em là: {student.StudentCode}.";
+            }
 
             // 3. Kiểm tra khớp 4 số cuối SĐT Phụ huynh
             bool isPhoneValid = false;

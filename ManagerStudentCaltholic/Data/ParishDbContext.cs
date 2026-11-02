@@ -57,7 +57,10 @@ namespace ManagerStudentCaltholic.Data
         // --- Mass Campaign (Phase 3: FEAT-P4-01) ---
         public DbSet<MassCampaign> MassCampaigns => Set<MassCampaign>();
         public DbSet<MassCampaignRecord> MassCampaignRecords => Set<MassCampaignRecord>();
-        
+
+        // --- Student Code History (Phase 3: FEAT-P4-04) ---
+        public DbSet<StudentCodeHistory> StudentCodeHistories => Set<StudentCodeHistory>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -610,6 +613,26 @@ namespace ManagerStudentCaltholic.Data
                       .WithMany()
                       .HasForeignKey(r => r.EnrollmentId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<StudentCodeHistory>(entity =>
+            {
+                entity.ToTable("StudentCodeHistories");
+                entity.HasKey(h => h.Id);
+
+                entity.HasIndex(h => h.OriginalCode);
+                entity.HasIndex(h => h.ArchivedYearCode);
+                entity.HasIndex(h => new { h.StudentId, h.SourceAcademicYearId });
+
+                entity.HasOne(h => h.Student)
+                      .WithMany()
+                      .HasForeignKey(h => h.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(h => h.SourceAcademicYear)
+                      .WithMany()
+                      .HasForeignKey(h => h.SourceAcademicYearId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
         }
 

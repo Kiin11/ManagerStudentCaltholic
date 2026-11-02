@@ -7,7 +7,7 @@ namespace ManagerStudentCaltholic.Models.Entities
     {
         public long Id { get; set; }
 
-        [Required, MaxLength(20)]
+        [Required, MaxLength(50)]
         public string StudentCode { get; set; } = string.Empty;
 
         [Required, MaxLength(50)]

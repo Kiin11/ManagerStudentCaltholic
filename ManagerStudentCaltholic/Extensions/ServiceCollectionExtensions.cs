@@ -107,6 +107,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IMassCampaignService, MassCampaignService>();
             services.AddScoped<IClassEvaluationService, ClassEvaluationService>();
 
+            services.AddScoped<IStudentCodeRolloverService, StudentCodeRolloverService>();
+
             return services;
         }
 
