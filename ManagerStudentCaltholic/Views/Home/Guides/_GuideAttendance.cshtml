@@ -1,0 +1,117 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+
+<div class="guide-container shadow-sm p-3 p-md-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-4 border-bottom">
+        <div>
+            <span class="badge bg-success-subtle text-success border rounded-pill px-3 py-1 mb-1">
+                <i class="bi bi-qr-code-scan me-1"></i>Cẩm Nang Tác Nghiệp — Phân Khu 2: Điểm Danh & Chuyên Cần
+            </span>
+            <h5 class="fw-bold text-dark mb-0">Quy Trình Quét QR, Sổ Điểm Danh Lớp, Duyệt Đơn & Chiến Dịch Lễ 1 Tháng</h5>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Attendance/ScanQr" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-qr-code-scan me-1"></i> Mở Cổng Quét QR
+            </a>
+            <a href="/Attendance/Index" class="btn btn-outline-success btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-card-checklist me-1"></i> Mở Sổ Điểm Danh Lớp
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-primary text-white">01</span>
+                        <span class="badge bg-primary-subtle text-primary border">Cổng Nhà Thờ</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Quét QR Điểm Danh (Online & Offline)</h6>
+                    <p class="small text-secondary mb-2">
+                        Mở camera điện thoại hoặc dùng máy quét USB. Hệ thống tự động nhận diện cả thẻ QR mới lẫn thẻ năm học cũ (có đuôi <code>_2526</code>).
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-wifi-off text-warning me-1"></i>Nếu mất mạng, dữ liệu tự lưu vào <strong>IndexedDB</strong> trên máy và đồng bộ ngay khi có mạng.
+                    </div>
+                </div>
+                <a href="/Attendance/ScanQr" class="btn btn-sm btn-outline-primary rounded-pill w-100 fw-semibold">
+                    Bắt đầu Quét QR <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-success text-white">02</span>
+                        <span class="badge bg-success-subtle text-success border">Tại Lớp Học</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Sổ Điểm Danh Lớp & Duyệt Báo Sai Sót</h6>
+                    <p class="small text-secondary mb-2">
+                        GLV kiểm tra lại danh sách lớp trên Redis tốc độ cao, tích chọn nhanh và bấm <strong>Lưu Điểm Danh</strong>.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-flag-fill text-danger me-1"></i>Bấm nút <strong>Duyệt Báo Sai Sót PH</strong> ngay trên sổ lớp để xử lý khiếu nại điểm danh của phụ huynh.
+                    </div>
+                </div>
+                <a href="/Attendance/Index" class="btn btn-sm btn-outline-success rounded-pill w-100 fw-semibold">
+                    Vào Sổ Điểm Danh <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-danger text-white">03</span>
+                        <span class="badge bg-danger-subtle text-danger border">Lớp RL2, TS3, BĐ3, DB4</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Chiến Dịch Đi Lễ 1 Tháng (Lớp Bí Tích)</h6>
+                    <p class="small text-secondary mb-2">
+                        Thiết lập đợt đi lễ 28–31 ngày liên tục trước kỳ lãnh Bí tích / Tuyên hứa. Điểm danh bằng lưới 30 ngày hoặc quét QR chiến dịch.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-fire text-danger me-1"></i>Tự động tính chuỗi ngày đi lễ liên tiếp (<strong>Streak</strong>) và kết nối thẳng vào xét duyệt cuối năm.
+                    </div>
+                </div>
+                <a href="/MassCampaigns/Index" class="btn btn-sm btn-outline-danger rounded-pill w-100 fw-semibold">
+                    Mở Chiến Dịch Lễ <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-info text-dark">04</span>
+                        <span class="badge bg-info-subtle text-dark border">Đơn phép & Báo cáo</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Duyệt Đơn Nghỉ Phép & Tổng Hợp Tháng</h6>
+                    <p class="small text-secondary mb-2">
+                        Duyệt đơn xin phép trực tuyến của phụ huynh tại mục <strong>Duyệt Đơn</strong> để tự động chuyển trạng thái sang <em>Vắng có phép</em>.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-file-earmark-excel text-success me-1"></i>Xem ma trận điểm danh tháng và xuất file Excel báo cáo chuyên cần bất cứ lúc nào.
+                    </div>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/Absence/Manage" class="btn btn-sm btn-outline-dark rounded-pill w-50 fw-semibold">Duyệt đơn</a>
+                    <a href="/Attendance/MonthlySummary" class="btn btn-sm btn-outline-primary rounded-pill w-50 fw-semibold">TK Tháng</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="guide-tip-box">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small">
+            <div>
+                <strong class="text-primary"><i class="bi bi-lightning-charge-fill me-1"></i>Cơ chế đồng bộ Redis High-Throughput:</strong>
+                Mọi lượt quét QR và lưu sổ lớp được ghi tức thì trên bộ nhớ đệm Redis (0ms độ trễ) và tự động đồng bộ hàng loạt xuống PostgreSQL mỗi 10 phút/lần qua Hangfire.
+            </div>
+            <a href="/Attendance/Statistics" class="fw-bold text-decoration-none">Xem Thống kê cả năm <i class="bi bi-arrow-right"></i></a>
+        </div>
+    </div>
+</div>

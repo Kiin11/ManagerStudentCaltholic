@@ -1,0 +1,107 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+
+<div class="guide-container shadow-sm p-3 p-md-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-4 border-bottom">
+        <div>
+            <span class="badge bg-info-subtle text-primary border rounded-pill px-3 py-1 mb-1">
+                <i class="bi bi-mortarboard-fill me-1"></i>Cẩm Nang Đào Tạo — Phân Khu 3: Học Vụ & Sổ Điểm
+            </span>
+            <h5 class="fw-bold text-dark mb-0">Hướng Dẫn Nhập Sổ Điểm, Xét Duyệt Cuối Năm, Quản Lý Hồ Sơ & Cơ Sở Vật Chất</h5>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Grades/Index" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-journal-check me-1"></i> Mở Sổ Điểm Lớp
+            </a>
+            <a href="/Students/Index" class="btn btn-outline-success btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-people-fill me-1"></i> Hồ Sơ Thiếu Nhi
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-primary text-white">01</span>
+                        <span class="badge bg-primary-subtle text-primary border">Sổ điểm thông minh</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Nhập điểm nhanh & Tạo cột điểm riêng</h6>
+                    <p class="small text-secondary mb-2">
+                        Nhập điểm thang 10 trực tiếp trên bảng lưới (dùng phím mũi tên <code>↑ ↓ ← →</code> hoặc <code>Enter</code> để di chuyển ô và tự động lưu tức thì).
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-plus-circle text-primary me-1"></i>GLV có thể bấm <strong>Thêm Cột Điểm</strong> cho riêng lớp mình nếu sổ điểm chưa bị khóa.
+                    </div>
+                </div>
+                <a href="/Grades/Index" class="btn btn-sm btn-outline-primary rounded-pill w-100 fw-semibold">
+                    Mở Sổ Điểm Giáo Lý <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-warning text-dark">02</span>
+                        <span class="badge bg-warning-subtle text-dark border">Tự động theo loại lớp</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Nút Xét Duyệt Cuối Năm Đa Năng</h6>
+                    <p class="small text-secondary mb-2">
+                        Trên góc phải Sổ điểm, nút xét duyệt tự động nhận diện loại lớp: <strong>Xét Lên Lớp</strong> (lớp thường), <strong>Xét Bí Tích</strong> (RL2, TS3) hoặc <strong>Xét Tuyên Hứa</strong> (BĐ3, DB4).
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-star-fill text-warning me-1"></i>Cho phép GLV đề xuất <strong>Đặc cách (chuẩn chước)</strong> kèm ghi chú lý do và tên Người đỡ đầu.
+                    </div>
+                </div>
+                <a href="/Grades/Index?semester=0" class="btn btn-sm btn-outline-warning text-dark rounded-pill w-100 fw-semibold">
+                    Xem Tổng kết Cả năm <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-success text-white">03</span>
+                        <span class="badge bg-success-subtle text-success border">Công thức mã mới</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Sinh Mã Thiếu Nhi Theo Tên Lớp</h6>
+                    <p class="small text-secondary mb-2">
+                        Khi thêm thiếu nhi và chọn lớp, hệ thống tự sinh mã theo công thức: <strong>Chữ cái đầu + Cụm cuối + Số thứ tự 3 chữ số</strong> (VD: Thêm Sức 3A → <code>TS3A001</code>).
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-printer text-info me-1"></i>Hỗ trợ kiểm tra trùng mã tức thì, nạp Excel hàng loạt và in Thẻ QR theo lớp.
+                    </div>
+                </div>
+                <a href="/Students/Index" class="btn btn-sm btn-outline-success rounded-pill w-100 fw-semibold">
+                    Quản lý Hồ sơ Thiếu nhi <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-dark text-white">04</span>
+                        <span class="badge bg-secondary-subtle text-dark border">Lớp học & CSVC</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Phân Công GLV, Giáo Án & Phòng Học</h6>
+                    <p class="small text-secondary mb-2">
+                        Mỗi GLV được phân công tối đa 2 lớp (1 lớp Ca Sáng + 1 lớp Ca Chiều). Mỗi phòng học bố trí tối đa 1 lớp Sáng và 1 lớp Chiều.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-tools text-danger me-1"></i>Báo hỏng thiết bị phòng học trực tiếp trên sơ đồ <strong>CSVC</strong> để BĐH xử lý.
+                    </div>
+                </div>
+                <div class="d-flex gap-1">
+                    <a href="/Classes/Index" class="btn btn-sm btn-outline-dark rounded-pill w-50 fw-semibold">DS Lớp</a>
+                    <a href="/Facilities/Index" class="btn btn-sm btn-outline-primary rounded-pill w-50 fw-semibold">Sơ đồ CSVC</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

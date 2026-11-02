@@ -1,0 +1,132 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+
+<div class="guide-container shadow-sm p-3 p-md-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-4 border-bottom">
+        <div>
+            <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1 mb-1">
+                <i class="bi bi-compass-fill me-1"></i>Cẩm Nang Sử Dụng Nhanh — Phân Khu 1: Chung
+            </span>
+            <h5 class="fw-bold text-dark mb-0">Hướng Dẫn Tra Cứu, Báo Sai Sót Điểm Danh & Tiện Ích Phụ Huynh</h5>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/TraCuu" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-search me-1"></i> Mở Cổng Tra Cứu Ngay
+            </a>
+            <a href="/PublicRegistration/Index" class="btn btn-outline-success btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-person-plus me-1"></i> Đăng Ký Đầu Năm
+            </a>
+        </div>
+    </div>
+
+    <!-- 4 Bước thao tác trực quan -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-primary text-white">01</span>
+                        <span class="badge bg-light text-secondary border">Dành cho Phụ huynh</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Tra cứu Chuyên cần & Điểm số (Bảo mật 3 lớp)</h6>
+                    <p class="small text-secondary mb-2">
+                        Nhập <strong>Mã Thiếu Nhi</strong> (in trên thẻ QR, VD: <code>TS3A001</code> hoặc mã năm cũ), <strong>Ngày sinh</strong> và <strong>4 số cuối SĐT Phụ huynh</strong>.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-check2-circle text-success me-1"></i>Xem rõ từng ngày đi Lễ Chúa Nhật, Lễ Thứ Năm, Học Giáo Lý và Bảng điểm HK1, HK2.
+                    </div>
+                </div>
+                <a href="/TraCuu" class="btn btn-sm btn-outline-primary rounded-pill w-100 fw-semibold">
+                    Thực hiện Tra cứu <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-danger text-white">02</span>
+                        <span class="badge bg-danger-subtle text-danger border">Phản hồi 2 chiều</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Báo sai sót điểm danh & Xin phép nghỉ</h6>
+                    <p class="small text-secondary mb-2">
+                        Sau khi tra cứu tại <code>/TraCuu</code>, nếu thấy ngày bé có đi lễ/đi học nhưng bị ghi vắng, bấm nút <strong>Báo sai Lễ / Báo sai Học</strong> ngay trên dòng ngày đó.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-lightning-fill text-warning me-1"></i>Khi GLV bấm duyệt, sổ điểm danh sẽ tự động cập nhật sang <strong>Có mặt</strong>.
+                    </div>
+                </div>
+                <a href="/TraCuu" class="btn btn-sm btn-outline-danger rounded-pill w-100 fw-semibold">
+                    Đến mục Báo sai sót <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-success text-white">03</span>
+                        <span class="badge bg-success-subtle text-success border">Tiện ích 1-Chạm</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Ghi nhớ thiết bị để nhận Thông báo Lớp</h6>
+                    <p class="small text-secondary mb-2">
+                        Tích chọn <strong>"Ghi nhớ thiếu nhi trên thiết bị này"</strong> lúc tra cứu để điện thoại tự động hiển thị thông báo dặn dò của riêng lớp bé ở Trang chủ.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-shield-lock text-primary me-1"></i>Hỗ trợ lưu tối đa 5 anh chị em ruột trên cùng 1 máy điện thoại của Ba/Mẹ.
+                    </div>
+                </div>
+                <a href="/Announcements/Index" class="btn btn-sm btn-outline-success rounded-pill w-100 fw-semibold">
+                    Xem Bảng tin chung <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-warning text-dark">04</span>
+                        <span class="badge bg-warning-subtle text-dark border">Tuyển sinh & Zalo</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Tuyển sinh Online & Mẫu tin Zalo 1-Click</h6>
+                    <p class="small text-secondary mb-2">
+                        Phụ huynh nộp đơn nhập học mới kèm ảnh chụp Giấy Rửa Tội. GLV dùng Trung tâm mẫu tin để copy nhanh thông báo gửi Zalo miễn phí.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-chat-dots text-info me-1"></i>Tự động điền sẵn Tên thiếu nhi, ĐTB, Số buổi vắng vào nội dung tin nhắn.
+                    </div>
+                </div>
+                <a href="/PublicRegistration/CheckStatus" class="btn btn-sm btn-outline-dark rounded-pill w-100 fw-semibold">
+                    Tra cứu đơn tuyển sinh <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Khung Lịch Sinh Hoạt Chuẩn Giáo Xứ -->
+    <div class="guide-tip-box">
+        <div class="row align-items-center g-3">
+            <div class="col-lg-8">
+                <div class="fw-bold text-primary mb-1">
+                    <i class="bi bi-clock-history me-2"></i>Khung Giờ Sinh Hoạt & Điểm Danh Chuẩn Tại Giáo Xứ Phú Trung
+                </div>
+                <div class="row g-2 small text-dark mt-1">
+                    <div class="col-sm-4">
+                        <span class="badge bg-success me-1">Lễ Chúa Nhật</span> <strong>06:20 – 08:20</strong> (Trước 06:35: Xếp hàng)
+                    </div>
+                    <div class="col-sm-4">
+                        <span class="badge bg-primary me-1">Học Giáo Lý</span> <strong>Sáng 09:00</strong> (KT, RL, TS) | <strong>Chiều 15:00</strong> (BĐ)
+                    </div>
+                    <div class="col-sm-4">
+                        <span class="badge bg-warning text-dark me-1">Lễ Thứ Năm</span> <strong>17:30 – 19:30</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+                <span class="small text-muted"><i class="bi bi-phone me-1"></i>Mẹo: Bấm <strong>Tải App</strong> trên góc phải để cài ứng dụng ra màn hình chính điện thoại.</span>
+            </div>
+        </div>
+    </div>
+</div>

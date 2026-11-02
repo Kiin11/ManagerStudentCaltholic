@@ -1,0 +1,106 @@
+﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+
+<div class="guide-container shadow-sm p-3 p-md-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-4 border-bottom">
+        <div>
+            <span class="badge bg-warning-subtle text-dark border rounded-pill px-3 py-1 mb-1">
+                <i class="bi bi-award-fill text-warning me-1"></i>Cẩm Nang Học Vụ Cuối Năm — Phân Khu 4: Bí Tích & Kết Chuyển
+            </span>
+            <h5 class="fw-bold text-dark mb-0">Quy Trình Sổ Bộ Bí Tích, Tờ Trình Cha Xứ & Kết Chuyển Mã Năm Học Cũ</h5>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/Sacraments/Index" class="btn btn-success btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-journal-bookmark-fill me-1"></i> Mở Sổ Bộ Bí Tích
+            </a>
+            <a href="/Promotion/Index" class="btn btn-outline-primary btn-sm rounded-pill px-3 fw-bold">
+                <i class="bi bi-arrow-up-right-circle me-1"></i> Kết Chuyển Niên Khóa
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-success text-white">01</span>
+                        <span class="badge bg-success-subtle text-success border">Hồ sơ 4 Chặng</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Tra cứu & Ghi Sổ Bộ Bí Tích Điện Tử</h6>
+                    <p class="small text-secondary mb-2">
+                        Quản lý xuyên suốt 4 cột mốc: <strong>1. Rửa Tội → 2. Rước Lễ Lần Đầu → 3. Thêm Sức → 4. Tuyên Hứa Bao Đồng</strong>.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>Hệ thống tự động đánh dấu cảnh báo các em bị trễ tuổi lãnh nhận Bí tích.
+                    </div>
+                </div>
+                <a href="/Sacraments/Index" class="btn btn-sm btn-outline-success rounded-pill w-100 fw-semibold">
+                    Tra cứu Sổ Bộ <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-warning text-dark">02</span>
+                        <span class="badge bg-warning-subtle text-dark border">Đệ trình Cha Xứ</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Lập Tờ Trình Xét Duyệt & Đồng Bộ Sổ Bộ</h6>
+                    <p class="small text-secondary mb-2">
+                        Tổng hợp danh sách đề xuất từ các lớp <strong>RL2, TS3, BĐ3, DB4</strong>, xuất file Excel hoặc in <strong>Tờ trình A4 chuẩn</strong> trình Cha Chánh xứ ký duyệt.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-check2-all text-success me-1"></i>Khi bấm <strong>Duyệt & Ghi Sổ</strong>, toàn bộ danh sách đạt sẽ tự động ghi vào Sổ Bộ Bí Tích.
+                    </div>
+                </div>
+                <a href="/Sacraments/Evaluation" class="btn btn-sm btn-outline-warning text-dark rounded-pill w-100 fw-semibold">
+                    Mở Tờ Trình Bí Tích <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-primary text-white">03</span>
+                        <span class="badge bg-primary-subtle text-primary border">Đổi năm học (FEAT-P4-04)</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Kết Chuyển Lên Lớp & Gắn Đuôi Mã Năm Cũ</h6>
+                    <p class="small text-secondary mb-2">
+                        Xét lên lớp tự động, chia đều sĩ số Nam/Nữ sang lớp mới và chuyển <code>StudentCode</code> gắn đuôi năm học cũ (VD: <code>TS3A001</code> → <code>TS3A001_2526</code>).
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-qr-code text-primary me-1"></i>Lưu vết vào bảng <code>StudentCodeHistories</code> để thẻ QR cũ vẫn quét và tra cứu được.
+                    </div>
+                </div>
+                <a href="/Promotion/Index" class="btn btn-sm btn-outline-primary rounded-pill w-100 fw-semibold">
+                    Thực hiện Kết chuyển <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl-3 workspace-searchable-item">
+            <div class="guide-step-card">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <span class="step-number-badge bg-info text-dark">04</span>
+                        <span class="badge bg-info-subtle text-dark border">Tuyển sinh đầu năm</span>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-2">Duyệt Hồ Sơ Tuyển Sinh Trực Tuyến</h6>
+                    <p class="small text-secondary mb-2">
+                        Đối chiếu ảnh chụp Giấy Chứng Nhận Rửa Tội ngay trên màn hình 2 cột, bấm <strong>Duyệt & Cấp Mã TN</strong> để tự động xếp lớp cân bằng sĩ số.
+                    </p>
+                    <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
+                        <i class="bi bi-person-check text-info me-1"></i>Đang chờ duyệt: <strong class="text-danger">@Model.PendingRegistrations hồ sơ</strong>.
+                    </div>
+                </div>
+                <a href="/StudentRegistrations/Index" class="btn btn-sm btn-outline-info text-dark rounded-pill w-100 fw-semibold">
+                    Duyệt Đơn Tuyển Sinh <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
