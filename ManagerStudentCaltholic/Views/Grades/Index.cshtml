@@ -46,9 +46,9 @@ else
                         <select id="selectClass" class="form-select form-select-sm w-auto fw-semibold" onchange="onFilterChange()">
                             @foreach (var c in classes)
                             {
-                                <!option value="@c.Id" @(c.Id == Model.ClassId ? "selected" : "")>
-                                @c.Name (@c.GradeLevel)
-                                </!option>
+                                <option value="@c.Id" selected="@(c.Id == Model.ClassId)">
+                                    @c.Name (@c.GradeLevel)
+                                </option>
                             }
                         </select>
 
