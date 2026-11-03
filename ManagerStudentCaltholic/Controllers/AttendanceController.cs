@@ -20,6 +20,14 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ILogger<AttendanceController> _logger; 
         private readonly IRedisAttendanceService _redisAttendance; private readonly IAttendanceDisputeService _disputeService;
 
+        private long CurrentUserId =>
+            long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+        private bool IsLeadership =>
+            User.IsInRole(UserRole.Admin) ||
+            User.IsInRole(UserRole.SpiritualDirector) ||
+            User.IsInRole(UserRole.ExecutiveBoard);
+
         public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger
             , IRedisAttendanceService redisAttendance, IAttendanceDisputeService disputeService)
         {
@@ -46,29 +54,8 @@ namespace ManagerStudentCaltholic.Controllers
             var yearId = currentYear?.Id ?? 0;
 
             // 1. Khởi tạo truy vấn danh sách lớp của niên khóa
-            var classesQuery = _context.Classes
-                .Where(c => c.AcademicYearId == yearId);
-
-            // BƯỚC 4: BỘ LỌC PHẠM VI DÀNH CHO TRƯỞNG KHỐI (BRANCH HEAD)
-            string? managedGrade = null;
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    // SEC-08 FIX: Trưởng khối chưa được phân công khối nào thì không trả về dữ liệu toàn trường
-                    classesQuery = classesQuery.Where(_ => false);
-                }
-                else
-                {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
-                }
-            }
-
-            var classes = await classesQuery
-                .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
-                .AsNoTracking()
-                .ToListAsync();
+            // P2-SEC-01 FIX: Chỉ lấy các lớp nằm trong phạm vi phân quyền của người dùng (kể cả Teacher)
+            var classes = await GetAuthorizedClassesAsync(yearId);
 
             ViewBag.Classes = classes;
             ViewBag.SelectedDate = targetDate.ToString("yyyy-MM-dd");
@@ -159,15 +146,10 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             // Kiểm tra chống IDOR theo khối nếu là Trưởng khối (BranchHead)
-            if (User.IsInRole(UserRole.BranchHead))
+            // P2-SEC-01 FIX: Kiểm tra quyền trên lớp đối với cả BranchHead và Teacher
+            if (!await CanAccessClassAsync(request.ClassId))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == request.ClassId);
-                if (targetClass == null || string.IsNullOrWhiteSpace(managedGrade) ||
-                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid();
-                }
+                return Forbid();
             }
 
             try
@@ -238,6 +220,21 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetMissedDates(long enrollmentId)
         {
+            var enrollment = await _context.Enrollments
+        .AsNoTracking()
+        .FirstOrDefaultAsync(e => e.Id == enrollmentId);
+
+            if (enrollment == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy hồ sơ xếp lớp." });
+            }
+
+            // P2-SEC-01 FIX: Chặn xem ngày vắng của học sinh lớp khác
+            if (!await CanAccessClassAsync(enrollment.ClassRoomId))
+            {
+                return Forbid();
+            }
+
             var missedRecords = await _context.Attendances
                 .Where(a => a.EnrollmentId == enrollmentId && !a.IsMakeUp
                        && (a.MassStatus == AttendanceStatus.AbsentUnpermitted || a.MassStatus == AttendanceStatus.AbsentPermitted
@@ -283,6 +280,12 @@ namespace ManagerStudentCaltholic.Controllers
             if (enrollment == null)
             {
                 return Json(new { success = false, message = "Không tìm thấy hồ sơ xếp lớp của thiếu nhi!" });
+            }
+
+            // P2-SEC-01 FIX: Chặn Giáo lý viên/Trưởng khối duyệt điểm danh bù cho học sinh lớp khác
+            if (!await CanAccessClassAsync(enrollment.ClassRoomId))
+            {
+                return Forbid();
             }
 
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -1373,21 +1376,33 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Chưa có niên khóa nào được kích hoạt." });
             }
 
+            // P2-SEC-02 FIX: Lấy danh sách ID các lớp được phép truy cập của User hiện tại (Leadership / BranchHead / Teacher)
+            var authorizedClasses = await GetAuthorizedClassesAsync(currentYear.Id);
+            var authorizedClassIds = authorizedClasses.Select(c => c.Id).ToHashSet();
+
+            if (!authorizedClassIds.Any())
+            {
+                return Json(new
+                {
+                    success = true,
+                    academicYear = currentYear.Name,
+                    cachedAtUtc = DateTime.UtcNow,
+                    totalCount = 0,
+                    students = new List<OfflineStudentCacheItemDto>()
+                });
+            }
+
+            if (classId.HasValue && classId.Value > 0 && !authorizedClassIds.Contains(classId.Value))
+            {
+                return Forbid();
+            }
+
             var enrollmentsQuery = _context.Enrollments
                 .Include(e => e.Student)
                 .Include(e => e.ClassRoom)
-                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id && e.Student.IsActive);
-
-            // Nếu là Trưởng khối: Chỉ lấy học sinh thuộc khối phụ trách
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    return Json(new { success = true, academicYear = currentYear.Name, students = new List<OfflineStudentCacheItemDto>() });
-                }
-                enrollmentsQuery = enrollmentsQuery.Where(e => e.ClassRoom.GradeLevel == managedGrade);
-            }
+                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id &&
+                            e.Student.IsActive &&
+                            authorizedClassIds.Contains(e.ClassRoomId));
 
             if (classId.HasValue && classId.Value > 0)
             {
@@ -1442,6 +1457,14 @@ namespace ManagerStudentCaltholic.Controllers
             if (currentYear == null)
             {
                 return BadRequest(new { success = false, message = "Chưa kích hoạt niên khóa hiện hành." });
+            }
+
+            // P2-SEC-02 FIX: Lấy tập hợp các lớp mà người dùng hiện tại có thẩm quyền đồng bộ điểm danh
+            var authorizedClasses = await GetAuthorizedClassesAsync(currentYear.Id);
+            var authorizedClassIds = authorizedClasses.Select(c => c.Id).ToHashSet();
+            if (!authorizedClassIds.Any())
+            {
+                return Forbid();
             }
 
             // Kiểm tra phạm vi quyền hạn theo khối nếu là BranchHead
@@ -1518,10 +1541,16 @@ namespace ManagerStudentCaltholic.Controllers
                         else if (!string.IsNullOrWhiteSpace(item.StudentCode) &&
                                  enrollmentByCode.TryGetValue(item.StudentCode.Trim().ToUpperInvariant(), out var enrByCode))
                         {
-                            targetEnrollment = enrByCode;
+                            targetEnrollment = enrByCode;   
                         }
 
                         if (targetEnrollment == null)
+                        {
+                            continue;
+                        }
+
+                        // P2-SEC-02 FIX: Chặn ghi đè điểm danh chéo lớp/khối đối với cả Teacher và BranchHead
+                        if (!authorizedClassIds.Contains(targetEnrollment.ClassRoomId))
                         {
                             continue;
                         }
@@ -1664,6 +1693,71 @@ namespace ManagerStudentCaltholic.Controllers
             };
 
             return Rank(incomingStatus) > Rank(currentStatus) ? incomingStatus : currentStatus;
+        }
+
+        /// <summary>
+        /// P2-SEC-01 & P2-SEC-02 FIX: Lấy danh sách lớp học mà người dùng hiện tại được phép truy cập
+        /// - Leadership (Admin, Cha Xứ, BĐH): Toàn bộ lớp
+        /// - BranchHead (Trưởng khối): Các lớp thuộc khối phụ trách + lớp đứng dạy trực tiếp
+        /// - Teacher (Giáo lý viên): Chỉ các lớp được phân công trong bảng ClassTeachers
+        /// </summary>
+        private async Task<List<ClassRoom>> GetAuthorizedClassesAsync(int academicYearId)
+        {
+            var query = _context.Classes.Where(c => academicYearId == 0 || c.AcademicYearId == academicYearId);
+
+            if (IsLeadership)
+            {
+                return await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+            }
+
+            var uid = CurrentUserId;
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    query = query.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == uid));
+                }
+                else
+                {
+                    query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
+                }
+            }
+            else
+            {
+                // Vai trò Teacher: Bắt buộc chỉ lấy các lớp được phân công dạy
+                query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
+            }
+
+            return await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+        }
+
+        /// <summary>
+        /// P2-SEC-01 FIX: Kiểm tra người dùng hiện tại có quyền thao tác trên classId hay không
+        /// </summary>
+        private async Task<bool> CanAccessClassAsync(int classId)
+        {
+            if (classId <= 0) return false;
+            if (IsLeadership) return true;
+
+            var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
+            if (targetClass == null) return false;
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade) &&
+                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            var uid = CurrentUserId;
+            return uid > 0 && await _context.ClassTeachers
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == uid);
         }
         #endregion
 

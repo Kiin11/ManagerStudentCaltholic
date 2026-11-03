@@ -567,12 +567,15 @@
                 note: note
             };
 
+            const csrfToken = getCsrfToken();
+
             try {
                 const res = await fetch('/MassCampaigns/UpdateCell', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': getCsrfToken()
+                        'X-CSRF-TOKEN': csrfToken, // P2-LOG-09 FIX: Khớp với HeaderName = "X-CSRF-TOKEN"
+                        'RequestVerificationToken': csrfToken
                     },
                     body: JSON.stringify(payload)
                 });
@@ -612,11 +615,14 @@
                 return;
             }
 
+            const csrfToken = getCsrfToken();
+
             const res = await fetch('/MassCampaigns/BulkMarkDay', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'RequestVerificationToken': getCsrfToken()
+                    'X-CSRF-TOKEN': csrfToken, // P2-LOG-09 FIX
+                    'RequestVerificationToken': csrfToken
                 },
                 body: JSON.stringify({
                     campaignId: @(matrix?.CampaignId ?? 0),
@@ -641,11 +647,14 @@
             const studentCode = (codeInput.value || '').trim();
             if (!studentCode) return;
 
+            const csrfToken = getCsrfToken();
+
             const res = await fetch('/MassCampaigns/ScanCampaignQr', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'RequestVerificationToken': getCsrfToken()
+                    'X-CSRF-TOKEN': csrfToken, // P2-LOG-09 FIX
+                    'RequestVerificationToken': csrfToken
                 },
                 body: JSON.stringify({
                     campaignId: @(matrix?.CampaignId ?? 0),
