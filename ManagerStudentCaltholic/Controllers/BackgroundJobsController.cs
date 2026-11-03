@@ -156,6 +156,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return NotFound(new { success = false, message = "Không tìm thấy thông tin công việc hoặc đã hết hạn." });
             }
 
+            // P2-SEC-03 FIX: Chỉ người tạo lệnh xuất báo cáo hoặc Ban Điều Hành / Admin mới được xem trạng thái
+            var currentUserName = User.Identity?.Name ?? string.Empty;
+            if (!IsLeadership && !string.Equals(meta.RequestedBy, currentUserName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
             return Json(new
             {
                 success = true,
@@ -170,7 +177,7 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 4. GET: /BackgroundJobs/DownloadExport?jobId=... (Tải xuống file báo cáo từ PrivateUploads/exports an toàn)
+        /// 4. GET: /BackgroundJobs/DownloadExport?jobId=...
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> DownloadExport(string jobId)
@@ -183,7 +190,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return NotFound("Báo cáo chưa hoàn tất hoặc đã hết hạn lưu trữ.");
             }
 
-            // Chặn Path Traversal tuyệt đối bằng Path.GetFileName
+            // P2-SEC-03 FIX: Chặn tải chéo báo cáo của người dùng khác
+            var currentUserName = User.Identity?.Name ?? string.Empty;
+            if (!IsLeadership && !string.Equals(meta.RequestedBy, currentUserName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
             var safeFileName = Path.GetFileName(meta.FileName);
             var exportsRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "PrivateUploads", "exports"));
             var fullFilePath = Path.GetFullPath(Path.Combine(exportsRoot, safeFileName));

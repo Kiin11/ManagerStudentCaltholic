@@ -117,9 +117,21 @@
                     </select>
                 </div>
                 <div class="col-lg-3 col-md-6">
-                   <!-- <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-sm" onclick="openAttendanceRuleModal(@Model.ClassId)">
-                        <i class="bi bi-sliders me-1 text-primary"></i> Quy Ước Tính Điểm
-                    </button> -->
+                    <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label small text-muted mb-1">Lễ Chúa Nhật (%)</label>
+                            <input type="number" id="ruleSundayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="40" onchange="autoBalanceClassWeight()" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted mb-1">Lễ Thứ Năm (%)</label>
+                            <input type="number" id="ruleThursdayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="20" onchange="autoBalanceClassWeight()" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small text-muted mb-1">Giờ Học GL (%)</label>
+                            <input type="number" id="ruleClassWeight" class="form-control form-control-sm text-center fw-bold bg-light" min="0" max="100" value="40" readonly />
+                        </div>
+                    </div>
                     <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
@@ -884,15 +896,20 @@
                 console.warn("Không thể lưu LocalStorage:", e);
             }
         }
-                function autoBalanceClassWeight(massInput) {
-            let mass = parseInt(massInput.value) || 0;
-            if (mass < 0) mass = 0;
-            if (mass > 100) mass = 100;
-            massInput.value = mass;
-            document.getElementById('ruleClassWeight').value = 100 - mass;
+
+        function autoBalanceClassWeight() {
+            let sun = parseInt(document.getElementById('ruleSundayMassWeight').value) || 0;
+            let thu = parseInt(document.getElementById('ruleThursdayMassWeight').value) || 0;
+            if (sun < 0) sun = 0;
+            if (thu < 0) thu = 0;
+            if (sun + thu > 100) {
+                thu = Math.max(0, 100 - sun);
+                document.getElementById('ruleThursdayMassWeight').value = thu;
+            }
+            document.getElementById('ruleSundayMassWeight').value = sun;
+            document.getElementById('ruleClassWeight').value = 100 - (sun + thu);
         }
 
-        // SEC-NEW-09 FIX 4: Dùng textContent khi gán tên lớp trong openAttendanceRuleModal
         async function openAttendanceRuleModal(classId) {
             document.getElementById('ruleClassId').value = classId;
             document.getElementById('ruleAlert').classList.add('d-none');
@@ -906,11 +923,12 @@
                     titleEl.innerHTML = '<i class="bi bi-sliders me-2"></i>';
                     titleEl.appendChild(document.createTextNode(`Quy Ước Lớp: ${r.className}`));
 
-                    document.getElementById('ruleMassWeight').value = r.massWeightPercent;
-                    document.getElementById('ruleClassWeight').value = r.classWeightPercent;
-                    document.getElementById('ruleLateMultiplier').value = r.lateMultiplier.toFixed(2);
-                    document.getElementById('rulePermittedAbsentMultiplier').value = r.permittedAbsentMultiplier.toFixed(2);
-                    document.getElementById('ruleMinSacrament').value = r.minAttendanceRateForSacrament;
+                    document.getElementById('ruleSundayMassWeight').value = r.sundayMassWeightPercent ?? 40;
+                    document.getElementById('ruleThursdayMassWeight').value = r.thursdayMassWeightPercent ?? 20;
+                    document.getElementById('ruleClassWeight').value = r.classWeightPercent ?? 40;
+                    document.getElementById('ruleLateMultiplier').value = Number(r.lateMultiplier ?? 0.8).toFixed(2);
+                    document.getElementById('rulePermittedAbsentMultiplier').value = Number(r.permittedAbsentMultiplier ?? 0.5).toFixed(2);
+                    document.getElementById('ruleMinSacrament').value = r.minAttendanceRateForSacrament ?? 80;
 
                     const btnSave = document.getElementById('btnSaveRule');
                     btnSave.disabled = !r.canEdit;
@@ -925,8 +943,9 @@
 
         async function saveClassRule() {
             const classId = parseInt(document.getElementById('ruleClassId').value);
-            const massWeight = parseInt(document.getElementById('ruleMassWeight').value);
-            const classWeight = parseInt(document.getElementById('ruleClassWeight').value);
+            const sundayMassWeight = parseInt(document.getElementById('ruleSundayMassWeight').value) || 0;
+            const thursdayMassWeight = parseInt(document.getElementById('ruleThursdayMassWeight').value) || 0;
+            const classWeight = parseInt(document.getElementById('ruleClassWeight').value) || 0;
             const lateMult = parseFloat(document.getElementById('ruleLateMultiplier').value);
             const permMult = parseFloat(document.getElementById('rulePermittedAbsentMultiplier').value);
             const minSacrament = parseFloat(document.getElementById('ruleMinSacrament').value);
@@ -934,7 +953,8 @@
 
             const payload = {
                 classId: classId,
-                massWeightPercent: massWeight,
+                sundayMassWeightPercent: sundayMassWeight,
+                thursdayMassWeightPercent: thursdayMassWeight,
                 classWeightPercent: classWeight,
                 lateMultiplier: lateMult,
                 permittedAbsentMultiplier: permMult,
@@ -946,7 +966,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': token // SEC-NEW-03 FIX: Khớp với options.HeaderName = "X-CSRF-TOKEN"
+                        'X-CSRF-TOKEN': token
                     },
                     body: JSON.stringify(payload)
                 });

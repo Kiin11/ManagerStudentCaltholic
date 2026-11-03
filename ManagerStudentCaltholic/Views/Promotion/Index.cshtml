@@ -496,6 +496,7 @@
                 return;
             }
 
+            const selectedMode = document.querySelector('input[name="codeTransitionMode"]:checked')?.value || 'SUFFIX_ONLY';
             const btn = document.getElementById('btnExecuteRollover');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang xử lý...';
@@ -506,6 +507,7 @@
                     sourceClassId: @Model.SelectedClassId,
                     targetAcademicYearId: @Model.TargetYearId,
                     useSmartBalancing: document.getElementById('chkSmartBalancing').checked,
+                    codeTransitionMode: selectedMode, // P2-LOG-11 FIX: Đưa vào trong hàm
                     decisions: decisions
                 };
 

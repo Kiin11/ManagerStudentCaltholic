@@ -95,9 +95,15 @@ namespace ManagerStudentCaltholic.Controllers
             return false;
         }
 
+
         /// <summary>
         /// 1. GET: /Announcements (Xem & Lọc Bảng Tin Toàn Xứ / Khối / Lớp - TASK-P3-07.1)
         /// </summary>
+        /// <param name="scope"></param>
+        /// <param name="gradeLevel"></param>
+        /// <param name="classId"></param>
+        /// <param name="search"></param>
+        /// <returns></returns>
         [HttpGet]
         public async Task<IActionResult> Index(string? scope, string? gradeLevel, int? classId, string? search)
         {
@@ -106,11 +112,34 @@ namespace ManagerStudentCaltholic.Controllers
 
             var authorizedClasses = await GetAuthorizedClassesAsync(yearId);
             var authorizedClassIds = authorizedClasses.Select(c => c.Id).ToHashSet();
+            var authorizedGrades = authorizedClasses.Select(c => c.GradeLevel).Distinct().ToHashSet();
+
+            var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+            if (!string.IsNullOrWhiteSpace(managedGrade))
+            {
+                authorizedGrades.Add(managedGrade);
+            }
+
+            // P2-SEC-04 FIX: Nếu tự truyền classId của lớp không thuộc quyền phụ trách -> Chặn 403
+            if (!IsLeadership && classId.HasValue && classId.Value > 0 && !authorizedClassIds.Contains(classId.Value))
+            {
+                return Forbid();
+            }
 
             var nowUtc = DateTime.UtcNow;
             var query = _context.Announcements
                 .Include(a => a.TargetClassRoom)
                 .Where(a => a.IsActive && (!a.ExpireAt.HasValue || a.ExpireAt.Value >= nowUtc));
+
+            // P2-SEC-04 FIX: Giới chặt phạm vi xem đối với Trưởng khối & Giáo lý viên
+            if (!IsLeadership)
+            {
+                query = query.Where(a =>
+                    a.Scope == "ALL" ||
+                    a.Scope == "PARISH" ||
+                    (a.Scope == "GRADE" && a.TargetGradeLevel != null && authorizedGrades.Contains(a.TargetGradeLevel)) ||
+                    (a.Scope == "CLASS" && a.TargetClassRoomId.HasValue && authorizedClassIds.Contains(a.TargetClassRoomId.Value)));
+            }
 
             if (!string.IsNullOrEmpty(scope) && scope != "ALL")
             {
@@ -152,7 +181,7 @@ namespace ManagerStudentCaltholic.Controllers
             ViewBag.CanPostAll = IsLeadership;
             ViewBag.CanPostGrade = IsLeadership || User.IsInRole(UserRole.BranchHead);
             ViewBag.CanPostClass = IsLeadership || authorizedClasses.Any();
-            ViewBag.ManagedGradeLevel = User.FindFirst("ManagedGradeLevel")?.Value;
+            ViewBag.ManagedGradeLevel = managedGrade;
 
             ViewBag.SelectedScope = scope ?? "ALL";
             ViewBag.SelectedGrade = gradeLevel ?? "ALL";

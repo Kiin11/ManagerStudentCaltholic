@@ -101,8 +101,37 @@ namespace ManagerStudentCaltholic.Controllers
             return View(documents);
         }
 
+        /// <summary>
+        /// P2-SEC-05 FIX: Kiểm tra chữ ký byte đầu (Magic Bytes) của tệp tải lên
+        /// </summary>
+        private static async Task<bool> HasValidMagicBytesAsync(IFormFile file, string ext)
+        {
+            if (file.Length < 4) return false;
+
+            byte[] header = new byte[8];
+            await using var stream = file.OpenReadStream();
+            int bytesRead = await stream.ReadAsync(header, 0, header.Length);
+            if (bytesRead < 4) return false;
+
+            return ext switch
+            {
+                // PDF: %PDF (0x25 0x50 0x44 0x46)
+                ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
+
+                // DOCX / XLSX (OpenXML ZIP): PK\x03\x04 (0x50 0x4B 0x03 0x04)
+                ".docx" or ".xlsx" => header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04,
+
+                // DOC / XLS (OLE2 Compound Document): D0 CF 11 E0 A1 B1 1A E1
+                ".doc" or ".xls" => bytesRead >= 8 &&
+                                    header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0 &&
+                                    header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1,
+
+                _ => false
+            };
+        }
+
         [HttpPost]
-        [ValidateAntiForgeryToken] // SEC-NEW-02 FIX: Bật lại kiểm tra CSRF
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
         public async Task<IActionResult> UploadDocument(IFormFile file, [FromForm] int classRoomId, [FromForm] string? description)
         {
@@ -113,7 +142,6 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Vui lòng chọn file kế hoạch để tải lên." });
                 }
 
-                // Giới hạn kích thước tối đa 15MB
                 const long maxFileSize = 15 * 1024 * 1024;
                 if (file.Length > maxFileSize)
                 {
@@ -122,9 +150,9 @@ namespace ManagerStudentCaltholic.Controllers
 
                 var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
                 var allowedExtensions = new[] { ".pdf", ".docx", ".doc", ".xlsx", ".xls" };
-                if (!allowedExtensions.Contains(ext))
+                if (!allowedExtensions.Contains(ext) || !await HasValidMagicBytesAsync(file, ext))
                 {
-                    return Json(new { success = false, message = "Chỉ chấp nhận các định dạng file: .pdf, .docx, .xlsx" });
+                    return Json(new { success = false, message = "Định dạng hoặc cấu trúc tệp không hợp lệ! Chỉ chấp nhận tệp chuẩn .pdf, .docx, .xlsx." });
                 }
 
                 var targetClass = await _context.Classes.FindAsync(classRoomId);
@@ -133,23 +161,19 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
                 }
 
-                // SEC-NEW-05 FIX: Kiểm tra GLV / Trưởng khối có quyền trên lớp này không
                 if (!await CanManageClassLessonAsync(targetClass))
                 {
                     return Json(new { success = false, message = "Bạn không có thẩm quyền tải giáo án lên lớp học này!" });
                 }
 
-                var uploadsFolder = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"));
-                if (!Directory.Exists(uploadsFolder))
-                {
-                    Directory.CreateDirectory(uploadsFolder);
-                }
+                // P2-SEC-05 FIX: Lưu vào PrivateUploads/lesson_plans thay vì wwwroot
+                var privateFolder = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"));
+                Directory.CreateDirectory(privateFolder);
 
                 var storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
-                var physicalPath = Path.Combine(uploadsFolder, storedFileName);
-                var relativeWebPath = $"/uploads/lesson_plans/{storedFileName}";
+                var physicalPath = Path.Combine(privateFolder, storedFileName);
 
-                using (var stream = new FileStream(physicalPath, FileMode.Create))
+                await using (var stream = new FileStream(physicalPath, FileMode.Create))
                 {
                     await file.CopyToAsync(stream);
                 }
@@ -161,7 +185,7 @@ namespace ManagerStudentCaltholic.Controllers
                     AcademicYearId = targetClass.AcademicYearId,
                     FileName = safeOriginalName,
                     StoredFileName = storedFileName,
-                    FilePath = relativeWebPath,
+                    FilePath = string.Empty, // Sẽ gán link DownloadDocument ngay sau khi SaveChanges
                     ContentType = file.ContentType,
                     FileSize = file.Length,
                     Description = string.IsNullOrWhiteSpace(description) ? safeOriginalName : description.Trim(),
@@ -172,16 +196,61 @@ namespace ManagerStudentCaltholic.Controllers
                 _context.ClassLessonDocuments.Add(doc);
                 await _context.SaveChangesAsync();
 
+                doc.FilePath = $"/LessonPlans/DownloadDocument/{doc.Id}";
+                await _context.SaveChangesAsync();
+
                 _logger.LogInformation("Người dùng {User} đã upload tài liệu {FileName} cho lớp {ClassId}",
                     User.Identity?.Name, safeOriginalName, classRoomId);
 
-                return Json(new { success = true, message = $"Đã tải lên và lưu file '{safeOriginalName}' thành công!" });
+                return Json(new { success = true, message = $"Đã tải lên và lưu file '{safeOriginalName}' an toàn!" });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi khi upload tài liệu giáo án cho lớp {ClassId}", classRoomId);
                 return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi lưu tệp." });
             }
+        }
+
+        /// <summary>
+        /// P2-SEC-05 FIX: Endpoint bảo mật để Xem/Tải giáo án có kiểm tra quyền truy cập lớp
+        /// </summary>
+        [HttpGet("LessonPlans/DownloadDocument/{id:long}")]
+        public async Task<IActionResult> DownloadDocument(long id, [FromQuery] bool inline = true)
+        {
+            var doc = await _context.ClassLessonDocuments
+                .Include(d => d.ClassRoom)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            if (doc == null || doc.ClassRoom == null) return NotFound();
+
+            if (!await CanManageClassLessonAsync(doc.ClassRoom))
+            {
+                return Forbid();
+            }
+
+            var safeStoredName = Path.GetFileName(doc.StoredFileName);
+            var privatePath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans", safeStoredName));
+            var legacyPublicPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans", safeStoredName));
+
+            string? targetPath = System.IO.File.Exists(privatePath)
+                ? privatePath
+                : (System.IO.File.Exists(legacyPublicPath) ? legacyPublicPath : null);
+
+            if (targetPath == null) return NotFound("Không tìm thấy tệp giáo án trên máy chủ.");
+
+            var contentType = Path.GetExtension(safeStoredName).ToLowerInvariant() == ".pdf"
+                ? "application/pdf"
+                : (string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType);
+
+            var fileStream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (inline && contentType == "application/pdf")
+            {
+                Response.Headers["Content-Disposition"] = $"inline; filename=\"{Uri.EscapeDataString(doc.FileName)}\"";
+                return File(fileStream, contentType);
+            }
+
+            return File(fileStream, contentType, doc.FileName);
         }
 
         [HttpPost]

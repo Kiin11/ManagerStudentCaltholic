@@ -502,6 +502,7 @@ namespace ManagerStudentCaltholic.Controllers
                 };
             }).ToList();
 
+
             var viewModel = new AttendanceStatisticsViewModel
             {
                 ClassId = targetClass.Id,
