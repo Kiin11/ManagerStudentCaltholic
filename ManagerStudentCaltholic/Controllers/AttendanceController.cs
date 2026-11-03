@@ -62,27 +62,20 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!classes.Any())
             {
-                TempData["ErrorMessage"] = User.IsInRole(UserRole.BranchHead)
-                    ? $"Không tìm thấy lớp học nào thuộc khối {managedGrade} trong niên khóa hiện tại."
-                    : "Chưa có lớp học nào được tạo trong niên khóa hiện tại.";
+                TempData["ErrorMessage"] = "Bạn chưa được phân công phụ trách lớp học nào trong niên khóa hiện tại.";
                 return View(new ClassAttendanceSheetViewModel { AttendanceDate = targetDate });
             }
 
-            // 2. Chặn truy cập chéo khối nếu người dùng tự ý truyền classId qua Query String
-            if (classId.HasValue && User.IsInRole(UserRole.BranchHead) && !string.IsNullOrEmpty(managedGrade))
+            // Chặn truy cập chéo lớp nếu tự truyền classId qua URL
+            if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
             {
-                var requestedClass = await _context.Classes.FindAsync(classId.Value);
-                if (requestedClass != null && !string.Equals(requestedClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid(); // Trả về 403 Forbidden nếu cố tình xem sổ lớp khối khác
-                }
+                return Forbid();
             }
 
             var selectedClassId = classId ?? classes.First().Id;
-            var targetClass = classes.FirstOrDefault(c => c.Id == selectedClassId) ?? classes.First();
+            var targetClass = classes.First(c => c.Id == selectedClassId);
             ViewBag.SelectedClassId = targetClass.Id;
 
-            // Lấy danh sách học sinh thuộc lớp
             var viewModel = await _redisAttendance.GetOrLoadClassSheetAsync(targetClass.Id, targetDate);
             ViewBag.SessionContext = await _redisAttendance.GetOrLoadSessionContextAsync(targetClass.Id, targetDate);
             ViewBag.PendingDisputesCount = await _disputeService.GetPendingDisputeCountForClassAsync(targetClass.Id);
