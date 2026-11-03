@@ -477,8 +477,6 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         /// <returns></returns>
         [HttpGet]
-        // GET: /Classes/GetAvailableTeachers?classRoomId=...
-        [HttpGet]
         public async Task<IActionResult> GetAvailableTeachers(int? classRoomId)
         {
             try

@@ -58,7 +58,12 @@ namespace ManagerStudentCaltholic.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return Json(new AuthResponseDto { Success = false, Message = "Dữ liệu không hợp lệ." });
+                // P2-SEC-07 FIX: Chỉ trả JSON nếu gọi bằng Ajax, còn Form POST thông thường thì trả về View(model)
+                if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+                {
+                    return Json(new AuthResponseDto { Success = false, Message = "Vui lòng nhập đầy đủ Tên đăng nhập và Mật khẩu." });
+                }
+                return View(model);
             }
 
             var cleanUsername = model.Username.Trim().ToLower();
@@ -250,11 +255,23 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 HttpOnly = true,
                 Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Strict, // SEC-02 FIX: Chặn gửi Cookie chéo trang (Cross-Site)
-                Path = "/Account",              // SEC-02 FIX: Chỉ gửi Cookie này khi gọi các đường dẫn thuộc /Account
+                SameSite = SameSiteMode.Strict,
+                Path = "/Account",
                 Expires = expires
             };
             Response.Cookies.Append("refreshToken", token, cookieOptions);
+
+            // P2-LOG-18 FIX: Đánh dấu thiết bị này thuộc về Nhân sự / Giáo lý viên (hiệu lực 180 ngày trên toàn trang "/")
+            // Không xóa cookie này khi Logout thường để màn hình Trang chủ/Topbar luôn ưu tiên hiện nút "Quét QR Điểm Danh"
+            Response.Cookies.Append("Parish_Staff_Device", "1", new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Path = "/",
+                Expires = DateTimeOffset.UtcNow.AddDays(180),
+                IsEssential = true
+            });
         }
 
         private IActionResult RedirectToLocal(string? returnUrl)

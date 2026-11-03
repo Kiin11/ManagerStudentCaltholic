@@ -167,6 +167,20 @@ RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     "*/10 * * * *", // Every 10 minutes
     new RecurringJobOptions { TimeZone = vnTimeZone });
 
+// P2-LOG-17 (Job 4): Automatically mark absent students to DB at 20:30 every Thursday (for Thursday Mass)
+RecurringJob.AddOrUpdate<IRedisAttendanceService>(
+    "auto-mark-absent-thursday",
+    service => service.AutoMarkAbsentUncheckedStudentsAsync(null),
+    "30 20 * * 4", // 20:30 Thursday
+    new RecurringJobOptions { TimeZone = vnTimeZone });
+
+// P2-LOG-17 (Job 5): Automatically mark absent students to DB at 18:30 every Sunday (for Sunday Mass)
+RecurringJob.AddOrUpdate<IRedisAttendanceService>(
+    "auto-mark-absent-sunday",
+    service => service.AutoMarkAbsentUncheckedStudentsAsync(null),
+    "30 18 * * 0", // 18:30 Sunday
+    new RecurringJobOptions { TimeZone = vnTimeZone });
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

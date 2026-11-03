@@ -583,6 +583,94 @@ namespace ManagerStudentCaltholic.Services
             return (classesSynced, recordsUpserted);
         }
 
+        public async Task<int> AutoMarkAbsentUncheckedStudentsAsync(DateTime? targetDate = null)
+        {
+            var vnNow = DateTime.UtcNow.AddHours(7);
+            var rawDate = targetDate?.Date ?? vnNow.Date;
+            var dateUtc = DateTime.SpecifyKind(rawDate, DateTimeKind.Utc);
+
+            // Chỉ tự động đánh vắng cho ngày sinh hoạt định kỳ: Thứ Năm (Lễ T5) và Chúa Nhật (Lễ CN + Học GL)
+            if (dateUtc.DayOfWeek != DayOfWeek.Thursday && dateUtc.DayOfWeek != DayOfWeek.Sunday)
+            {
+                return 0;
+            }
+
+            // 1. Đồng bộ toàn bộ dữ liệu đang chờ trên Redis xuống DB trước khi rà soát
+            await SyncDirtyAttendancesToDatabaseAsync(dateUtc);
+
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (currentYear == null) return 0;
+
+            // 2. Lấy toàn bộ danh sách Enrollment đang theo học trong niên khóa hiện hành
+            var activeEnrollmentIds = await _context.Enrollments
+                .AsNoTracking()
+                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id && e.Student.IsActive)
+                .Select(e => e.Id)
+                .ToListAsync();
+
+            if (!activeEnrollmentIds.Any()) return 0;
+
+            // 3. Lấy danh sách EnrollmentId đã có bản ghi Attendance trong ngày
+            var recordedEnrollmentIds = await _context.Attendances
+                .AsNoTracking()
+                .Where(a => a.AttendanceDate == dateUtc && activeEnrollmentIds.Contains(a.EnrollmentId))
+                .Select(a => a.EnrollmentId)
+                .ToListAsync();
+
+            // 4. Kiểm tra các đơn xin phép nghỉ đã được duyệt (APPROVED) for ngày này
+            var approvedAbsences = await _context.AbsenceRequests
+                .AsNoTracking()
+                .Where(r => r.AbsenceDate == dateUtc && r.Status == "APPROVED" && activeEnrollmentIds.Contains(r.EnrollmentId))
+                .ToDictionaryAsync(r => r.EnrollmentId, r => r.SessionType);
+
+            var missingEnrollmentIds = activeEnrollmentIds
+                .Where(id => !recordedEnrollmentIds.Contains(id))
+                .ToList();
+
+            if (!missingEnrollmentIds.Any()) return 0;
+
+            bool isSunday = dateUtc.DayOfWeek == DayOfWeek.Sunday;
+            var newAbsentRecords = new List<Attendance>(missingEnrollmentIds.Count);
+
+            foreach (var enrollmentId in missingEnrollmentIds)
+            {
+                approvedAbsences.TryGetValue(enrollmentId, out var permittedSession);
+
+                bool massPermitted = permittedSession == "MASS" || permittedSession == "ALL";
+                bool classPermitted = permittedSession == "CLASS" || permittedSession == "ALL";
+
+                newAbsentRecords.Add(new Attendance
+                {
+                    EnrollmentId = enrollmentId,
+                    AttendanceDate = dateUtc,
+                    DayOfWeek = dateUtc.DayOfWeek,
+                    AttendedMass = false,
+                    MassStatus = massPermitted ? AttendanceStatus.AbsentPermitted : AttendanceStatus.AbsentUnpermitted,
+                    ClassAttended = false,
+                    ClassStatus = isSunday
+                        ? (classPermitted ? AttendanceStatus.AbsentPermitted : AttendanceStatus.AbsentUnpermitted)
+                        : AttendanceStatus.AbsentUnpermitted,
+                    IsMakeUp = false,
+                    Note = (massPermitted || classPermitted)
+                        ? "[Hệ thống]: Vắng có phép theo đơn đã duyệt"
+                        : "[Hệ thống]: Tự động ghi nhận vắng cuối ngày",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+
+            await _context.Attendances.AddRangeAsync(newAbsentRecords);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "[Hangfire AutoAbsent] Đã tự động ghi nhận vắng xuống DB cho {Count} thiếu nhi chưa điểm danh ngày {Date:dd/MM/yyyy}.",
+                newAbsentRecords.Count, dateUtc);
+
+            return newAbsentRecords.Count;
+        }
+
         #region Helpers Nội bộ
         private async Task MarkClassDirtyAsync(int classId, DateTime dateUtc)
         {

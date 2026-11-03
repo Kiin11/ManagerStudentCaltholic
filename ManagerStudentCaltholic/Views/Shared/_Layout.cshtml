@@ -21,6 +21,9 @@
     bool isLead = isAuthenticated && (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard));
     bool isStaff = isLead || (isAuthenticated && (User.IsInRole(UserRole.BranchHead) || User.IsInRole(UserRole.Teacher)));
     bool canViewGovernance = isLead || (isAuthenticated && User.IsInRole(UserRole.BranchHead));
+
+    // P2-LOG-18: Nhận diện thiết bị đang đăng nhập hoặc đã từng đăng nhập tài khoản GLV/Nhân sự
+    bool isRecognizedStaffDevice = isAuthenticated || Context.Request.Cookies.ContainsKey("Parish_Staff_Device");
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -568,11 +571,24 @@
 
             <!-- Cụm Nút Lối Tắt Nhanh + Profile -->
             <div class="d-flex align-items-center gap-2">
-                <a class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 d-inline-flex align-items-center fw-semibold"
-                   asp-controller="Lookup" asp-action="Index">
-                    <i class="bi bi-search me-1"></i>
-                    <span>Tra Cứu Học Sinh</span>
-                </a>
+                @if (isRecognizedStaffDevice)
+                {
+                    <!-- P2-LOG-18: Máy đã đăng nhập GLV/BĐH hiển thị nút Quét QR Điểm Danh ngay kế nút Đăng nhập/Profile -->
+                    <a class="btn btn-primary btn-sm rounded-pill px-3 d-inline-flex align-items-center fw-bold shadow-sm"
+                       asp-controller="Attendance" asp-action="ScanQr">
+                        <i class="bi bi-qr-code-scan me-1"></i>
+                        <span>Quét QR Điểm Danh</span>
+                    </a>
+                }
+                else
+                {
+                    <!-- Máy của Phụ huynh / Khách chưa từng đăng nhập tài khoản GLV thì hiện nút Tra Cứu Học Sinh -->
+                    <a class="btn btn-outline-warning text-dark btn-sm rounded-pill px-3 d-inline-flex align-items-center fw-semibold"
+                       asp-controller="Lookup" asp-action="Index">
+                        <i class="bi bi-search me-1"></i>
+                        <span>Tra Cứu Học Sinh</span>
+                    </a>
+                }
 
                 <button type="button" id="btnInstallPwaTopbar"
                         class="btn btn-primary btn-sm rounded-pill px-3 d-none align-items-center fw-semibold shadow-sm"

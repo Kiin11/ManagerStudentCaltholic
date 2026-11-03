@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Data;
+﻿ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
@@ -84,17 +84,31 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (targetClass == null) return null;
 
+            // P2-LOG-14 FIX 1: Lọc đúng cột điểm chung (ClassRoomId == null) hoặc cột điểm riêng của đúng lớp này
             var configs = await _context.GradeConfigurations
                 .Where(g => g.AcademicYearId == targetClass.AcademicYearId &&
-                            (g.GradeLevel == "ALL" || g.GradeLevel == targetClass.GradeLevel))
+                            (g.GradeLevel == "ALL" || g.GradeLevel == targetClass.GradeLevel) &&
+                            (g.ClassRoomId == null || g.ClassRoomId == targetClass.Id))
+                .AsNoTracking()
                 .ToListAsync();
 
             var enrollmentIds = targetClass.Enrollments.Select(e => e.Id).ToList();
             var attendances = await _context.Attendances
                 .Where(a => enrollmentIds.Contains(a.EnrollmentId))
+                .AsNoTracking()
                 .ToListAsync();
 
-            var totalSessions = Math.Max(1, attendances.Select(a => a.AttendanceDate).Distinct().Count());
+            // P2-LOG-14 FIX 2: Tính chuyên cần kết hợp cả Lễ Chúa Nhật và Giờ Học Giáo Lý
+            var totalSunMassSessions = Math.Max(1, attendances
+                .Where(a => a.DayOfWeek == DayOfWeek.Sunday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted))
+                .Select(a => a.AttendanceDate.Date).Distinct().Count());
+
+            var totalClassSessions = Math.Max(1, attendances
+                .Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted)
+                .Select(a => a.AttendanceDate.Date).Distinct().Count());
+
+            var hk1Configs = configs.Where(c => c.Semester == 1).ToList();
+            var hk2Configs = configs.Where(c => c.Semester == 2).ToList();
 
             var studentItems = targetClass.Enrollments
                 .Where(e => e.Student.IsActive)
@@ -102,21 +116,31 @@ namespace ManagerStudentCaltholic.Controllers
                 .Select(e =>
                 {
                     var attList = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
-                    var presentCount = attList.Count(a => a.ClassAttended && (a.ClassStatus == "PRESENT" || a.ClassStatus == "LATE"));
-                    var attRate = Math.Round((presentCount / (double)totalSessions) * 100, 1);
 
-                    var hk1Configs = configs.Where(c => c.Semester == 1).ToList();
+                    var massPresent = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && ((a.AttendedMass && (a.MassStatus == AttendanceStatus.Present || a.MassStatus == AttendanceStatus.LinedUp)) || a.IsMakeUp));
+                    var massLate = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && !a.IsMakeUp && a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
+                    var massRate = attendances.Any()
+                        ? Math.Min(100.0, ((massPresent + massLate * 0.8) / totalSunMassSessions) * 100.0)
+                        : 100.0;
+
+                    var classPresent = attList.Count(a => (a.ClassAttended && a.ClassStatus == AttendanceStatus.Present) || a.IsMakeUp);
+                    var classLate = attList.Count(a => !a.IsMakeUp && a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
+                    var classRate = attendances.Any()
+                        ? Math.Min(100.0, ((classPresent + classLate * 0.8) / totalClassSessions) * 100.0)
+                        : 100.0;
+
+                    var combinedAttRate = Math.Round((massRate + classRate) / 2.0, 1);
+
                     var hk1Dict = e.GradeRecords.Where(r => hk1Configs.Any(c => c.Id == r.GradeConfigurationId))
                                                .ToDictionary(r => r.GradeConfigurationId, r => r.Score);
                     var sem1Avg = _gradeService.CalculateSemesterAverage(hk1Dict, hk1Configs);
 
-                    var hk2Configs = configs.Where(c => c.Semester == 2).ToList();
                     var hk2Dict = e.GradeRecords.Where(r => hk2Configs.Any(c => c.Id == r.GradeConfigurationId))
                                                .ToDictionary(r => r.GradeConfigurationId, r => r.Score);
                     var sem2Avg = _gradeService.CalculateSemesterAverage(hk2Dict, hk2Configs);
 
                     var yearAvg = _gradeService.CalculateYearAverage(sem1Avg, sem2Avg);
-                    var (rank, eligible) = _gradeService.EvaluateStudent(yearAvg, attRate, targetClass.GradeLevel);
+                    var (rank, eligible) = _gradeService.EvaluateStudent(yearAvg, combinedAttRate, targetClass.GradeLevel);
 
                     return new PrintStudentItemViewModel
                     {
@@ -130,7 +154,7 @@ namespace ManagerStudentCaltholic.Controllers
                         Semester2Average = sem2Avg,
                         YearAverage = yearAvg,
                         AcademicRank = rank,
-                        AttendanceRate = attRate,
+                        AttendanceRate = combinedAttRate,
                         IsEligibleForSacrament = eligible
                     };
                 }).ToList();

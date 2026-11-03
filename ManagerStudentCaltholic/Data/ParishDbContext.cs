@@ -89,7 +89,9 @@ namespace ManagerStudentCaltholic.Data
 
             // Ràng buộc duy nhất: 1 học sinh chỉ xếp vào 1 lớp trong cùng 1 niên khóa
             modelBuilder.Entity<Enrollment>()
-                .HasIndex(e => new { e.StudentId, e.ClassRoomId }).IsUnique();
+                    .HasIndex(e => new { e.StudentId, e.ClassRoomId })
+                    .IsUnique()
+                    .HasFilter("\"IsDeleted\" = false");                        
 
             modelBuilder.Entity<Attendance>(entity =>
             {
@@ -524,7 +526,9 @@ namespace ManagerStudentCaltholic.Data
                 entity.Property(r => r.CreatedBy).HasMaxLength(100).IsRequired(false);
                 entity.Property(r => r.UpdatedBy).HasMaxLength(100).IsRequired(false);
 
-                entity.HasIndex(r => new { r.StudentId, r.SacramentType }).IsUnique();
+                entity.HasIndex(r => new { r.StudentId, r.SacramentType })
+                      .IsUnique()
+                      .HasFilter("\"IsDeleted\" = false");
             });
 
             modelBuilder.Entity<SacramentApprovalBatch>(entity =>

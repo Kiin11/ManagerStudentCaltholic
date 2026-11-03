@@ -1094,7 +1094,7 @@
         // SEC-NEW-09 FIX 3: Dùng createElement + textContent trong openAuditTimeline
         function openAuditTimeline(studentId, studentName) {
             document.getElementById('auditStudentName').textContent = studentName;
-            const modal = new bootstrap.Modal(document.getElementById('auditTimelineModal'));
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('auditTimelineModal'));
             modal.show();
 
             const loading = document.getElementById('timelineLoading');
@@ -1103,9 +1103,10 @@
             list.style.display = 'none';
             list.innerHTML = '';
 
-            const selectedDate = document.getElementById('attendanceDatePicker')?.value || new Date().toISOString().split('T')[0];
+            // P2-LOG-12 FIX: Đọc đúng ID '#inputDate' trên thanh chọn ngày điểm danh
+            const selectedDate = document.getElementById('inputDate')?.value || new Date().toISOString().split('T')[0];
 
-            fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${selectedDate}`)
+            fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${encodeURIComponent(selectedDate)}`)
                 .then(res => res.json())
                 .then(response => {
                     loading.style.display = 'none';
@@ -1149,6 +1150,7 @@
                     list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
                 });
         }
+
         // TASK-P3-07.4: 1-Click Copy tin nhắn báo vắng / đi trễ ngay trên dòng Sổ Điểm Danh
         async function quickCopyAbsenceMessageFromRow(btn) {
             const row = btn.closest('tr');

@@ -34,5 +34,11 @@ namespace ManagerStudentCaltholic.Interface.Services
         /// TASK-P3-12.4: Đồng bộ hàng loạt (Batch Upsert) toàn bộ dữ liệu điểm danh đã thay đổi trên Redis về PostgreSQL
         /// </summary>
         Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null);
+
+        /// <summary>
+        /// P2-LOG-17: Tự động tạo bản ghi vắng mặt (ABSENT_UNPERMITTED / ABSENT_PERMITTED) xuống DB
+        /// cho các học sinh không quét QR / chưa được điểm danh trong ngày Thứ Năm hoặc Chúa Nhật
+        /// </summary>
+        Task<int> AutoMarkAbsentUncheckedStudentsAsync(DateTime? targetDate = null);
     }
 }

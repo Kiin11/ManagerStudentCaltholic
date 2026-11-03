@@ -125,10 +125,8 @@ namespace ManagerStudentCaltholic.Controllers
 
 
         /// <summary>
-        /// 2. POST: /Attendance/SaveBatch (TASK-403)
+        /// 2. POST: /Attendance/SaveBatch (P2-LOG-16 FIX: Write-Through Redis + Sync thẳng xuống PostgreSQL)
         /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveBatch([FromBody] AttendanceBatchSubmitDto request)
@@ -138,8 +136,6 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Không có dữ liệu điểm danh nào được gửi lên." });
             }
 
-            // Kiểm tra chống IDOR theo khối nếu là Trưởng khối (BranchHead)
-            // P2-SEC-01 FIX: Kiểm tra quyền trên lớp đối với cả BranchHead và Teacher
             if (!await CanAccessClassAsync(request.ClassId))
             {
                 return Forbid();
@@ -147,15 +143,23 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
+                // 1. Lưu cập nhật lên bộ nhớ đệm Redis
                 var (success, message) = await _redisAttendance.SaveBatchToRedisAsync(request);
+                if (success)
+                {
+                    // 2. P2-LOG-16 FIX: Đồng bộ tức thì (Write-Through) từ Redis xuống PostgreSQL ngay trong cùng Request
+                    await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate);
+                }
+
                 return Json(new { success, message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi lưu điểm danh qua Redis cho Lớp ID: {ClassId}", request.ClassId);
+                _logger.LogError(ex, "Lỗi khi lưu điểm danh cho Lớp ID: {ClassId}", request.ClassId);
                 return Json(new { success = false, message = "Đã xảy ra lỗi khi lưu dữ liệu điểm danh." });
             }
         }
+
         /// <summary>
         /// GET: /Attendance/ScanQr (TASK-406 - Màn hình quét QR)
         /// </summary>
@@ -169,10 +173,8 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// POST: /Attendance/ScanCheckIn (TASK-407 - API Xử lý quét mã)
+        /// POST: /Attendance/ScanCheckIn (P2-LOG-16 FIX: Quét QR cập nhật ngay xuống DB)
         /// </summary>
-        /// <param name="request"></param>
-        /// <returns></returns>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ScanCheckIn([FromBody] QrScanRequestDto request)
@@ -189,11 +191,18 @@ namespace ManagerStudentCaltholic.Controllers
             try
             {
                 var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request);
+                if (response.Success && !response.IsDuplicate)
+                {
+                    // P2-LOG-16 FIX: Ghi thẳng lượt quét QR mới xuống PostgreSQL ngay lập tức
+                    var targetDate = request.ScanTimestamp?.Date ?? DateTime.UtcNow.AddHours(7).Date;
+                    await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(targetDate);
+                }
+
                 return Json(response);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi xử lý quét mã QR qua Redis cho mã: {Code}", request.StudentCode);
+                _logger.LogError(ex, "Lỗi khi xử lý quét mã QR cho mã: {Code}", request.StudentCode);
                 return Json(new QrScanResponseDto
                 {
                     Success = false,
@@ -202,7 +211,6 @@ namespace ManagerStudentCaltholic.Controllers
                 });
             }
         }
-
 
         #region diem danh bù (TASK-408 & TASK-410)
         /// <summary>
@@ -837,20 +845,6 @@ namespace ManagerStudentCaltholic.Controllers
             if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
             {
                 return Forbid();
-            }
-
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    // SEC-08 FIX: Trưởng khối chưa được phân công khối nào thì không trả về dữ liệu toàn trường
-                    classesQuery = classesQuery.Where(_ => false);
-                }
-                else
-                {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
-                }
             }
 
             // Và nếu truyền classId không nằm trong danh sách classes của khối mình thì trả về Forbid():
