@@ -1,4 +1,4 @@
-graph TD
+```graph TD
     Client((Client Browser / Mobile PWA))
     Nginx[Nginx Reverse Proxy\nRate Limiting]
     
@@ -31,3 +31,5 @@ graph TD
     EFCore --> PostgreSQL
     Jobs --> Services
     Jobs --> PostgreSQL
+
+```

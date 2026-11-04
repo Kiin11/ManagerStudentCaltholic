@@ -1,4 +1,4 @@
-sequenceDiagram
+```sequenceDiagram
     participant User as User (GLV/Thiết bị quét)
     participant Ctrl as AttendanceController
     participant R_Svc as RedisAttendanceService
@@ -29,3 +29,5 @@ sequenceDiagram
     R_Svc->>DB: Upsert hàng loạt bảng Attendances
     DB-->>R_Svc: Commit thành công
     R_Svc->>Redis: Set IsDirty = false
+	
+```
