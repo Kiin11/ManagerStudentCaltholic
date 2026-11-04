@@ -1,0 +1,165 @@
+Để sau này bạn tiếp tục code mà không phải phân tích lại toàn bộ source codebase, mình khuyên nên xây dựng quy trình cập nhật AI-Knowledge theo kiểu Incremental Update (cập nhật tăng dần).
+
+Nguyên tắc quan trọng nhất:
+Không yêu cầu Gemini đọc lại toàn bộ project sau mỗi lần thay đổi. Chỉ đưa vào những file code đã thay đổi, phần liên quan trực tiếp và tài liệu AI-Knowledge hiện tại. Sau đó yêu cầu Gemini cập nhật đúng những tài liệu bị ảnh hưởng.
+
+Mình đề xuất chia thành 3 cấp độ cập nhật, tùy quy mô thay đổi.
+1. Quy trình cập nhật sau mỗi lần code
+Incremental Knowledge Update
+1. Phát hiện source code thay đổi
+   
+   Dùng Git để lấy danh sách file thêm mới, chỉnh sửa, xóa kể từ lần cập nhật Knowledge gần nhất.
+2. Thu thập ngữ cảnh liên quan
+   
+   Lấy code mới, code cũ (nếu cần), các class gọi đến hoặc được gọi bởi phần code thay đổi.
+3. Phân tích ảnh hưởng
+   
+   Xác định module, feature, route, database, integration và dependency nào bị ảnh hưởng.
+4. Gemini cập nhật tài liệu
+   
+   Chỉ cập nhật những file Markdown, JSON, JSONL có liên quan. Không tạo lại toàn bộ Knowledge.
+5. Kiểm tra và xác nhận
+   
+   Đối chiếu tài liệu với source code, kiểm tra JSON hợp lệ, đường dẫn và các tham chiếu.
+6. Đánh dấu phiên bản mới
+   
+   Lưu Git commit/source hash và thời điểm cập nhật để lần sau tiếp tục từ mốc này.
+
+2. Dùng Git để xác định chính xác những gì cần cập nhật
+Ví dụ lần cập nhật Knowledge gần nhất được thực hiện tại commit abc123, hiện tại bạn đã code thêm một số tính năng.
+
+Có thể dùng:
+# Liệt kê file thay đổi từ commit đã cập nhật Knowledge
+git diff --name-status abc123 HEAD
+
+# Chỉ lấy file C# và Razor
+git diff --name-only abc123 HEAD -- "*.cs" "*.cshtml"
+
+# Xem nội dung thay đổi
+git diff abc123 HEAD -- "*.cs" "*.cshtml"
+
+
+Kết quả có thể như sau:
+M Controllers/HotelController.cs
+M Services/HotelBookingService.cs
+A Services/HotelPromotionService.cs
+M Views/Hotel/Details.cshtml
+D Services/OldHotelService.cs
+
+
+Từ đó, Gemini chỉ cần phân tích các thay đổi liên quan đến Hotel.
+
+Lưu ý: Không nên chỉ dựa vào git diff để kết luận tài liệu nào cần cập nhật. Ví dụ, thay đổi một service có thể ảnh hưởng đến feature Booking, Payment hoặc API khác. Cần kiểm tra dependency của các class liên quan.
+
+3. Phân loại mức độ thay đổi để chọn model Gemini
+Không phải thay đổi nào cũng cần Gemini Pro. Bạn có thể áp dụng quy tắc sau:
+Loại thay đổi	Model đề xuất	Mức độ
+Thêm/sửa một method, class đơn giản	Gemini Flash	Medium
+Thêm Controller, Service hoặc Repository	Gemini Flash	Medium
+Thay đổi luồng nghiệp vụ của một feature	Gemini Pro	High
+Thay đổi kiến trúc hoặc nhiều module	Gemini Pro	High
+Rà soát tính nhất quán toàn bộ tài liệu	Argon 4	High
+Phân loại danh sách file thay đổi lớn	Gemini Flash-Lite	Low
+
+Đây là cách phân công để tối ưu chi phí và chất lượng trong workflow, không phải khẳng định model nào luôn tốt hơn model nào.
+
+4. Bộ prompt dùng cho mỗi lần cập nhật
+Mình khuyên tạo một thư mục riêng:
+AI-Knowledge/
+├── 00-OVERVIEW/
+├── 01-MODULES/
+├── 02-DATABASE/
+├── 03-CODE-INDEX/
+├── 04-INTEGRATIONS/
+├── 05-FEATURES/
+└── 06-UPDATE-LOG/
+    ├── KNOWLEDGE-BASELINE.json
+    ├── UPDATE-LOG.md
+    └── PENDING-UPDATES.md
+
+
+Trong đó:
+- KNOWLEDGE-BASELINE.json: lưu commit Git gần nhất đã được phản ánh đầy đủ vào Knowledge.
+- UPDATE-LOG.md: lịch sử các lần cập nhật.
+- PENDING-UPDATES.md: các thay đổi chưa được phân tích hoặc chưa cập nhật xong.
+Ví dụ KNOWLEDGE-BASELINE.json:
+{
+  "solution": "Easybook",
+  "lastIndexedCommit": "abc123",
+  "lastUpdatedAt": "2026-11-04T10:00:00+07:00",
+  "status": "completed"
+}
+
+Promt A - Promt B -Promt Cần
+
+5. Quy tắc quan trọng: Chỉ cập nhật Baseline sau khi hoàn tất
+Đây là điểm giúp bạn tránh mất dấu các thay đổi.
+
+Ví dụ:
+Lần cập nhật	Git commit	Trạng thái
+Khởi tạo Knowledge	abc123	Completed
+Lần 1	def456	Completed
+Lần 2	ghi789	Pending
+Lần 3	jkl012	Chưa xử lý
+
+Nếu lần 2 chưa được cập nhật thành công, lần 3 vẫn phải tính thay đổi từ def456, không được lấy ghi789 làm baseline.
+
+Chỉ cập nhật lastIndexedCommit sau khi:
+1. Gemini đã cập nhật xong các file.
+2. Audit không còn lỗi nghiêm trọng.
+3. Bạn đã kiểm tra và chấp nhận kết quả.
+4. Các file Knowledge đã được lưu vào Git.
+6. Một số lưu ý khi triển khai thực tế
+- File mới chưa được Git track: git diff mặc định không hiển thị nội dung file untracked. Cần bổ sung nội dung file mới vào gói đầu vào.
+- File bị xóa: Phải cung cấp thông tin file đã xóa để Gemini xử lý các tham chiếu cũ.
+- Thay đổi database: Nên cung cấp cả migration hoặc SQL schema mới, không chỉ code C#.
+- Thay đổi lớn: Chia theo module hoặc feature, tránh đưa toàn bộ patch vào một lần.
+- Không để Gemini tự sửa toàn bộ Knowledge: Nên yêu cầu xuất các file thay đổi, kiểm tra trước rồi mới ghi đè tài liệu hiện tại.
+- Không đưa secrets: Loại bỏ connection string có mật khẩu, API key, token và dữ liệu nhạy cảm trước khi gửi cho Gemini.
+7. Hướng phát triển tốt hơn: Viết một công cụ Knowledge Updater
+Về lâu dài, mình khuyên bạn nên bổ sung một module vào chính dự án AI Codebase Analyzer .NET 8 đã thiết kế trước đó.
+AI.CodebaseAnalyzer.KnowledgeUpdater
+Git Change Detector
+
+Đọc commit baseline, phát hiện file thêm/sửa/xóa.
+
+
+Impact Analyzer
+
+Truy vấn PostgreSQL để tìm dependency, module và feature liên quan.
+
+
+Context Package Generator
+
+Tạo gói TXT/Markdown nhỏ, chỉ chứa thông tin cần thiết cho Gemini.
+
+
+Gemini Knowledge Updater
+
+Phân tích và đề xuất các tài liệu cần cập nhật.
+
+
+Knowledge Validator
+
+Kiểm tra tính chính xác, JSON, dependency và tài liệu lỗi thời.
+
+
+CLI có thể thiết kế như sau:
+# Phân tích source code thay đổi
+CodeAnalyzer update --since abc123
+
+# Xuất gói ngữ cảnh cho Gemini
+CodeAnalyzer export-update --since abc123
+
+# Kiểm tra Knowledge sau khi cập nhật
+CodeAnalyzer validate-knowledge
+
+# Xác nhận commit đã được cập nhật Knowledge
+CodeAnalyzer baseline set --commit def456
+
+
+Điểm mình muốn nhấn mạnh: Không nên phụ thuộc vào Gemini để tự phát hiện mọi thay đổi trong source code. Hãy để công cụ .NET 8 chịu trách nhiệm phát hiện thay đổi, phân tích dependency và tạo context package. Gemini chỉ nên đảm nhiệm phần diễn giải kiến trúc, nghiệp vụ và viết tài liệu.
+
+Như vậy, bạn vừa giảm token sử dụng, vừa tránh việc AI vô tình viết lại những tài liệu vẫn còn chính xác.
+
+Đề xuất: Hãy triển khai KnowledgeUpdater ngay sau khi hoàn thành MVP của Codebase Analyzer. Đây sẽ là cầu nối giúp AI-Knowledge luôn đồng bộ với quá trình phát triển phần mềm, thay vì chỉ là một bộ tài liệu được tạo ra một lần rồi dần lỗi thời.
