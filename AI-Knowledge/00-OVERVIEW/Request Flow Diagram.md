@@ -1,4 +1,5 @@
-```sequenceDiagram
+```mermaid
+sequenceDiagram
     participant User as User (GLV/Thiết bị quét)
     participant Ctrl as AttendanceController
     participant R_Svc as RedisAttendanceService

@@ -1,4 +1,5 @@
-```graph TD
+```mermaid
+	graph TD
     Client((Client Browser / Mobile PWA))
     Nginx[Nginx Reverse Proxy\nRate Limiting]
     
