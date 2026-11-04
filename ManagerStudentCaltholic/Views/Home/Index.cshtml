@@ -1,4 +1,4 @@
-﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
 @{
     var activeMaster = Model.Masters.FirstOrDefault(m => m.MasterCode == Model.ActiveMasterCode)
                        ?? Model.Masters.FirstOrDefault();
@@ -184,6 +184,12 @@
         </div>
     </div>
 
+    <!-- FEAT-P5-01: CỔNG TRA CỨU THIẾU NHI NỘI BỘ DÀNH CHO GLV / BAN ĐIỀU HÀNH -->
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        @await Html.PartialAsync("_StaffStudentLookupWidget", Model)
+    }
+
     <!-- 2. BÀN LÀM VIỆC NHANH: CÁC TÁC VỤ THUỘC PHÂN KHU MASTER ĐANG CHỌN TRÊN TOPBAR -->
     @if (activeMaster != null && activeMaster.Features.Any())
     {
@@ -350,4 +356,5 @@
             });
         }
     </script>
+    <script src="~/js/staff-student-lookup.js" asp-append-version="true"></script>
 }
