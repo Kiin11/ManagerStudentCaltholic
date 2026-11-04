@@ -1,0 +1,62 @@
+[
+  {
+    "filePath": "ManagerStudentCaltholic",
+    "fileName": "AttendanceModule",
+    "extension": "cs",
+    "language": "C#",
+    "project": "ManagerStudentCaltholic",
+    "module": "Attendance",
+    "category": "Controllers & Services",
+    "isGenerated": false,
+    "isComplete": true,
+    "confidence": "high"
+  },
+  {
+    "filePath": "ManagerStudentCaltholic",
+    "fileName": "BookingEnrollmentModule",
+    "extension": "cs",
+    "language": "C#",
+    "project": "ManagerStudentCaltholic",
+    "module": "Booking",
+    "category": "Controllers",
+    "isGenerated": false,
+    "isComplete": true,
+    "confidence": "high"
+  },
+  {
+    "filePath": "ManagerStudentCaltholic",
+    "fileName": "PaymentPaymentModule",
+    "extension": "cs",
+    "language": "C#",
+    "project": "ManagerStudentCaltholic",
+    "module": "Payment",
+    "category": "Controllers",
+    "isGenerated": false,
+    "isComplete": false,
+    "confidence": "low"
+  },
+  {
+    "filePath": "ManagerStudentCaltholic",
+    "fileName": "UserAccountModule",
+    "extension": "cs",
+    "language": "C#",
+    "project": "ManagerStudentCaltholic",
+    "module": "User / Account",
+    "category": "Controllers & Models",
+    "isGenerated": false,
+    "isComplete": true,
+    "confidence": "high"
+  },
+  {
+    "filePath": "ManagerStudentCaltholic",
+    "fileName": "NotificationModule",
+    "extension": "cs",
+    "language": "C#",
+    "project": "ManagerStudentCaltholic",
+    "module": "Notification",
+    "category": "Controllers",
+    "isGenerated": false,
+    "isComplete": true,
+    "confidence": "high"
+  }
+]
