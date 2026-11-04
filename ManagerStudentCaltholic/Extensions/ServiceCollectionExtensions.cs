@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
@@ -109,6 +109,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IAttendanceDisputeService, AttendanceDisputeService>();
             services.AddScoped<IFeatureNavigationService, FeatureNavigationService>();
             services.AddScoped<IDeviceStudentRecognitionService, DeviceStudentRecognitionService>();
+            // FEAT-P5-01: Service Truy vấn 360 độ Thiếu nhi Nội bộ
+            services.AddScoped<IStaffStudentLookupService, StaffStudentLookupService>();
 
             return services;
         }

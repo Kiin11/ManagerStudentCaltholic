@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Entities;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
@@ -44,6 +44,10 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         // FEAT-P4-07: Dữ liệu học sinh & thông báo lớp được nhận diện từ thiết bị đã tra cứu
         public DeviceDetectedStudentContextViewModel DeviceStudentContext { get; set; } = new();
+
+        // FEAT-P5-01: Lịch sử tra cứu gần đây của GLV & Danh sách Option chế độ xem
+        public List<DTOs.RecentLookupItemDto> RecentStaffLookups { get; set; } = new();
+        public List<LookupViewOption> LookupOptions { get; set; } = new();
     }
 
     public class FeaturePermissionManageViewModel

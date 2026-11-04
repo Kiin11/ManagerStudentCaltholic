@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Interface.Models;
+using ManagerStudentCaltholic.Interface.Models;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -63,6 +63,10 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<AttendanceDisputeRequest> AttendanceDisputeRequests => Set<AttendanceDisputeRequest>();
         public DbSet<FeaturePermissionRule> FeaturePermissionRules => Set<FeaturePermissionRule>();
 
+        // --- Internal Staff Quick Lookup (Phase 5: FEAT-P5-01 / TASK-P5-01.1) ---
+        public DbSet<StaffQuickLookupLog> StaffQuickLookupLogs => Set<StaffQuickLookupLog>();
+        public DbSet<LookupViewOption> LookupViewOptions => Set<LookupViewOption>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -76,6 +80,12 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<ClassRoom>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<Enrollment>().HasIndex(e => e.IsDeleted);
+
+            // FEAT-P5-01 (TASK-P5-01.1): Bổ sung Index tìm kiếm đa khóa trên Students và Enrollments
+            modelBuilder.Entity<Student>().HasIndex(e => e.StudentCode);
+            modelBuilder.Entity<Student>().HasIndex(e => new { e.LastName, e.FirstName });
+            modelBuilder.Entity<Student>().HasIndex(e => e.ChristianName);
+            modelBuilder.Entity<Enrollment>().HasIndex(e => new { e.StudentId, e.AcademicYearId });
 
             modelBuilder.Entity<ClassRoom>(entity =>
             {
@@ -628,6 +638,7 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.HasIndex(h => h.OriginalCode);
                 entity.HasIndex(h => h.ArchivedYearCode);
+                entity.HasIndex(h => h.NewCode);
                 entity.HasIndex(h => new { h.StudentId, h.SourceAcademicYearId });
 
                 entity.HasOne(h => h.Student)
@@ -676,6 +687,95 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasKey(r => r.Id);
                 entity.HasIndex(r => r.FeatureCode).IsUnique();
                 entity.HasIndex(r => new { r.MasterCode, r.IsEnabled, r.SortOrder });
+            });
+
+            // FEAT-P5-01 (TASK-P5-01.1): Cấu hình Schema Lịch sử Tra cứu & Chế độ xem
+            modelBuilder.Entity<StaffQuickLookupLog>(entity =>
+            {
+                entity.ToTable("StaffQuickLookupLogs");
+                entity.HasKey(l => l.Id);
+
+                entity.HasIndex(l => new { l.UserId, l.LookedUpAt });
+                entity.HasIndex(l => l.StudentId);
+
+                entity.Property(l => l.SearchTerm).HasMaxLength(150);
+                entity.Property(l => l.SelectedOption).HasMaxLength(50).HasDefaultValue("OVERVIEW");
+                entity.Property(l => l.IpAddress).HasMaxLength(50);
+                entity.Property(l => l.LookedUpAt).HasDefaultValueSql("NOW()");
+
+                entity.HasOne(l => l.User)
+                      .WithMany()
+                      .HasForeignKey(l => l.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(l => l.Student)
+                      .WithMany()
+                      .HasForeignKey(l => l.StudentId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<LookupViewOption>(entity =>
+            {
+                entity.ToTable("LookupViewOptions");
+                entity.HasKey(o => o.Id);
+
+                entity.HasIndex(o => o.OptionCode).IsUnique();
+
+                entity.Property(o => o.OptionCode).HasMaxLength(50).IsRequired();
+                entity.Property(o => o.DisplayName).HasMaxLength(100).IsRequired();
+                entity.Property(o => o.Description).HasMaxLength(255);
+                entity.Property(o => o.IconClass).HasMaxLength(50).HasDefaultValue("bi-card-list");
+                entity.Property(o => o.BadgeColor).HasMaxLength(30).HasDefaultValue("primary");
+                entity.Property(o => o.SortOrder).HasDefaultValue(1);
+                entity.Property(o => o.IsActive).HasDefaultValue(true);
+
+                // Seed 4 Options mặc định theo yêu cầu FEAT-P5-01
+                entity.HasData(
+                    new LookupViewOption
+                    {
+                        Id = 1,
+                        OptionCode = "OVERVIEW",
+                        DisplayName = "Tổng quan",
+                        Description = "Hồ sơ cá nhân, phân bổ lớp học & tóm tắt tình trạng hiện tại",
+                        IconClass = "bi-person-badge",
+                        BadgeColor = "primary",
+                        SortOrder = 1,
+                        IsActive = true
+                    },
+                    new LookupViewOption
+                    {
+                        Id = 2,
+                        OptionCode = "ATTENDANCE_DETAIL",
+                        DisplayName = "Chuyên cần & Chiến dịch",
+                        Description = "Lễ Chúa Nhật & Thứ Năm gần nhất, giờ học & Chiến dịch đi lễ 1 tháng",
+                        IconClass = "bi-calendar-check",
+                        BadgeColor = "success",
+                        SortOrder = 2,
+                        IsActive = true
+                    },
+                    new LookupViewOption
+                    {
+                        Id = 3,
+                        OptionCode = "ACADEMIC_2Y_SACRAMENT",
+                        DisplayName = "Lịch sử 2 năm & Bí tích",
+                        Description = "ĐTB cả năm, tỷ lệ chuyên cần 2 năm trước, bảng điểm & mốc Bí tích",
+                        IconClass = "bi-journal-bookmark",
+                        BadgeColor = "warning",
+                        SortOrder = 3,
+                        IsActive = true
+                    },
+                    new LookupViewOption
+                    {
+                        Id = 4,
+                        OptionCode = "PARENT_CONTACT",
+                        DisplayName = "Liên hệ phụ huynh",
+                        Description = "Thông tin liên hệ phụ huynh, địa chỉ & mẫu soạn tin nhắn Zalo/SMS",
+                        IconClass = "bi-telephone",
+                        BadgeColor = "info",
+                        SortOrder = 4,
+                        IsActive = true
+                    }
+                );
             });
         }
 
