@@ -225,6 +225,19 @@ body.mobile-mode {
 /* =======================================================
    5. OFFCANVAS / BOTTOM SHEET CHO DI ĐỘNG (TASK-P5-02.3)
    ======================================================= */
+#mobileMenuOffcanvas {
+    height: 100dvh !important;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#mobileMenuOffcanvas .offcanvas-body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+}
+
 .mobile-bottom-sheet {
     border-top-left-radius: 24px !important;
     border-top-right-radius: 24px !important;
