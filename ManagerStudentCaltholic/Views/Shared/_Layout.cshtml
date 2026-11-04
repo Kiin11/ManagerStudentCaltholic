@@ -1,4 +1,4 @@
-@using System.Security.Claims
+﻿@using System.Security.Claims
 @using ManagerStudentCaltholic.Models.Entities
 @{
     var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
@@ -327,6 +327,8 @@
 </head>
 <body class="@(isMobile ? "mobile-mode" : "")">
     <!-- CỤM NÚT KÉO LÊN & KÉO XUỐNG NHANH -->
+    @if (!isMobile)
+    {
     <div class="scroll-floating-controls" aria-label="Điều hướng cuộn trang">
         <button type="button" id="btnScrollToTop" class="btn-scroll-action hide-btn" onclick="scrollToTop()" title="Kéo lên đầu trang">
             <i class="bi bi-chevron-up"></i>
@@ -335,6 +337,8 @@
             <i class="bi bi-chevron-down"></i>
         </button>
     </div>
+
+    }
 
     @if (isMobile)
     {
@@ -656,11 +660,6 @@
                             <div class="small text-muted">Đăng nhập với:</div>
                             <div class="fw-bold text-dark">@User.Identity?.Name</div>
                         </li>
-                        <li>
-                            <a class="dropdown-item py-2 text-primary fw-semibold" href="/Home/SetDeviceMode?mode=mobile&returnUrl=@Context.Request.Path@Context.Request.QueryString">
-                                <i class="bi bi-phone me-2"></i> Chuyển Sang Giao Diện Mobile
-                            </a>
-                        </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item py-2" asp-controller="Account" asp-action="Profile">
@@ -696,12 +695,7 @@
                                 </li>
                             }
 
-                            <li>
-                            <a class="dropdown-item py-2 text-primary fw-semibold" href="/Home/SetDeviceMode?mode=mobile&returnUrl=@Context.Request.Path@Context.Request.QueryString">
-                                <i class="bi bi-phone me-2"></i> Chuyển Sang Giao Diện Mobile
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="m-0"
                                       onsubmit="if(window.ParishOfflineEngine) { ParishOfflineEngine.clearCacheOnLogout(); }">

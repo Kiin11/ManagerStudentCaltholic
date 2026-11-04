@@ -9,8 +9,6 @@ namespace ManagerStudentCaltholic.Extensions
     /// </summary>
     public static class HttpRequestExtensions
     {
-        public const string CookieDeviceMode = "Parish_Device_Mode";
-
         private static readonly Regex MobileRegex = new Regex(
             @"(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino",
             RegexOptions.IgnoreCase | RegexOptions.Multiline | RegexOptions.Compiled,
@@ -33,7 +31,7 @@ namespace ManagerStudentCaltholic.Extensions
         {
             if (request == null) return false;
 
-            // 1. Kiểm tra query param ?device=mobile hoặc ?device=desktop
+            // 1. Kiểm tra query param ?device=mobile hoặc ?device=desktop (Dành cho kiểm thử)
             if (request.Query.TryGetValue("device", out var queryMode))
             {
                 var qStr = queryMode.ToString().ToLowerInvariant();
@@ -41,15 +39,7 @@ namespace ManagerStudentCaltholic.Extensions
                 if (qStr == "desktop") return false;
             }
 
-            // 2. Kiểm tra Cookie lưu chế độ người dùng đã chủ động chọn
-            if (request.Cookies.TryGetValue(CookieDeviceMode, out var cookieMode))
-            {
-                var cStr = cookieMode?.ToLowerInvariant();
-                if (cStr == "mobile") return true;
-                if (cStr == "desktop") return false;
-            }
-
-            // 3. Client Hints HTTP header hiện đại
+            // 2. Client Hints HTTP header hiện đại
             if (request.Headers.TryGetValue("Sec-CH-UA-Mobile", out var secChMobile) && secChMobile == "?1")
             {
                 return true;

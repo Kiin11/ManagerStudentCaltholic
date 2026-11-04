@@ -105,7 +105,7 @@ body.mobile-mode {
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 1045;
+    z-index: 1035;
     background: rgba(255, 255, 255, 0.97);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -225,6 +225,46 @@ body.mobile-mode {
 /* =======================================================
    5. OFFCANVAS / BOTTOM SHEET CHO DI ĐỘNG (TASK-P5-02.3)
    ======================================================= */
+#mobileMenuOffcanvas {
+    height: 100dvh !important;
+    height: 100vh !important;
+    max-height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    z-index: 1070 !important;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+.offcanvas-backdrop.show {
+    z-index: 1065 !important;
+}
+
+#mobileMenuOffcanvas .offcanvas-header {
+    flex-shrink: 0 !important;
+}
+
+#mobileMenuOffcanvas .offcanvas-body {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
+    padding-bottom: 20px !important;
+}
+
+#mobileMenuOffcanvas .offcanvas-footer {
+    flex-shrink: 0 !important;
+    background: #ffffff !important;
+    border-top: 1px solid #e2e8f0 !important;
+    padding: 14px 16px !important;
+    padding-bottom: max(16px, var(--safe-inset-bottom)) !important;
+    z-index: 1075 !important;
+}
+
+/* Ẩn hoàn toàn nút cuộn trang nổi trên mobile để không che khuất thanh điều hướng */
+body.mobile-mode .scroll-floating-controls {
+    display: none !important;
+}
+
 .mobile-bottom-sheet {
     border-top-left-radius: 24px !important;
     border-top-right-radius: 24px !important;
