@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using Microsoft.AspNetCore.Mvc;
@@ -137,6 +138,37 @@ namespace ManagerStudentCaltholic.Controllers
                 : $"Đã gỡ ghi nhớ mã thiếu nhi {studentCode} khỏi thiết bị.";
 
             return RedirectToAction(nameof(Index), new { master = "COMMON" });
+        }
+
+        // FEAT-P5-02 / TASK-P5-02.1: Chuyển đổi linh hoạt giữa giao diện Mobile và Desktop
+        [HttpGet]
+        public IActionResult SetDeviceMode(string? mode, string? returnUrl = null)
+        {
+            var targetMode = (mode ?? "").Trim().ToLowerInvariant();
+            if (targetMode == "mobile" || targetMode == "desktop")
+            {
+                Response.Cookies.Append(
+                    HttpRequestExtensions.CookieDeviceMode,
+                    targetMode,
+                    new CookieOptions
+                    {
+                        Expires = DateTimeOffset.UtcNow.AddDays(60),
+                        HttpOnly = true,
+                        SameSite = SameSiteMode.Lax,
+                        Secure = Request.IsHttps
+                    });
+            }
+            else if (targetMode == "auto")
+            {
+                Response.Cookies.Delete(HttpRequestExtensions.CookieDeviceMode);
+            }
+
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            {
+                return Redirect(returnUrl);
+            }
+
+            return RedirectToAction(nameof(Index));
         }
 
         public IActionResult Privacy()

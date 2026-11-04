@@ -1,0 +1,198 @@
+@using System.Security.Claims
+@using ManagerStudentCaltholic.Models.Entities
+@{
+    bool isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+    bool isLead = isAuthenticated && (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard));
+    bool isStaff = isLead || (isAuthenticated && (User.IsInRole(UserRole.BranchHead) || User.IsInRole(UserRole.Teacher)));
+    bool canViewGovernance = isLead || (isAuthenticated && User.IsInRole(UserRole.BranchHead));
+    bool isRecognizedStaffDevice = isAuthenticated || Context.Request.Cookies.ContainsKey("Parish_Staff_Device");
+
+    var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
+    var currentAct = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
+    var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Khách";
+    var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+}
+
+<!-- FEAT-P5-02 / TASK-P5-02.1: HEADER THU GỌN TRÊN DI ĐỘNG (SUB-TASK 02.1.2) -->
+<header class="mobile-topbar">
+    <div class="mobile-topbar-inner">
+        <!-- Logo & Tên Xứ Đoàn -->
+        <a asp-controller="Home" asp-action="Index" class="mobile-brand">
+            <img src="~/image/logo.jpg" asp-append-version="true" alt="Logo" class="mobile-brand-logo" />
+            <div class="overflow-hidden">
+                <span class="mobile-brand-title">GLGX Phú Trung</span>
+                <span class="mobile-brand-sub text-truncate">@(ViewData["Title"] ?? "Thiếu Nhi Thánh Thể")</span>
+            </div>
+        </a>
+
+        <!-- Cụm Thao Tác Nhanh (Touch Target >= 44x44px) -->
+        <div class="d-flex align-items-center gap-1">
+            @if (isRecognizedStaffDevice)
+            {
+                <!-- Nút Quét QR Nhanh (1-Chạm) cho GLV/BĐH -->
+                <a asp-controller="Attendance" asp-action="ScanQr"
+                   class="btn btn-warning btn-sm rounded-circle shadow-sm touch-target-44 text-dark p-0"
+                   title="Quét QR Điểm Danh Tức Thời">
+                    <i class="bi bi-qr-code-scan fs-5"></i>
+                </a>
+            }
+            else
+            {
+                <!-- Nút Tra Cứu Nhanh cho Phụ huynh -->
+                <a asp-controller="Lookup" asp-action="Index"
+                   class="btn btn-outline-primary btn-sm rounded-circle touch-target-44 p-0"
+                   title="Tra Cứu Học Sinh">
+                    <i class="bi bi-search fs-5"></i>
+                </a>
+            }
+
+            <!-- Nút Mở Menu Trượt Offcanvas (Touch Target >= 44x44px) -->
+            <button type="button"
+                    class="btn btn-light btn-sm rounded-circle border shadow-sm touch-target-44 p-0 ms-1 text-dark"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#mobileMenuOffcanvas"
+                    aria-controls="mobileMenuOffcanvas"
+                    title="Menu Hệ Thống">
+                @if (isAuthenticated)
+                {
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center"
+                         style="width: 32px; height: 32px; font-size: 0.85rem;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                }
+                else
+                {
+                    <i class="bi bi-list fs-4"></i>
+                }
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- NGĂN KÉO MENU TRƯỢT DI ĐỘNG (OFFCANVAS) -->
+<div class="offcanvas offcanvas-end border-0 shadow-lg" tabindex="-1" id="mobileMenuOffcanvas" aria-labelledby="mobileMenuOffcanvasLabel" style="width: 82%; max-width: 360px;">
+    <div class="offcanvas-header bg-primary text-white py-3 px-3">
+        <div class="d-flex align-items-center gap-2">
+            <div class="rounded-circle bg-white text-primary p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                <i class="bi bi-person-circle fs-4"></i>
+            </div>
+            <div class="lh-sm overflow-hidden">
+                <div class="fw-bold text-white text-truncate" style="max-width: 200px;">@fullName</div>
+                <small class="text-white-50" style="font-size: 0.72rem;">
+                    @if (isAuthenticated)
+                    {
+                        @(role == UserRole.Admin ? "Quản trị viên" :
+                          role == UserRole.SpiritualDirector ? "Cha Tuyên Úy" :
+                          role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
+                          role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                    }
+                    else
+                    {
+                        <span>Khách / Phụ huynh</span>
+                    }
+                </small>
+            </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-3 d-flex flex-column justify-content-between">
+        <div>
+            <!-- LỐI TẮT CHÍNH -->
+            <div class="small fw-bold text-uppercase text-muted mb-2" style="font-size: 0.7rem; letter-spacing: 0.05em;">Lối Tắt Nhanh</div>
+            <div class="list-group list-group-flush rounded-3 border-0 mb-3">
+                <a asp-controller="Home" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                    <i class="bi bi-house-door-fill text-primary fs-5"></i>
+                    <span class="fw-medium">Trang Chủ Không Gian</span>
+                </a>
+                <a asp-controller="Lookup" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                    <i class="bi bi-search text-warning fs-5"></i>
+                    <span class="fw-medium">Cổng Tra Cứu Học Sinh</span>
+                </a>
+                @if (isStaff)
+                {
+                    <a asp-controller="Attendance" asp-action="ScanQr" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-qr-code-scan text-success fs-5"></i>
+                        <span class="fw-medium">Quét QR Điểm Danh</span>
+                    </a>
+                    <a asp-controller="Attendance" asp-action="MonthlySummary" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-calendar-check-fill text-info fs-5"></i>
+                        <span class="fw-medium">Báo Cáo Điểm Danh Tháng</span>
+                    </a>
+                    <a asp-controller="Students" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-people-fill text-primary fs-5"></i>
+                        <span class="fw-medium">Hồ Sơ Thiếu Nhi</span>
+                    </a>
+                    <a asp-controller="Grades" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-journal-check text-warning fs-5"></i>
+                        <span class="fw-medium">Sổ Điểm Học Tập</span>
+                    </a>
+                }
+                <a asp-controller="PublicRegistration" asp-action="Index" target="_blank" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                    <i class="bi bi-globe text-info fs-5"></i>
+                    <span class="fw-medium">Cổng Tuyển Sinh</span>
+                </a>
+            </div>
+
+            @if (canViewGovernance)
+            {
+                <div class="small fw-bold text-uppercase text-muted mb-2" style="font-size: 0.7rem; letter-spacing: 0.05em;">Quản Trị Hệ Thống</div>
+                <div class="list-group list-group-flush rounded-3 border-0 mb-3">
+                    <a asp-controller="Dashboard" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-speedometer2 text-warning fs-5"></i>
+                        <span class="fw-medium">Executive Dashboard</span>
+                    </a>
+                    @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+                    {
+                        <a asp-controller="Users" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                            <i class="bi bi-person-gear text-primary fs-5"></i>
+                            <span class="fw-medium">Tài Khoản & Phân Quyền</span>
+                        </a>
+                    }
+                    <a asp-controller="AcademicYears" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
+                        <i class="bi bi-calendar3 text-secondary fs-5"></i>
+                        <span class="fw-medium">Niên Khóa & Lớp Học</span>
+                    </a>
+                </div>
+            }
+
+            <!-- NÚT CÀI ĐẶT PWA TRÊN MOBILE -->
+            <button type="button" class="btn btn-light border w-100 rounded-3 py-2 text-start px-3 d-flex align-items-center gap-2 mb-2" onclick="triggerPwaInstall()">
+                <i class="bi bi-phone-fill text-info fs-5"></i>
+                <div class="lh-sm">
+                    <div class="fw-semibold small text-dark">Cài Đặt Ứng Dụng (PWA)</div>
+                    <small class="text-muted" style="font-size: 0.7rem;">Mở nhanh ngoài màn hình chính</small>
+                </div>
+            </button>
+        </div>
+
+        <!-- PHẦN ĐÁY MENU: CHUYỂN SANG DESKTOP & ĐĂNG XUẤT -->
+        <div class="pt-3 border-top">
+            <!-- Nút Chuyển sang giao diện Desktop -->
+            <a href="/Home/SetDeviceMode?mode=desktop&returnUrl=@Context.Request.Path@Context.Request.QueryString"
+               class="btn btn-outline-secondary btn-sm w-100 rounded-pill py-2 mb-2 d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-display"></i>
+                <span>Xem Bản Giao Diện Desktop</span>
+            </a>
+
+            @if (isAuthenticated)
+            {
+                <form asp-controller="Account" asp-action="Logout" method="post" class="m-0"
+                      onsubmit="if(window.ParishOfflineEngine) { ParishOfflineEngine.clearCacheOnLogout(); }">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100 rounded-pill py-2 d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>Đăng Xuất (@User.Identity?.Name)</span>
+                    </button>
+                </form>
+            }
+            else
+            {
+                <a asp-controller="Account" asp-action="Login" class="btn btn-primary btn-sm w-100 rounded-pill py-2 d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    <span>Đăng Nhập</span>
+                </a>
+            }
+        </div>
+    </div>
+</div>

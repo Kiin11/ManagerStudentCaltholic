@@ -1,0 +1,112 @@
+@using ManagerStudentCaltholic.Models.Entities
+@{
+    var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
+    var currentAct = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
+    var activeMasterQuery = Context.Request.Query["master"].ToString().ToUpperInvariant();
+
+    string currentMaster = !string.IsNullOrEmpty(activeMasterQuery)
+        ? activeMasterQuery
+        : currentCtrl switch
+        {
+            "Attendance" or "MassCampaigns" or "Absence" => "ATTENDANCE",
+            "Grades" or "Students" or "Classes" or "Enrollments" or "LessonPlans" or "Facilities" or "PrintReports" => "ACADEMIC",
+            "Sacraments" or "Promotion" or "StudentRegistrations" => "SACRAMENT",
+            "Dashboard" or "Users" or "Governance" or "FeaturePermissions" or "AcademicYears" or "Logs" => "GOVERNANCE",
+            _ => "COMMON"
+        };
+
+    bool isAuthenticated = User.Identity != null && User.Identity.IsAuthenticated;
+    bool isLead = isAuthenticated && (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard));
+    bool isStaff = isLead || (isAuthenticated && (User.IsInRole(UserRole.BranchHead) || User.IsInRole(UserRole.Teacher)));
+    bool canViewGovernance = isLead || (isAuthenticated && User.IsInRole(UserRole.BranchHead));
+}
+
+<!-- FEAT-P5-02 / TASK-P5-02.1: THANH ĐIỀU HƯỚNG ĐÁY CỐ ĐỊNH 5 PHÂN KHU (SUB-TASK 02.1.1) -->
+<nav class="mobile-bottom-nav" aria-label="Thanh điều hướng nhanh phía dưới">
+    <ul class="mobile-nav-items">
+        <!-- 1. PHÂN KHU CHUNG -->
+        <li class="mobile-nav-item">
+            <a class="mobile-nav-link @(currentMaster == "COMMON" ? "active" : "")"
+               asp-controller="Home" asp-action="Index" asp-route-master="COMMON"
+               title="Phân khu Chung">
+                <i class="bi @(currentMaster == "COMMON" ? "bi-house-heart-fill" : "bi-house-heart")"></i>
+                <span>Chung</span>
+            </a>
+        </li>
+
+        <!-- 2. PHÂN KHU ĐIỂM DANH (NỔI BẬT THAO TÁC 1-CHẠM) -->
+        <li class="mobile-nav-item">
+            @if (isStaff)
+            {
+                <a class="mobile-nav-link qr-highlight @(currentMaster == "ATTENDANCE" ? "active" : "")"
+                   asp-controller="Attendance" asp-action="ScanQr"
+                   title="Quét QR Điểm Danh">
+                    <div class="qr-circle">
+                        <i class="bi bi-qr-code-scan"></i>
+                    </div>
+                    <span>Quét QR</span>
+                </a>
+            }
+            else
+            {
+                <a class="mobile-nav-link @(currentMaster == "ATTENDANCE" ? "active" : "")"
+                   asp-controller="Home" asp-action="Index" asp-route-master="ATTENDANCE"
+                   title="Phân khu Điểm Danh">
+                    <i class="bi @(currentMaster == "ATTENDANCE" ? "bi-calendar-check-fill" : "bi-calendar-check")"></i>
+                    <span>Điểm Danh</span>
+                </a>
+            }
+        </li>
+
+        <!-- 3. PHÂN KHU HỌC VỤ -->
+        <li class="mobile-nav-item">
+            <a class="mobile-nav-link @(currentMaster == "ACADEMIC" ? "active" : "")"
+               asp-controller="Home" asp-action="Index" asp-route-master="ACADEMIC"
+               title="Phân khu Học Vụ">
+                <i class="bi @(currentMaster == "ACADEMIC" ? "bi-mortarboard-fill" : "bi-mortarboard")"></i>
+                <span>Học Vụ</span>
+            </a>
+        </li>
+
+        <!-- 4. PHÂN KHU BÍ TÍCH -->
+        <li class="mobile-nav-item">
+            <a class="mobile-nav-link @(currentMaster == "SACRAMENT" ? "active" : "")"
+               asp-controller="Home" asp-action="Index" asp-route-master="SACRAMENT"
+               title="Phân khu Bí Tích">
+                <i class="bi @(currentMaster == "SACRAMENT" ? "bi-award-fill" : "bi-award")"></i>
+                <span>Bí Tích</span>
+            </a>
+        </li>
+
+        <!-- 5. PHÂN KHU QUẢN TRỊ / MENU -->
+        <li class="mobile-nav-item">
+            @if (canViewGovernance)
+            {
+                <a class="mobile-nav-link @(currentMaster == "GOVERNANCE" ? "active" : "")"
+                   asp-controller="Home" asp-action="Index" asp-route-master="GOVERNANCE"
+                   title="Phân khu Quản Trị">
+                    <i class="bi @(currentMaster == "GOVERNANCE" ? "bi-shield-lock-fill" : "bi-shield-lock")"></i>
+                    <span>Quản Trị</span>
+                </a>
+            }
+            else if (isAuthenticated)
+            {
+                <a class="mobile-nav-link @(currentCtrl == "Account" ? "active" : "")"
+                   asp-controller="Account" asp-action="Profile"
+                   title="Hồ Sơ Cá Nhân">
+                    <i class="bi @(currentCtrl == "Account" ? "bi-person-circle" : "bi-person")"></i>
+                    <span>Cá Nhân</span>
+                </a>
+            }
+            else
+            {
+                <a class="mobile-nav-link @(currentCtrl == "Lookup" ? "active" : "")"
+                   asp-controller="Lookup" asp-action="Index"
+                   title="Tra Cứu Học Sinh">
+                    <i class="bi @(currentCtrl == "Lookup" ? "bi-search-heart-fill" : "bi-search")"></i>
+                    <span>Tra Cứu</span>
+                </a>
+            }
+        </li>
+    </ul>
+</nav>

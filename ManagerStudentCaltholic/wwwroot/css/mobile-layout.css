@@ -1,0 +1,255 @@
+/**
+ * FEAT-P5-02: GIAO DIỆN MOBILE WEB (MOBILE-FIRST)
+ * TASK-P5-02.1: Khung Mobile-First, Header Thu Gọn & Bottom Navigation Bar
+ */
+
+:root {
+    --mobile-header-height: 56px;
+    --mobile-bottom-nav-height: 62px;
+    --mobile-primary: #1e40af;
+    --mobile-primary-rgb: 30, 64, 175;
+    --mobile-accent: #f59e0b;
+    --mobile-bg: #f8fafc;
+    --safe-inset-top: env(safe-area-inset-top, 0px);
+    --safe-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-inset-left: env(safe-area-inset-left, 0px);
+    --safe-inset-right: env(safe-area-inset-right, 0px);
+}
+
+/* =======================================================
+   1. RESET & VIEWPORT SAFE AREAS CHO THIẾT BỊ DI ĐỘNG
+   ======================================================= */
+body.mobile-mode {
+    background-color: var(--mobile-bg);
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: contain;
+}
+
+/* Nút chạm cảm ứng tối thiểu 44x44px theo tiêu chuẩn Apple HIG / Android Material */
+.touch-target-44 {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* =======================================================
+   2. HEADER THU GỌN TRÊN DI ĐỘNG (SUB-TASK 02.1.2)
+   ======================================================= */
+.mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    height: calc(var(--mobile-header-height) + var(--safe-inset-top));
+    padding-top: var(--safe-inset-top);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #e2e8f0;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+}
+
+.mobile-topbar-inner {
+    height: var(--mobile-header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: max(12px, var(--safe-inset-left));
+    padding-right: max(12px, var(--safe-inset-right));
+}
+
+.mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+    max-width: 60%;
+}
+
+.mobile-brand-logo {
+    width: 34px;
+    height: 34px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.mobile-brand-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mobile-brand-sub {
+    font-size: 0.68rem;
+    color: #64748b;
+    font-weight: 500;
+    display: block;
+}
+
+/* =======================================================
+   3. THANH ĐIỀU HƯỚNG ĐÁY 5 PHÂN KHU (SUB-TASK 02.1.1)
+   ======================================================= */
+.mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1045;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
+    padding-bottom: max(6px, var(--safe-inset-bottom));
+    padding-left: var(--safe-inset-left);
+    padding-right: var(--safe-inset-right);
+}
+
+.mobile-nav-items {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    height: var(--mobile-bottom-nav-height);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.mobile-nav-item {
+    flex: 1;
+    max-width: 20%;
+    text-align: center;
+}
+
+.mobile-nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 48px;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 4px 2px;
+    transition: all 0.18s ease;
+    position: relative;
+    user-select: none;
+}
+
+.mobile-nav-link i {
+    font-size: 1.35rem;
+    line-height: 1;
+    margin-bottom: 3px;
+    transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.mobile-nav-link:active {
+    transform: scale(0.92);
+}
+
+.mobile-nav-link.active {
+    color: var(--mobile-primary);
+}
+
+.mobile-nav-link.active i {
+    color: var(--mobile-primary);
+    transform: translateY(-2px);
+}
+
+.mobile-nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    width: 16px;
+    height: 3px;
+    border-radius: 999px;
+    background-color: var(--mobile-primary);
+}
+
+/* Nút quét QR trung tâm nổi bật */
+.mobile-nav-link.qr-highlight {
+    color: #ffffff;
+}
+
+.mobile-nav-link.qr-highlight .qr-circle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: -16px;
+    margin-bottom: 2px;
+    border: 3px solid #ffffff;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.mobile-nav-link.qr-highlight:active .qr-circle {
+    transform: scale(0.9);
+}
+
+.mobile-nav-link.qr-highlight .qr-circle i {
+    color: #ffffff;
+    font-size: 1.35rem;
+    margin-bottom: 0;
+}
+
+.mobile-nav-link.qr-highlight span {
+    color: #1e40af;
+    font-weight: 700;
+}
+
+/* =======================================================
+   4. NỘI DUNG CHÍNH (MAIN WRAPPER CHO MOBILE)
+   ======================================================= */
+.mobile-main-wrapper {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-inset-bottom) + 20px) !important;
+    overflow-x: hidden;
+}
+
+/* =======================================================
+   5. OFFCANVAS / BOTTOM SHEET CHO DI ĐỘNG (TASK-P5-02.3)
+   ======================================================= */
+.mobile-bottom-sheet {
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    max-height: 90vh !important;
+    padding-bottom: max(16px, var(--safe-inset-bottom));
+}
+
+.bottom-sheet-handle {
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background-color: #cbd5e1;
+    margin: 10px auto 14px;
+}
+
+/* =======================================================
+   6. TIỆN ÍCH CHUYỂN ĐỔI CHẾ ĐỘ XEM
+   ======================================================= */
+.device-switch-banner {
+    background: #f1f5f9;
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 0.78rem;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
