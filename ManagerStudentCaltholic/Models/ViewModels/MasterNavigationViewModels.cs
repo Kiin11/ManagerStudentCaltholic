@@ -46,8 +46,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public DeviceDetectedStudentContextViewModel DeviceStudentContext { get; set; } = new();
 
         // FEAT-P5-01: Lịch sử tra cứu gần đây của GLV & Danh sách Option chế độ xem
-        public List<ManagerStudentCaltholic.Models.DTOs.RecentLookupItemDto> RecentStaffLookups { get; set; } = new();
-        public List<ManagerStudentCaltholic.Models.Entities.LookupViewOption> LookupOptions { get; set; } = new();
+        public List<DTOs.RecentLookupItemDto> RecentStaffLookups { get; set; } = new();
+        public List<LookupViewOption> LookupOptions { get; set; } = new();
     }
 
     public class FeaturePermissionManageViewModel
