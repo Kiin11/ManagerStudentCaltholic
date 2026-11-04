@@ -32,7 +32,9 @@
 <html lang="vi">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0@(isMobile ? ", viewport-fit=cover" : "")" />
+    <!-- TASK-P5-02.4: Mở sớm kết nối tới CDN để rút ngắn thời gian tải CSS/JS -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <title>@ViewData["Title"] - Hệ Thống Quản Lý Giáo Lý</title>
 
     <!-- Bootstrap 5 & Bootstrap Icons -->
@@ -40,9 +42,14 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 
     <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    @* TASK-P5-02.4: Mobile dùng font hệ thống (bỏ tải Google Fonts) để giảm request chặn hiển thị *@
+    @* fonts.gstatic / googleapis chỉ tải trên Desktop *@
+    @if (!isMobile)
+    {
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    }
 
     <!-- PWA & Mobile Meta Tags -->
     <link rel="manifest" href="/manifest.json" />
@@ -884,36 +891,36 @@
             window.scrollTo({ top: document.documentElement.scrollHeight || document.body.scrollHeight, behavior: 'smooth' });
         }
 
-        window.addEventListener('scroll', function () {
+        // TASK-P5-02.4: Listener cuộn chỉ chạy khi có nút cuộn (Desktop), dùng passive + requestAnimationFrame
+        // để không ép trình duyệt tính lại layout ở mỗi sự kiện scroll (gây giật trên điện thoại).
+        (function initScrollButtons() {
             const btnTop = document.getElementById('btnScrollToTop');
             const btnBottom = document.getElementById('btnScrollToBottom');
-            const scrollPosition = window.scrollY || document.documentElement.scrollTop;
-            const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+            if (!btnTop && !btnBottom) return;
 
-            if (btnTop) {
-                if (scrollPosition > 150) {
-                    btnTop.classList.remove('hide-btn');
-                } else {
-                    btnTop.classList.add('hide-btn');
+            let ticking = false;
+            function updateScrollButtons() {
+                ticking = false;
+                const scrollPosition = window.scrollY || document.documentElement.scrollTop;
+                const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+                if (btnTop) {
+                    btnTop.classList.toggle('hide-btn', scrollPosition <= 150);
+                }
+                if (btnBottom) {
+                    btnBottom.style.opacity = (totalHeight - scrollPosition <= 50) ? '0.35' : '0.85';
                 }
             }
 
-            if (btnBottom) {
-                if (totalHeight - scrollPosition <= 50) {
-                    btnBottom.style.opacity = '0.35';
-                } else {
-                    btnBottom.style.opacity = '0.85';
+            window.addEventListener('scroll', function () {
+                if (!ticking) {
+                    ticking = true;
+                    window.requestAnimationFrame(updateScrollButtons);
                 }
-            }
-        });
+            }, { passive: true });
+        })();
 
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((reg) => console.log('[PWA] Service Worker đã kích hoạt với phạm vi:', reg.scope))
-                    .catch((err) => console.warn('[PWA] Đăng ký Service Worker thất bại:', err));
-            });
-        }
+        // Service Worker chỉ được đăng ký 1 lần duy nhất trong ~/js/pwa-installer.js (tránh đăng ký trùng lặp)
 
         function updateNetworkStatus() {
             const notice = document.getElementById('offlineNotice');

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
     'use strict';
 
     let deferredInstallPrompt = null;
@@ -79,7 +79,7 @@
 
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
+            if (refreshing || !window.__pwaUserRequestedUpdate) return; // TASK-P5-02.4: chỉ reload khi người dùng chủ động bấm "Cập nhật ngay" (tránh tải trang 2 lần)
             refreshing = true;
             window.location.reload();
         });
@@ -93,7 +93,9 @@
         toastEl.classList.remove('d-none');
         if (btnReload) {
             btnReload.onclick = function () {
+                window.__pwaUserRequestedUpdate = true;
                 worker.postMessage({ type: 'SKIP_WAITING' });
+                setTimeout(() => window.location.reload(), 400); // SW mới có thể đã active sẵn
             };
         }
     }

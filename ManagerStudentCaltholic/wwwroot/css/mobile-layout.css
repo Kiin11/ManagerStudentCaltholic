@@ -46,9 +46,9 @@ body.mobile-mode {
     z-index: 1030;
     height: calc(var(--mobile-header-height) + var(--safe-inset-top));
     padding-top: var(--safe-inset-top);
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #ffffff;
+    /* TASK-P5-02.4: bỏ backdrop-filter blur (rất nặng GPU khi cuộn trên Android tầm trung) */
+    contain: layout paint;
     border-bottom: 1px solid #e2e8f0;
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
 }
@@ -106,9 +106,10 @@ body.mobile-mode {
     left: 0;
     right: 0;
     z-index: 1035;
-    background: rgba(255, 255, 255, 0.97);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: #ffffff;
+    /* TASK-P5-02.4: bỏ backdrop-filter blur, tách lớp riêng cho thanh cố định */
+    transform: translateZ(0);
+    contain: layout paint;
     border-top: 1px solid #e2e8f0;
     box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
     padding-bottom: max(6px, var(--safe-inset-bottom));
@@ -144,7 +145,7 @@ body.mobile-mode {
     font-size: 0.68rem;
     font-weight: 600;
     padding: 4px 2px;
-    transition: all 0.18s ease;
+    transition: color 0.15s ease;
     position: relative;
     user-select: none;
 }
