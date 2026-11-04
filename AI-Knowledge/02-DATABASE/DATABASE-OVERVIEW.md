@@ -49,6 +49,8 @@ Mối liên hệ giữa C# Code và Database được xác nhận thông qua c�
 | `StudentCodeHistory` | `StudentCodeHistories` | `StudentCodeHistories` | ORM Confirmed | `ParishDbContext.cs` (`ToTable("StudentCodeHistories")`) |
 | `AttendanceDisputeRequest` | `AttendanceDisputeRequests` | `AttendanceDisputeRequests` | ORM Confirmed | `ParishDbContext.cs` (`ToTable("AttendanceDisputeRequests")`) |
 | `FeaturePermissionRule` | `FeaturePermissionRules` | `FeaturePermissionRules` | ORM Confirmed | `ParishDbContext.cs` (`ToTable("FeaturePermissionRules")`) |
+| `StaffQuickLookupLog` | `StaffQuickLookupLogs` | `StaffQuickLookupLogs` | ORM Confirmed | `ParishDbContext.cs` (`ToTable("StaffQuickLookupLogs")`), `StaffQuickLookupLog.cs` (`[Table("StaffQuickLookupLogs")]`) |
+| `LookupViewOption` | `LookupViewOptions` | `LookupViewOptions` | ORM Confirmed | `ParishDbContext.cs` (`ToTable("LookupViewOptions")`), `LookupViewOption.cs` (`[Table("LookupViewOptions")]`) |
 
 ## C. Database Context Configuration
-- Tất cả cấu hình Foreign Key, Index, Unique Constraint và Default Values được khai báo theo chuẩn Fluent API trong phương thức `OnModelCreating` của lớp `ParishDbContext`.
+- Tất cả cấu hình Foreign Key, Index, Unique Constraint, Seed Data (`HasData`) và Default Values được khai báo theo chuẩn Fluent API trong phương thức `OnModelCreating` của lớp `ParishDbContext`.

@@ -23,7 +23,7 @@
           ],
           "primaryKeys": ["Id"],
           "foreignKeys": [],
-          "indexes": ["IsDeleted", "StudentCode"]
+          "indexes": ["IsDeleted", "StudentCode", "LastName, FirstName", "ChristianName"]
         },
         {
           "tableName": "AcademicYears",
@@ -82,7 +82,7 @@
             { "column": "StudentId", "principalTable": "Students", "principalColumn": "Id" },
             { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" }
           ],
-          "indexes": ["StudentId, ClassRoomId", "IsDeleted"]
+          "indexes": ["StudentId, ClassRoomId", "IsDeleted", "StudentId, AcademicYearId"]
         },
         {
           "tableName": "Attendances",
@@ -400,6 +400,40 @@
             "ClassRoomId, Status, CreatedAt",
             "EnrollmentId, AttendanceDate, SessionScope"
           ]
+        },
+        {
+          "tableName": "StaffQuickLookupLogs",
+          "columns": [
+            "Id",
+            "UserId",
+            "StudentId",
+            "SearchTerm",
+            "SelectedOption",
+            "IpAddress",
+            "LookedUpAt"
+          ],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "UserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "StudentId", "principalTable": "Students", "principalColumn": "Id" }
+          ],
+          "indexes": ["UserId, LookedUpAt", "StudentId"]
+        },
+        {
+          "tableName": "LookupViewOptions",
+          "columns": [
+            "Id",
+            "OptionCode",
+            "DisplayName",
+            "Description",
+            "IconClass",
+            "BadgeColor",
+            "SortOrder",
+            "IsActive"
+          ],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [],
+          "indexes": ["OptionCode"]
         }
       ]
     }

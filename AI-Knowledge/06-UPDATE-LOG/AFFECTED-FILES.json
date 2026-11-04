@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "metadata": {
+    "solution": "ManagerStudentCaltholic",
+    "baselineCommit": "7c61591",
+    "targetCommit": "c0e828a",
+    "branch": "main",
+    "analyzedAt": "2026-11-04T22:05:00+07:00",
+    "overallImpactLevel": "HIGH",
+    "totalFilesChanged": 19,
+    "totalAdded": 11,
+    "totalModified": 8,
+    "totalDeleted": 0,
+    "totalRenamed": 0
+  },
+  "affectedFiles": [
+    {
+      "path": "ManagerStudentCaltholic/Controllers/HomeController.cs",
+      "status": "Modified",
+      "layer": "Controller",
+      "impactLevel": "HIGH",
+      "linesAdded": 106,
+      "linesDeleted": 1,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Bổ sung DI IStaffStudentLookupService và ICacheService; cập nhật action Index; thêm 4 action API cho tra cứu tức thời, gợi ý autocomplete, dữ liệu 360 độ và danh sách option."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Data/ParishDbContext.cs",
+      "status": "Modified",
+      "layer": "Data",
+      "impactLevel": "HIGH",
+      "linesAdded": 102,
+      "linesDeleted": 2,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Bổ sung 2 DbSet mới (StaffQuickLookupLogs, LookupViewOptions); bổ sung 5 Indexes tìm kiếm trên Students, Enrollments, StudentCodeHistories; cấu hình Fluent API và seed data cho LookupViewOption."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Extensions/HttpRequestExtensions.cs",
+      "status": "Added",
+      "layer": "Extension",
+      "impactLevel": "HIGH",
+      "linesAdded": 75,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Xây dựng extension method IsMobileDevice(this HttpRequest) phục vụ nhận diện thiết bị thông minh qua Query string, Client Hints Sec-CH-UA-Mobile và Regex User-Agent."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs",
+      "status": "Modified",
+      "layer": "Extension",
+      "impactLevel": "MEDIUM",
+      "linesAdded": 4,
+      "linesDeleted": 1,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Đăng ký Dependency Injection Scoped cho IStaffStudentLookupService và StaffStudentLookupService."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Interface/Services/IStaffStudentLookupService.cs",
+      "status": "Added",
+      "layer": "Interface",
+      "impactLevel": "HIGH",
+      "linesAdded": 16,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Khai báo hợp đồng dịch vụ IStaffStudentLookupService với 5 phương thức tra cứu, gợi ý, chi tiết 360 độ, ghi log và lấy options."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Models/DTOs/StaffStudentLookupDtos.cs",
+      "status": "Added",
+      "layer": "DTO",
+      "impactLevel": "MEDIUM",
+      "linesAdded": 172,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Định nghĩa 13 DTOs phục vụ truyền nhận dữ liệu kết quả tra cứu tức thời, hồ sơ 360 độ, chuyên cần, điểm số 2 năm trước, tiến trình bí tích và mẫu tin nhắn phụ huynh."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Models/Entities/LookupViewOption.cs",
+      "status": "Added",
+      "layer": "Entity",
+      "impactLevel": "HIGH",
+      "linesAdded": 35,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Entity đại diện bảng cấu hình chế độ xem tra cứu LookupViewOptions."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Models/Entities/StaffQuickLookupLog.cs",
+      "status": "Added",
+      "layer": "Entity",
+      "impactLevel": "HIGH",
+      "linesAdded": 36,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Entity ghi nhật ký kiểm toán hành vi tra cứu StaffQuickLookupLogs liên kết khóa ngoại tới Users và Students."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Models/ViewModels/MasterNavigationViewModels.cs",
+      "status": "Modified",
+      "layer": "ViewModel",
+      "impactLevel": "MEDIUM",
+      "linesAdded": 4,
+      "linesDeleted": 2,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Mở rộng MasterWorkspaceViewModel với 2 thuộc tính RecentStaffLookups và LookupOptions."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Services/StaffStudentLookupService.cs",
+      "status": "Added",
+      "layer": "Service",
+      "impactLevel": "HIGH",
+      "linesAdded": 714,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Triển khai toàn diện logic nghiệp vụ truy vấn đa khóa, tổng hợp điểm số, tính tỷ lệ chuyên cần Chúa Nhật/Thứ Năm, chuỗi streak chiến dịch và tiến trình 4 mốc bí tích."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/Home/Index.cshtml",
+      "status": "Modified",
+      "layer": "View",
+      "impactLevel": "MEDIUM",
+      "linesAdded": 8,
+      "linesDeleted": 1,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Tích hợp partial view _StaffStudentLookupWidget và script staff-student-lookup.js vào trang chủ khi người dùng đã đăng nhập."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/Home/_StaffStudentLookupWidget.cshtml",
+      "status": "Added",
+      "layer": "View",
+      "impactLevel": "HIGH",
+      "linesAdded": 466,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Widget giao diện tra cứu nội bộ gồm ô tìm kiếm thông minh, dropdown gợi ý, danh sách tra cứu gần đây, bảng kết quả 360 độ và bộ nút chuyển option."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/Shared/_Layout.cshtml",
+      "status": "Modified",
+      "layer": "Layout",
+      "impactLevel": "HIGH",
+      "linesAdded": 70,
+      "linesDeleted": 25,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Bổ sung cấu trúc switch layout @if (isMobile) { _LayoutMobileHeader, _LayoutMobileBottomNav } else { Desktop Layout }, tối ưu font, ẩn nút cuộn nổi trên mobile và tinh gọn scroll listener."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/Shared/_LayoutMobileBottomNav.cshtml",
+      "status": "Added",
+      "layer": "View",
+      "impactLevel": "HIGH",
+      "linesAdded": 112,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Thanh điều hướng cố định phía dưới màn hình (Bottom Navigation Bar) 5 phân khu chuẩn thao tác một tay trên mobile (< 768px)."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/Shared/_LayoutMobileHeader.cshtml",
+      "status": "Added",
+      "layer": "View",
+      "impactLevel": "HIGH",
+      "linesAdded": 191,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Header thu gọn chuẩn Safe Area Inset iOS/Android, kích thước chạm >= 44px, nút quét QR nhanh và Offcanvas menu có chân trang cố định nút Đăng Xuất."
+    },
+    {
+      "path": "ManagerStudentCaltholic/Views/_ViewImports.cshtml",
+      "status": "Modified",
+      "layer": "ViewImports",
+      "impactLevel": "LOW",
+      "linesAdded": 2,
+      "linesDeleted": 1,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Bổ sung namespace ManagerStudentCaltholic.Extensions vào danh sách import mặc định của Razor."
+    },
+    {
+      "path": "ManagerStudentCaltholic/wwwroot/css/mobile-layout.css",
+      "status": "Added",
+      "layer": "StaticAsset",
+      "impactLevel": "HIGH",
+      "linesAdded": 296,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Stylesheet mobile-first định nghĩa Safe Area, touch targets >= 44px, bottom nav, mobile topbar, offcanvas z-index và tối ưu mượt mà không dùng backdrop blur."
+    },
+    {
+      "path": "ManagerStudentCaltholic/wwwroot/js/pwa-installer.js",
+      "status": "Modified",
+      "layer": "StaticAsset",
+      "impactLevel": "MEDIUM",
+      "linesAdded": 4,
+      "linesDeleted": 2,
+      "primaryFeature": "FEAT-P5-02",
+      "description": "Tối ưu hóa controllerchange trong Service Worker để tránh reload 2 lần khi cài đặt hoặc khởi động PWA."
+    },
+    {
+      "path": "ManagerStudentCaltholic/wwwroot/js/staff-student-lookup.js",
+      "status": "Added",
+      "layer": "StaticAsset",
+      "impactLevel": "HIGH",
+      "linesAdded": 614,
+      "linesDeleted": 0,
+      "primaryFeature": "FEAT-P5-01",
+      "description": "Controller JavaScript cho phân hệ tra cứu: xử lý debounce tìm kiếm, gọi API suggestions, render dynamic dữ liệu 360 độ và copy mẫu tin nhắn phụ huynh."
+    }
+  ]
+}

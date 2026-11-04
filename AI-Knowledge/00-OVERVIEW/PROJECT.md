@@ -19,12 +19,14 @@ Dự án **ManagerStudentCaltholic** là một ứng dụng Web Monolithic quả
    - *Bằng chứng:* `SacramentsController.cs`, `SacramentRegistryService.cs`. Theo dõi tiến trình 4 mốc Bí tích, lập tờ trình xin Cha xứ phê duyệt.
 5. **Chiến dịch Đi Lễ (Mass Campaigns):**
    - *Bằng chứng:* `MassCampaignsController.cs`, `MassCampaign.cs`. Theo dõi chuỗi đi lễ liên tục (Streak).
-6. **Tương tác Phụ huynh (Parent Communication):**
-   - *Bằng chứng:* `ParentMessagesController.cs`, `LookupController.cs`. Cổng tra cứu công khai, tạo mẫu tin nhắn Zalo/Viber, đơn xin phép nghỉ (`AbsenceController.cs`).
+6. **Tương tác Phụ huynh & Cổng Tra cứu (Parent Communication & Internal Staff Lookup):**
+   - *Bằng chứng:* `ParentMessagesController.cs`, `LookupController.cs`, `HomeController.cs`, `StaffStudentLookupService.cs`. Cổng tra cứu công khai cho phụ huynh, Cổng tra cứu 360 độ thiếu nhi nội bộ tại Trang chủ cho GLV/BĐH đã đăng nhập (`FEAT-P5-01`), tạo mẫu tin nhắn Zalo/Viber, đơn xin phép nghỉ (`AbsenceController.cs`).
 7. **Quản trị Hệ thống & Phân quyền (Governance & System):**
    - *Bằng chứng:* `UsersController.cs`, `GovernanceController.cs`, `LogsController.cs`. Quản lý vai trò (Role), xem System Health (RAM, Database Latency).
+8. **Giao diện Đa nền tảng & Mobile-First Web UI (Navigation & Responsive Shell):**
+   - *Bằng chứng:* `HttpRequestExtensions.cs`, `_Layout.cshtml`, `_LayoutMobileHeader.cshtml`, `_LayoutMobileBottomNav.cshtml`, `mobile-layout.css`. Tự động nhận diện thiết bị di động ở phía Server (`Context.Request.IsMobileDevice()`) để chuyển sang giao diện Mobile-First với Thanh điều hướng đáy 5 phân khu (`FEAT-P5-02`), giữ nguyên giao diện Desktop trên màn hình lớn.
 
 ## 4. External Integrations
-- **Redis Cache:** Sử dụng `StackExchange.Redis` để lưu trữ tạm thời dữ liệu điểm danh, tăng tốc độ quét QR. (*Bằng chứng:* `RedisAttendanceService.cs`, `appsettings.json`).
+- **Redis Cache:** Sử dụng `StackExchange.Redis` để lưu trữ tạm thời dữ liệu điểm danh, tăng tốc độ quét QR, và cache hồ sơ tra cứu 360 độ thiếu nhi nội bộ (`staff_lookup:student_360:{studentId}`). (*Bằng chứng:* `RedisAttendanceService.cs`, `RedisCacheService.cs`, `HomeController.cs`, `appsettings.json`).
 - **PostgreSQL Database:** Lưu trữ dữ liệu chính. (*Bằng chứng:* `ParishDbContext.cs`, `Npgsql.EntityFrameworkCore.PostgreSQL`).
 - **Nginx (Reverse Proxy):** Xử lý Rate Limiting và chuyển tiếp request. (*Bằng chứng:* `nginx.conf`, `ServiceCollectionExtensions.cs`).

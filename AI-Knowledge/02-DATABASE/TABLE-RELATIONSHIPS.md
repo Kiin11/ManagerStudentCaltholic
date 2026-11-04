@@ -20,7 +20,7 @@ Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong
 - **StudentSacramentRecords ↔ Students (n-1):** Khóa ngoại `StudentId`. DeleteBehavior: `Cascade`.
 - **SacramentApprovalBatches ↔ AcademicYears, Classes (n-1):** Khóa ngoại `AcademicYearId` (`Restrict`), `ClassRoomId` (`SetNull`).
 - **SacramentApprovalItems ↔ SacramentApprovalBatches, Students, Enrollments (n-1):** DeleteBehavior: `Cascade`.
-- **StudentCodeHistories ↔ Students, AcademicYears (n-1):** Khóa ngoại `StudentId` (`Cascade`), `SourceAcademicYearId` (`Restrict`).
+- **StudentCodeHistories ↔ Students, AcademicYears (n-1):** Khóa ngoại `StudentId` (`Cascade`), `SourceAcademicYearId` (`Restrict`). Index bổ sung trên `NewCode` phục vụ tra cứu ngược từ mã hiện hành sang mã năm cũ.
 
 ## 4. Facilities & Operations (Cơ sở vật chất)
 - **ClassRoomLocations ↔ BuildingZones (n-1):** Khóa ngoại `BuildingZoneId`. DeleteBehavior: `Cascade`.
@@ -29,6 +29,11 @@ Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong
 
 ## 5. Security (Bảo mật)
 - **RefreshTokens ↔ Users (n-1):** Khóa ngoại `UserId`. DeleteBehavior: `Cascade`.
+
+## 6. Internal Staff Quick Lookup (`FEAT-P5-01` - Tra cứu thiếu nhi nội bộ)
+- **StaffQuickLookupLogs ↔ Users (n-1):** Khóa ngoại `UserId` (`[ForeignKey(nameof(UserId))]`). DeleteBehavior: `Cascade`. Index trên `(UserId, LookedUpAt)`.
+- **StaffQuickLookupLogs ↔ Students (n-1):** Khóa ngoại `StudentId` (`[ForeignKey(nameof(StudentId))]`). DeleteBehavior: `Cascade`. Index trên `StudentId`.
+- **LookupViewOptions (Bảng cấu hình độc lập):** Khóa chính `Id`, Unique Index trên `OptionCode`. Được seed sẵn 4 cấu hình chế độ xem (`OVERVIEW`, `ATTENDANCE_DETAIL`, `ACADEMIC_2Y_SACRAMENT`, `PARENT_CONTACT`) trong `ParishDbContext.OnModelCreating`.
 
 ```mermaid
 erDiagram
@@ -44,7 +49,8 @@ erDiagram
     BuildingZones ||--o{ ClassRoomLocations : "1-N"
     ClassRoomLocations ||--o{ Classes : "1-N"
     Users ||--o{ RefreshTokens : "1-N"
-	
+    Users ||--o{ StaffQuickLookupLogs : "1-N"
+    Students ||--o{ StaffQuickLookupLogs : "1-N"
 ```
 
 ### 3. TABLE-INDEX.json
@@ -60,7 +66,7 @@ erDiagram
           "columns": ["Id", "StudentCode", "ChristianName", "FirstName", "LastName", "Gender", "DateOfBirth", "BaptismDate", "ConfirmationDate", "ParentPhone", "IsActive", "IsDeleted", "DeletedAt"],
           "primaryKeys": ["Id"],
           "foreignKeys": [],
-          "indexes": ["IsDeleted", "StudentCode"]
+          "indexes": ["IsDeleted", "StudentCode", "LastName, FirstName", "ChristianName"]
         },
         {
           "tableName": "AcademicYears",
@@ -87,7 +93,7 @@ erDiagram
             { "column": "StudentId", "principalTable": "Students", "principalColumn": "Id" },
             { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" }
           ],
-          "indexes": ["StudentId, ClassRoomId", "IsDeleted"]
+          "indexes": ["StudentId, ClassRoomId", "IsDeleted", "StudentId, AcademicYearId"]
         },
         {
           "tableName": "Attendances",
@@ -198,10 +204,26 @@ erDiagram
             { "column": "CampaignId", "principalTable": "MassCampaigns", "principalColumn": "Id" }
           ],
           "indexes": ["ClassRoomId, Status, CreatedAt", "EnrollmentId, AttendanceDate, SessionScope"]
+        },
+        {
+          "tableName": "StaffQuickLookupLogs",
+          "columns": ["Id", "UserId", "StudentId", "SearchTerm", "SelectedOption", "IpAddress", "LookedUpAt"],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "UserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "StudentId", "principalTable": "Students", "principalColumn": "Id" }
+          ],
+          "indexes": ["UserId, LookedUpAt", "StudentId"]
+        },
+        {
+          "tableName": "LookupViewOptions",
+          "columns": ["Id", "OptionCode", "DisplayName", "Description", "IconClass", "BadgeColor", "SortOrder", "IsActive"],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [],
+          "indexes": ["OptionCode"]
         }
       ]
     }
   ]
 }
-
 ```
