@@ -45,7 +45,7 @@ erDiagram
     ClassRoomLocations ||--o{ Classes : "1-N"
     Users ||--o{ RefreshTokens : "1-N"
 	
-	---
+```
 
 ### 3. TABLE-INDEX.json
 ```json
@@ -203,3 +203,5 @@ erDiagram
     }
   ]
 }
+
+```
