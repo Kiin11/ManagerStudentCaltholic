@@ -220,7 +220,7 @@ function renderStudent360ToDom(data, selectedOption = 'OVERVIEW') {
     const avatar = document.getElementById('resAvatarCircle');
     if (avatar) avatar.innerText = initial;
 
-    document.getElementById('resStudentFullName').innerText = `${b.christianName} ${b.lastName} ${b.firstName}`.trim();
+    document.getElementById('resStudentFullName').innerText = `${b.christianName} ${b.firstName} ${b.lastName}`.trim();
     document.getElementById('resStudentCodeBadge').innerText = b.studentCode;
     document.getElementById('resActiveClassBadge').innerText = b.currentClassName ? `Lớp: ${b.currentClassName}` : 'Chưa xếp lớp';
     document.getElementById('resAcademicYearName').innerText = b.currentAcademicYearName || '2026-2027';

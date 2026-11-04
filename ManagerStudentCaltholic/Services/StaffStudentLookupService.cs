@@ -87,8 +87,8 @@ namespace ManagerStudentCaltholic.Services
                      s.ChristianName.ToLower().Contains(lowerKeyword) ||
                      s.FirstName.ToLower().Contains(lowerKeyword) ||
                      s.LastName.ToLower().Contains(lowerKeyword) ||
-                     (s.LastName + " " + s.FirstName).ToLower().Contains(lowerKeyword) ||
-                     (s.ChristianName + " " + s.LastName + " " + s.FirstName).ToLower().Contains(lowerKeyword) ||
+                     (s.FirstName + " " + s.LastName).ToLower().Contains(lowerKeyword) ||
+                     (s.ChristianName + " " + s.FirstName + " " + s.LastName).ToLower().Contains(lowerKeyword) ||
                      historyStudentIds.Contains(s.Id)));
 
             var matchedStudents = await query.Take(limit * 2).ToListAsync();
@@ -109,7 +109,7 @@ namespace ManagerStudentCaltholic.Services
                 {
                     if (matchedStudents.All(s => s.Id != c.Id))
                     {
-                        var fullName = $"{c.ChristianName} {c.LastName} {c.FirstName}";
+                        var fullName = $"{c.FirstName} {c.LastName}";
                         var noDiacriticsName = VietnameseStringHelper.RemoveDiacritics(fullName);
                         if (noDiacriticsName.Contains(noDiacriticsKeyword))
                         {
@@ -519,7 +519,7 @@ namespace ManagerStudentCaltholic.Services
                 Address = "Giáo xứ Phú Trung, Hạt Tân Sơn Nhì, TGP Sài Gòn"
             };
 
-            var studentFullName = $"{student.ChristianName} {student.LastName} {student.FirstName}".Trim();
+            var studentFullName = $"{student.FirstName} {student.LastName}".Trim();
             var classDisplay = !string.IsNullOrWhiteSpace(className) ? $"lớp {className}" : "Xứ Đoàn Phú Trung";
 
             // Tạo các mẫu tin nhắn nhanh gửi phụ huynh qua Zalo / SMS
@@ -605,7 +605,7 @@ namespace ManagerStudentCaltholic.Services
                     StudentId = s.Id,
                     StudentCode = s.StudentCode,
                     ChristianName = s.ChristianName,
-                    FullName = $"{s.ChristianName} {s.LastName} {s.FirstName}".Trim(),
+                    FullName = $"{s.FirstName} {s.LastName}".Trim(),
                     ClassName = currentClass,
                     LookedUpAt = log.LookedUpAt,
                     TimeAgoDisplay = FormatTimeAgo(log.LookedUpAt)
