@@ -168,7 +168,7 @@
     </div>
 
     <!-- FOOTER CỐ ĐỊNH Ở ĐÁY OFFCANVAS (LUÔN HIỂN THỊ, NÚT ĐĂNG XUẤT 1-CHẠM KHÔNG BỊ TRÔI HOẶC CHE) -->
-    <div class="p-3 border-top bg-white flex-shrink-0" style="padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;">
+    <div class="offcanvas-footer p-3 border-top bg-white flex-shrink-0">
         @if (isAuthenticated)
         {
             <form asp-controller="Account" asp-action="Logout" method="post" class="m-0"
