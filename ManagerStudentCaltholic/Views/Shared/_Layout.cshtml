@@ -1,4 +1,4 @@
-﻿@using System.Security.Claims
+@using System.Security.Claims
 @using ManagerStudentCaltholic.Models.Entities
 @{
     var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
@@ -24,6 +24,9 @@
 
     // P2-LOG-18: Nhận diện thiết bị đang đăng nhập hoặc đã từng đăng nhập tài khoản GLV/Nhân sự
     bool isRecognizedStaffDevice = isAuthenticated || Context.Request.Cookies.ContainsKey("Parish_Staff_Device");
+
+    // FEAT-P5-02 / TASK-P5-02.1: Nhận diện thiết bị Mobile để chuyển đổi giao diện Mobile-First
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -50,6 +53,7 @@
     <meta name="apple-mobile-web-app-title" content="QL Giáo Lý" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="stylesheet" href="~/css/mobile-layout.css" asp-append-version="true" />
 
     <style>
         html {
@@ -321,7 +325,7 @@
     </style>
     @await RenderSectionAsync("Styles", required: false)
 </head>
-<body>
+<body class="@(isMobile ? "mobile-mode" : "")">
     <!-- CỤM NÚT KÉO LÊN & KÉO XUỐNG NHANH -->
     <div class="scroll-floating-controls" aria-label="Điều hướng cuộn trang">
         <button type="button" id="btnScrollToTop" class="btn-scroll-action hide-btn" onclick="scrollToTop()" title="Kéo lên đầu trang">
@@ -332,7 +336,32 @@
         </button>
     </div>
 
-    <!-- THANH TASKBAR TRÁI: CHỈ HIỂN THỊ TRÊN DESKTOP (d-none d-lg-flex) -->
+    @if (isMobile)
+    {
+        <!-- ============================================================== -->
+        <!-- GIAO DIỆN MOBILE-FIRST (FEAT-P5-02 / TASK-P5-02.1)             -->
+        <!-- ============================================================== -->
+        <div id="mobile-app-root" class="d-flex flex-column min-vh-100">
+            @await Html.PartialAsync("_LayoutMobileHeader")
+
+            <!-- BANNER BÁO MẤT SÓNG / OFFLINE -->
+            <div id="offlineNotice" class="alert alert-warning border-0 rounded-0 py-1 px-3 mb-0 text-center small fw-semibold shadow-sm d-none">
+                <i class="bi bi-wifi-off me-1"></i> Thiết bị đang mất kết nối mạng. Ứng dụng đang hoạt động ở chế độ Offline (Dữ liệu lấy từ bộ nhớ đệm).
+            </div>
+
+            <main role="main" class="mobile-main-wrapper flex-grow-1 p-2 p-sm-3">
+                @RenderBody()
+            </main>
+
+            @await Html.PartialAsync("_LayoutMobileBottomNav")
+        </div>
+    }
+    else
+    {
+        <!-- ============================================================== -->
+        <!-- GIAO DIỆN DESKTOP (GIỮ NGUYÊN 100% CẤU TRÚC GỐC)               -->
+        <!-- ============================================================== -->
+        <!-- THANH TASKBAR TRÁI: CHỈ HIỂN THỊ TRÊN DESKTOP (d-none d-lg-flex) -->
     <aside id="app-sidebar" class="d-none d-lg-flex">
         <!-- Logo & Brand Header -->
         <a asp-controller="Home" asp-action="Index" class="sidebar-brand text-decoration-none">
@@ -627,6 +656,11 @@
                             <div class="small text-muted">Đăng nhập với:</div>
                             <div class="fw-bold text-dark">@User.Identity?.Name</div>
                         </li>
+                        <li>
+                            <a class="dropdown-item py-2 text-primary fw-semibold" href="/Home/SetDeviceMode?mode=mobile&returnUrl=@Context.Request.Path@Context.Request.QueryString">
+                                <i class="bi bi-phone me-2"></i> Chuyển Sang Giao Diện Mobile
+                            </a>
+                        </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item py-2" asp-controller="Account" asp-action="Profile">
@@ -662,7 +696,12 @@
                                 </li>
                             }
 
-                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                            <a class="dropdown-item py-2 text-primary fw-semibold" href="/Home/SetDeviceMode?mode=mobile&returnUrl=@Context.Request.Path@Context.Request.QueryString">
+                                <i class="bi bi-phone me-2"></i> Chuyển Sang Giao Diện Mobile
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="m-0"
                                       onsubmit="if(window.ParishOfflineEngine) { ParishOfflineEngine.clearCacheOnLogout(); }">
@@ -725,6 +764,8 @@
             @RenderBody()
         </main>
     </div>
+
+    }
 
     <!-- BANNER MỜI CÀI ĐẶT ỨNG DỤNG TRÊN ĐIỆN THOẠI -->
     <div id="pwaInstallBanner" class="position-fixed bottom-0 start-0 end-0 p-3 d-none" style="z-index: 1055;">
