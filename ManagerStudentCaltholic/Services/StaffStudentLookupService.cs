@@ -135,7 +135,7 @@ namespace ManagerStudentCaltholic.Services
                     StudentId = student.Id,
                     StudentCode = student.StudentCode,
                     ChristianName = student.ChristianName,
-                    FullName = $"{student.ChristianName} {student.LastName} {student.FirstName}".Trim(),
+                    FullName = $"{student.FirstName} {student.LastName}".Trim(),
                     Gender = student.Gender,
                     DateOfBirth = student.DateOfBirth,
                     CurrentClassName = currentEnrollment?.ClassRoom?.Name,
