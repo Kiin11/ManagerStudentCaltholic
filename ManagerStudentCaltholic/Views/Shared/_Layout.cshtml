@@ -427,16 +427,6 @@
                             </a>
                         </li>
                     }
-                    @if (isAuthenticated)
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link @(currentCtrl == "Account" && currentAct == "Profile" ? "active fw-bold" : "")"
-                               asp-controller="Account" asp-action="Profile">
-                                <i class="bi bi-person-badge-fill text-primary"></i>
-                                <span class="sidebar-text">Hồ Sơ Cá Nhân</span>
-                            </a>
-                        </li>
-                    }
                 </ul>
             </div>
 
