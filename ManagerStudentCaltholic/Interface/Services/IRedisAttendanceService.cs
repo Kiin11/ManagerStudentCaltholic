@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Models.DTOs;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.ViewModels;
 
 namespace ManagerStudentCaltholic.Interface.Services
@@ -29,6 +29,11 @@ namespace ManagerStudentCaltholic.Interface.Services
         /// TASK-P3-12.3: Xử lý quét mã QR tốc độ cao trực tiếp trên Redis
         /// </summary>
         Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request);
+
+        /// <summary>
+        /// TASK-P5-04.3: Hoàn tác lượt quét QR trong vòng 5 giây
+        /// </summary>
+        Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto);
 
         /// <summary>
         /// TASK-P3-12.4: Đồng bộ hàng loạt (Batch Upsert) toàn bộ dữ liệu điểm danh đã thay đổi trên Redis về PostgreSQL
