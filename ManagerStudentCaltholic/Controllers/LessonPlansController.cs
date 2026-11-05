@@ -1,6 +1,9 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +14,16 @@ namespace ManagerStudentCaltholic.Controllers
     public class LessonPlansController : Controller
     {
         private readonly ParishDbContext _context;
+        private readonly IClassCurriculumService _curriculumService;
         private readonly ILogger<LessonPlansController> _logger;
 
-        public LessonPlansController(ParishDbContext context, ILogger<LessonPlansController> logger)
+        public LessonPlansController(
+            ParishDbContext context,
+            IClassCurriculumService curriculumService,
+            ILogger<LessonPlansController> logger)
         {
             _context = context;
+            _curriculumService = curriculumService;
             _logger = logger;
         }
 
@@ -77,33 +85,227 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
-            ViewBag.Classes = classes;
-            ViewBag.CurrentYear = currentYear;
-
             if (classRoomId.HasValue && !classes.Any(c => c.Id == classRoomId.Value))
             {
                 return Forbid();
             }
 
             var selectedClassId = classRoomId ?? classes.FirstOrDefault()?.Id ?? 0;
-            ViewBag.SelectedClassId = selectedClassId;
-
             var selectedClass = classes.FirstOrDefault(c => c.Id == selectedClassId);
-            ViewBag.SelectedClassName = selectedClass?.Name ?? "Chưa chọn lớp";
-            ViewBag.SelectedGrade = selectedClass?.GradeLevel ?? "";
 
-            var documents = await _context.ClassLessonDocuments
+            bool canManage = selectedClass != null && await CanManageClassLessonAsync(selectedClass);
+
+            // 1. Lấy dữ liệu Kế hoạch lớp (FEAT-P5-07)
+            ClassCurriculumDocumentDto? curriculumDoc = null;
+            List<ClassCurriculumVersionDto> versions = new();
+
+            if (selectedClassId > 0)
+            {
+                curriculumDoc = await _curriculumService.GetCurriculumByClassAsync(selectedClassId, yearId);
+                if (curriculumDoc != null && curriculumDoc.Id > 0)
+                {
+                    versions = await _curriculumService.GetVersionsAsync(curriculumDoc.Id);
+                }
+            }
+
+            // 2. Lấy danh sách tài liệu đính kèm truyền thống
+            var legacyDocs = await _context.ClassLessonDocuments
                 .Where(d => d.ClassRoomId == selectedClassId && d.AcademicYearId == yearId)
                 .OrderByDescending(d => d.UploadedAt)
                 .AsNoTracking()
                 .ToListAsync();
 
-            return View(documents);
+            var viewModel = new LessonPlanWorkspaceViewModel
+            {
+                Classes = classes,
+                CurrentYear = currentYear,
+                SelectedClassId = selectedClassId,
+                SelectedClassName = selectedClass?.Name ?? "Chưa chọn lớp",
+                SelectedGrade = selectedClass?.GradeLevel ?? "",
+                CanManage = canManage,
+                CurriculumDocument = curriculumDoc,
+                Versions = versions,
+                LegacyDocuments = legacyDocs
+            };
+
+            ViewBag.Classes = classes;
+            ViewBag.CurrentYear = currentYear;
+            ViewBag.SelectedClassId = selectedClassId;
+            ViewBag.SelectedClassName = viewModel.SelectedClassName;
+            ViewBag.SelectedGrade = viewModel.SelectedGrade;
+
+            return View(viewModel);
+        }
+
+        // =========================================================================
+        // FEAT-P5-07: API BIÊN TẬP, NẠP FILE, XUẤT VERSION & KHÔI PHỤC (TASK-P5-07.2, 07.3, 07.4)
+        // =========================================================================
+
+        /// <summary>
+        /// TASK-P5-07.2: Đọc file kế hoạch lớp (.xlsx, .docx, .csv, .md, .pdf) và nạp lên bảng phân phối
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
+        public async Task<IActionResult> ParseCurriculumFile(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return Json(new { success = false, message = "Vui lòng chọn file kế hoạch để nạp." });
+            }
+
+            const long maxFileSize = 15 * 1024 * 1024;
+            if (file.Length > maxFileSize)
+            {
+                return Json(new { success = false, message = "Dung lượng file vượt quá giới hạn 15MB." });
+            }
+
+            var result = await _curriculumService.ParseUploadedCurriculumFileAsync(file);
+            return Json(result);
         }
 
         /// <summary>
-        /// P2-SEC-05 FIX: Kiểm tra chữ ký byte đầu (Magic Bytes) của tệp tải lên
+        /// TASK-P5-07.3: Lưu kế hoạch trực tuyến, tự động sinh file đính kèm gắn version & ngày sửa, đồng bộ ClassLessonPlans
         /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
+        public async Task<IActionResult> SaveCurriculum([FromBody] SaveCurriculumRequestDto request)
+        {
+            if (request == null || request.ClassRoomId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu kế hoạch lớp không hợp lệ." });
+            }
+
+            var targetClass = await _context.Classes.FindAsync(request.ClassRoomId);
+            if (targetClass == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
+            }
+
+            if (!await CanManageClassLessonAsync(targetClass))
+            {
+                return Json(new { success = false, message = "Bạn không có thẩm quyền chỉnh sửa kế hoạch lớp học này!" });
+            }
+
+            var userName = User.Identity?.Name ?? "GLV";
+            var result = await _curriculumService.SaveCurriculumAsync(request, CurrentUserId, userName);
+
+            return Json(new
+            {
+                success = result.Success,
+                message = result.Message,
+                data = result.Data
+            });
+        }
+
+        /// <summary>
+        /// TASK-P5-07.4: Lấy chi tiết nội dung tuần học của một phiên bản cũ
+        /// </summary>
+        [HttpGet("LessonPlans/GetVersionDetail/{versionId:long}")]
+        public async Task<IActionResult> GetVersionDetail(long versionId)
+        {
+            var ver = await _context.ClassCurriculumVersions
+                .Include(v => v.CurriculumDocument)
+                .ThenInclude(d => d.ClassRoom)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == versionId);
+
+            if (ver == null) return NotFound(new { success = false, message = "Không tìm thấy phiên bản." });
+
+            if (ver.CurriculumDocument?.ClassRoom != null && !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
+            {
+                return Forbid();
+            }
+
+            var detail = await _curriculumService.GetVersionDetailAsync(versionId);
+            return Json(new { success = true, data = detail });
+        }
+
+        /// <summary>
+        /// TASK-P5-07.4: Tải file đính kèm được tự động sinh của phiên bản ngày sửa
+        /// </summary>
+        [HttpGet("LessonPlans/DownloadCurriculumVersion/{versionId:long}")]
+        public async Task<IActionResult> DownloadCurriculumVersion(long versionId)
+        {
+            var ver = await _context.ClassCurriculumVersions
+                .Include(v => v.CurriculumDocument)
+                .ThenInclude(d => d.ClassRoom)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == versionId);
+
+            if (ver == null) return NotFound("Không tìm thấy phiên bản yêu cầu.");
+
+            if (ver.CurriculumDocument?.ClassRoom != null && !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
+            {
+                return Forbid();
+            }
+
+            var fileResult = await _curriculumService.GetVersionFileAsync(versionId);
+            if (fileResult == null) return NotFound("Tệp đính kèm không tồn tại.");
+
+            return File(fileResult.Value.FileBytes, fileResult.Value.ContentType, fileResult.Value.DownloadFileName);
+        }
+
+        /// <summary>
+        /// TASK-P5-07.4: Xuất file Excel bảng kế hoạch lớp hiện tại
+        /// </summary>
+        [HttpGet("LessonPlans/ExportCurrentCurriculumExcel")]
+        public async Task<IActionResult> ExportCurrentCurriculumExcel(long documentId, [FromQuery] long? versionId = null)
+        {
+            var doc = await _context.ClassCurriculumDocuments
+                .Include(d => d.ClassRoom)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (doc == null || doc.ClassRoom == null) return NotFound("Không tìm thấy tài liệu kế hoạch.");
+
+            if (!await CanManageClassLessonAsync(doc.ClassRoom))
+            {
+                return Forbid();
+            }
+
+            var fileResult = await _curriculumService.ExportCurriculumToExcelAsync(documentId, versionId);
+            return File(fileResult.FileBytes, fileResult.ContentType, fileResult.DownloadFileName);
+        }
+
+        /// <summary>
+        /// TASK-P5-07.4: Khôi phục (Rollback) nội dung kế hoạch lớp về phiên bản ngày sửa cũ
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> RollbackCurriculum([FromForm] long documentId, [FromForm] long versionId)
+        {
+            var doc = await _context.ClassCurriculumDocuments
+                .Include(d => d.ClassRoom)
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (doc == null || doc.ClassRoom == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy kế hoạch lớp." });
+            }
+
+            if (!await CanManageClassLessonAsync(doc.ClassRoom))
+            {
+                return Json(new { success = false, message = "Bạn không có quyền khôi phục kế hoạch của lớp này!" });
+            }
+
+            var userName = User.Identity?.Name ?? "GLV";
+            var result = await _curriculumService.RollbackCurriculumAsync(documentId, versionId, CurrentUserId, userName);
+
+            return Json(new
+            {
+                success = result.Success,
+                message = result.Message,
+                data = result.Data
+            });
+        }
+
+        // =========================================================================
+        // LEGACY DOCUMENT MANAGEMENT (ClassLessonDocuments)
+        // =========================================================================
+
         private static async Task<bool> HasValidMagicBytesAsync(IFormFile file, string ext)
         {
             if (file.Length < 4) return false;
@@ -115,17 +317,11 @@ namespace ManagerStudentCaltholic.Controllers
 
             return ext switch
             {
-                // PDF: %PDF (0x25 0x50 0x44 0x46)
                 ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
-
-                // DOCX / XLSX (OpenXML ZIP): PK\x03\x04 (0x50 0x4B 0x03 0x04)
                 ".docx" or ".xlsx" => header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04,
-
-                // DOC / XLS (OLE2 Compound Document): D0 CF 11 E0 A1 B1 1A E1
                 ".doc" or ".xls" => bytesRead >= 8 &&
                                     header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0 &&
                                     header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1,
-
                 _ => false
             };
         }
@@ -166,7 +362,6 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Bạn không có thẩm quyền tải giáo án lên lớp học này!" });
                 }
 
-                // P2-SEC-05 FIX: Lưu vào PrivateUploads/lesson_plans thay vì wwwroot
                 var privateFolder = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"));
                 Directory.CreateDirectory(privateFolder);
 
@@ -185,7 +380,7 @@ namespace ManagerStudentCaltholic.Controllers
                     AcademicYearId = targetClass.AcademicYearId,
                     FileName = safeOriginalName,
                     StoredFileName = storedFileName,
-                    FilePath = string.Empty, // Sẽ gán link DownloadDocument ngay sau khi SaveChanges
+                    FilePath = string.Empty,
                     ContentType = file.ContentType,
                     FileSize = file.Length,
                     Description = string.IsNullOrWhiteSpace(description) ? safeOriginalName : description.Trim(),
@@ -211,9 +406,6 @@ namespace ManagerStudentCaltholic.Controllers
             }
         }
 
-        /// <summary>
-        /// P2-SEC-05 FIX: Endpoint bảo mật để Xem/Tải giáo án có kiểm tra quyền truy cập lớp
-        /// </summary>
         [HttpGet("LessonPlans/DownloadDocument/{id:long}")]
         public async Task<IActionResult> DownloadDocument(long id, [FromQuery] bool inline = true)
         {
@@ -254,7 +446,7 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken] // SEC-NEW-02 FIX: Bật lại kiểm tra CSRF
+        [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> DeleteDocument([FromForm] long documentId)
         {
@@ -264,13 +456,11 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (doc == null) return Json(new { success = false, message = "Không tìm thấy tài liệu cần xóa." });
 
-            // SEC-NEW-05 FIX 1: Kiểm tra quyền của Trưởng khối trên lớp của tài liệu
             if (doc.ClassRoom != null && !await CanManageClassLessonAsync(doc.ClassRoom))
             {
                 return Json(new { success = false, message = "Bạn không có quyền xóa tài liệu của khối/lớp khác!" });
             }
 
-            // SEC-NEW-05 FIX 2: Chặn Path Traversal khi xóa tệp vật lý
             var uploadsRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"));
             if (!uploadsRoot.EndsWith(Path.DirectorySeparatorChar))
             {

@@ -85,6 +85,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddHostedService<LogRetentionBackgroundService>();
             services.AddSingleton<IAuthorizationHandler, GradeScopeHandler>();
             services.AddScoped<ILessonPlanImportService, LessonPlanImportService>();
+            services.AddScoped<IClassCurriculumService, ClassCurriculumService>();
             services.AddScoped<IGradeCalculationService, GradeCalculationService>();
             services.AddScoped<IGradePermissionService, GradePermissionService>();
             services.AddScoped<IStudentPlacementService, StudentPlacementService>();

@@ -31,6 +31,9 @@ namespace ManagerStudentCaltholic.Data
 
         // --- Syllabus & Lesson Plans (Epic 9: TASK-904) ---
         public DbSet<ClassLessonDocument> ClassLessonDocuments => Set<ClassLessonDocument>();
+        public DbSet<ClassCurriculumDocument> ClassCurriculumDocuments => Set<ClassCurriculumDocument>();
+        public DbSet<ClassCurriculumVersion> ClassCurriculumVersions => Set<ClassCurriculumVersion>();
+        public DbSet<ClassLessonPlan> ClassLessonPlans => Set<ClassLessonPlan>();
 
         // --- Grade Configuration & Records (Epic 10: TASK-1001, TASK-1002) ---
         public DbSet<GradeConfiguration> GradeConfigurations => Set<GradeConfiguration>();
@@ -346,6 +349,35 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasIndex(p => new { p.ClassRoomId, p.LessonDate });
                 entity.HasIndex(p => p.AcademicYearId);
                 entity.HasIndex(p => p.AssignedTeacherUserId);
+                entity.HasOne(p => p.CurriculumDocument)
+                      .WithMany(c => c.LessonPlans)
+                      .HasForeignKey(p => p.CurriculumDocumentId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(p => p.CurriculumDocumentId);
+            });
+
+            // --- FEAT-P5-07: Class Curriculum Documents & Versions ---
+            modelBuilder.Entity<ClassCurriculumDocument>(entity =>
+            {
+                entity.ToTable("ClassCurriculumDocuments");
+                entity.HasKey(c => c.Id);
+                entity.HasOne(c => c.ClassRoom).WithMany().HasForeignKey(c => c.ClassRoomId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(c => c.AcademicYear).WithMany().HasForeignKey(c => c.AcademicYearId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(c => c.CreatedByUser).WithMany().HasForeignKey(c => c.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(c => c.UpdatedByUser).WithMany().HasForeignKey(c => c.UpdatedByUserId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasMany(c => c.Versions).WithOne(v => v.CurriculumDocument).HasForeignKey(v => v.ClassCurriculumDocumentId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasIndex(c => new { c.ClassRoomId, c.AcademicYearId });
+                entity.HasIndex(c => c.AcademicYearId);
+            });
+
+            modelBuilder.Entity<ClassCurriculumVersion>(entity =>
+            {
+                entity.ToTable("ClassCurriculumVersions");
+                entity.HasKey(v => v.Id);
+                entity.HasOne(v => v.CurriculumDocument).WithMany(c => c.Versions).HasForeignKey(v => v.ClassCurriculumDocumentId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(v => v.CreatedByUser).WithMany().HasForeignKey(v => v.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(v => new { v.ClassCurriculumDocumentId, v.VersionNumber });
+                entity.HasIndex(v => v.CreatedAt);
             });
 
             // 5. GOVERNANCE & ROLES (TASK-906 & TASK-907)

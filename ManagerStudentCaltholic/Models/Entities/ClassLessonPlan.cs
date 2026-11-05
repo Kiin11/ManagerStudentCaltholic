@@ -1,9 +1,9 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Models.Entities
 {
     /// <summary>
-    /// Kế hoạch bài giảng chi tiết từng tuần của lớp học trong niên khóa (TASK-904)
+    /// Kế hoạch bài giảng chi tiết từng tuần của lớp học trong niên khóa (TASK-904 / FEAT-P5-07)
     /// </summary>
     public class ClassLessonPlan
     {
@@ -14,6 +14,12 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         public int AcademicYearId { get; set; }
         public AcademicYear AcademicYear { get; set; } = null!;
+
+        public long? CurriculumDocumentId { get; set; }
+        public ClassCurriculumDocument? CurriculumDocument { get; set; }
+
+        public int? WeekNumber { get; set; } // Tuần học số 1, 2, 3...
+        public int? Semester { get; set; } = 1; // Học kỳ 1 hoặc 2
 
         public DateTime LessonDate { get; set; } // Ngày dạy (Chúa Nhật)
 
