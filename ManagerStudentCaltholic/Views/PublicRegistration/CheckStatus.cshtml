@@ -47,7 +47,7 @@
 
 <div class="@(isMobile ? "container-fluid px-2 py-2" : "container py-4")">
     <div class="row justify-content-center">
-        <div class="col-lg-7">
+        <div class="col-lg-8">
             @if (isMobile)
             {
                 <!-- THANH ĐIỀU HƯỚNG & TIÊU ĐỀ TRÊN MOBILE -->
@@ -292,53 +292,173 @@
                     }
                     else
                     {
-                        <!-- GIAO DIỆN DESKTOP (GIỮ NGUYÊN BỐ CỤC) -->
-                        foreach (var item in Model.Results)
+                        <!-- GIAO DIỆN DESKTOP (ĐỒNG BỘ NỘI DUNG & TÍNH NĂNG NHƯ MOBILE) -->
+                        <div class="mb-3 d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-secondary text-uppercase" style="letter-spacing: 0.03em;">
+                                Tìm thấy @Model.Results.Count hồ sơ
+                            </span>
+                            <span class="small text-muted">Sắp xếp theo thời gian nộp mới nhất</span>
+                        </div>
+
+                        @foreach (var item in Model.Results)
                         {
-                            <div class="card border-0 shadow-sm rounded-4 mb-3">
+                            <div class="card border-0 shadow-sm rounded-4 mb-3 overflow-hidden">
+                                <!-- Header thẻ: Mã hồ sơ & Trạng thái -->
+                                <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-light text-secondary border font-monospace fs-6">
+                                            Mã hồ sơ: #@item.Id
+                                        </span>
+                                        <span class="badge bg-info-subtle text-primary border rounded-pill px-3 py-1">
+                                            Khối: @item.TargetGradeLevel
+                                        </span>
+                                    </div>
+                                    <div>
+                                        @if (item.Status == "PENDING")
+                                        {
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill fw-semibold">
+                                                <i class="bi bi-hourglass-split me-1"></i>Đang chờ Ban Điều Hành duyệt
+                                            </span>
+                                        }
+                                        else if (item.Status == "APPROVED")
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-semibold">
+                                                <i class="bi bi-check-circle-fill me-1"></i>Đã duyệt &amp; Xếp lớp
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill fw-semibold">
+                                                <i class="bi bi-x-circle-fill me-1"></i>Cần bổ sung / Từ chối
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+
                                 <div class="card-body p-4">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <div>
-                                            <span class="badge bg-light text-secondary border mb-1">Mã hồ sơ: #@item.Id</span>
-                                            <h5 class="fw-bold text-dark mb-0">@item.ChristianName @item.FirstName @item.LastName</h5>
-                                            <small class="text-muted">Ngày nộp: @item.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm") | Khối đăng ký: <strong>@item.TargetGradeLevel</strong></small>
-                                        </div>
-                                        <div>
-                                            @if (item.Status == "PENDING")
-                                            {
-                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 rounded-pill">
-                                                    <i class="bi bi-hourglass-split me-1"></i>Đang chờ Ban Điều Hành duyệt
-                                                </span>
-                                            }
-                                            else if (item.Status == "APPROVED")
-                                            {
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
-                                                    <i class="bi bi-check-circle-fill me-1"></i>Đã duyệt &amp; Xếp lớp
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill">
-                                                    <i class="bi bi-x-circle-fill me-1"></i>Cần bổ sung / Từ chối
-                                                </span>
-                                            }
+                                    <!-- Thông tin thiếu nhi -->
+                                    <div class="row align-items-center g-3 mb-2">
+                                        <div class="col-md-8">
+                                            <h4 class="fw-bold text-dark mb-1">
+                                                @item.ChristianName @item.FirstName @item.LastName
+                                            </h4>
+                                            <div class="row g-2 small text-muted mt-1">
+                                                <div class="col-sm-6">
+                                                    <i class="bi bi-calendar-event me-1"></i>Ngày sinh: <strong class="text-dark">@item.DateOfBirth.ToString("dd/MM/yyyy")</strong> (@item.Gender)
+                                                </div>
+                                                <div class="col-sm-6">
+                                                    <i class="bi bi-clock-history me-1"></i>Ngày nộp: <strong class="text-dark">@item.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</strong>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     @if (item.Status == "APPROVED")
                                     {
-                                        <div class="alert alert-success rounded-3 mb-0 mt-3">
-                                            <div class="fw-bold mb-1"><i class="bi bi-stars me-1"></i>Thông tin nhập học chính thức:</div>
-                                            <div>Mã Thiếu Nhi: <strong class="text-primary font-monospace fs-6">@(item.CreatedStudent?.StudentCode ?? "Đang cập nhật")</strong></div>
-                                            <div>Lớp được xếp: <strong>@(item.AssignedClass?.Name ?? "Đang cập nhật")</strong> (@(item.AcademicYear?.Name ?? ""))</div>
-                                            <div class="small mt-1 text-muted">Phụ huynh có thể dùng Mã Thiếu Nhi này để tra cứu điểm danh &amp; bảng điểm tại cổng Tra cứu của Giáo xứ.</div>
+                                        var studentCode = item.CreatedStudent?.StudentCode;
+                                        <div class="p-3 p-md-4 rounded-4 bg-success bg-opacity-10 border border-success border-opacity-25 mt-3">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                                                <div class="fw-bold text-success fs-6">
+                                                    <i class="bi bi-patch-check-fill me-2 fs-5"></i>Hồ sơ đã được tiếp nhận và phân lớp chính thức
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(studentCode))
+                                                {
+                                                    <a href="/TraCuu" class="btn btn-success btn-sm rounded-pill px-4 py-2 fw-bold shadow-sm">
+                                                        <i class="bi bi-search me-1"></i> Mở Cổng Tra Cứu Điểm Danh
+                                                    </a>
+                                                }
+                                            </div>
+
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                                                        <div class="small text-secondary mb-1">Mã Thiếu Nhi chính thức:</div>
+                                                        <div class="d-flex align-items-center justify-content-between">
+                                                            <span class="fs-4 fw-bold text-primary font-monospace" id="codeText_desk_@item.Id">
+                                                                @(studentCode ?? "Đang cập nhật")
+                                                            </span>
+                                                            @if (!string.IsNullOrEmpty(studentCode))
+                                                            {
+                                                                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1"
+                                                                        onclick="copyStudentCode('@studentCode', this)">
+                                                                    <i class="bi bi-clipboard me-1"></i> Sao chép
+                                                                </button>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="bg-white p-3 rounded-3 border shadow-sm h-100">
+                                                        <div class="small text-secondary mb-1">Lớp học được xếp:</div>
+                                                        <div class="fs-5 fw-bold text-success">
+                                                            @(item.AssignedClass?.Name ?? "Đang cập nhật")
+                                                            @if (item.AcademicYear != null)
+                                                            {
+                                                                <span class="text-muted fs-6 fw-normal ms-1">(@item.AcademicYear.Name)</span>
+                                                            }
+                                                        </div>
+                                                        <div class="small text-muted mt-1">
+                                                            Phụ huynh có thể dùng Mã Thiếu Nhi này để tra cứu điểm danh &amp; bảng điểm tại cổng Tra Cứu.
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (item.Status == "PENDING")
+                                    {
+                                        <div class="p-3 p-md-4 rounded-4 bg-warning bg-opacity-10 border border-warning border-opacity-25 mt-3">
+                                            <div class="fw-bold text-dark mb-3 fs-6">
+                                                <i class="bi bi-hourglass-top text-warning me-2 fs-5"></i>Tiến trình xét duyệt hồ sơ:
+                                            </div>
+                                            <div class="row g-3 align-items-center">
+                                                <div class="col-md-8">
+                                                    <div class="ps-1">
+                                                        <div class="status-step-item pb-3">
+                                                            <span class="status-step-dot bg-success text-white">✔</span>
+                                                            <span class="fw-semibold text-dark">Bước 1: Nộp hồ sơ trực tuyến</span>
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle ms-2 small">Hoàn tất</span>
+                                                            <div class="text-muted small">Hồ sơ đã được lưu trữ an toàn trong cơ sở dữ liệu Giáo xứ.</div>
+                                                        </div>
+                                                        <div class="status-step-item pb-3">
+                                                            <span class="status-step-dot bg-warning text-dark">⏳</span>
+                                                            <span class="fw-semibold text-dark">Bước 2: Ban Điều Hành kiểm tra &amp; phân lớp</span>
+                                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-2 small">Đang xử lý</span>
+                                                            <div class="text-muted small">Đối chiếu thông tin và chứng nhận Bí Tích Rửa Tội đã tải lên.</div>
+                                                        </div>
+                                                        <div class="status-step-item">
+                                                            <span class="status-step-dot bg-light border text-muted">3</span>
+                                                            <span class="text-muted">Bước 3: Cấp Mã Thiếu Nhi chính thức &amp; xếp vào danh sách lớp</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="bg-white p-3 rounded-3 border shadow-sm">
+                                                        <div class="small fw-bold text-dark mb-1">
+                                                            <i class="bi bi-info-circle-fill text-warning me-1"></i>Lưu ý xét duyệt
+                                                        </div>
+                                                        <div class="small text-muted">
+                                                            Ban Điều Hành họp duyệt hồ sơ định kỳ trước các Thánh Lễ Chúa Nhật. Vui lòng quay lại tra cứu sau 1–2 ngày làm việc.
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     }
                                     else if (item.Status == "REJECTED")
                                     {
-                                        <div class="alert alert-danger rounded-3 mb-0 mt-3">
-                                            <div class="fw-bold"><i class="bi bi-info-circle-fill me-1"></i>Lý do / Yêu cầu bổ sung từ Ban Điều Hành:</div>
-                                            <div>@(item.RejectionReason ?? "Hồ sơ chưa hợp lệ.")</div>
+                                        <div class="p-3 p-md-4 rounded-4 bg-danger bg-opacity-10 border border-danger border-opacity-25 mt-3">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+                                                <div class="fw-bold text-danger fs-6">
+                                                    <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>Yêu cầu bổ sung thông tin từ Ban Điều Hành:
+                                                </div>
+                                                <a asp-action="Index" class="btn btn-outline-danger btn-sm rounded-pill px-4 py-2 fw-bold">
+                                                    <i class="bi bi-pencil-square me-1"></i> Bổ sung &amp; Nộp lại hồ sơ
+                                                </a>
+                                            </div>
+                                            <div class="bg-white p-3 rounded-3 border border-danger border-opacity-25 shadow-sm text-dark">
+                                                @(item.RejectionReason ?? "Hồ sơ chưa hợp lệ hoặc hình ảnh giấy chứng nhận Rửa Tội bị mờ/không rõ.")
+                                            </div>
                                         </div>
                                     }
                                 </div>

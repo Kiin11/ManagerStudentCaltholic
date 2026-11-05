@@ -1,38 +1,66 @@
-﻿@{
+@using ManagerStudentCaltholic.Extensions
+@{
     ViewData["Title"] = "Đăng Ký Thành Công";
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 
-<div class="container py-5">
+<style>
+    @@media (max-width: 768px) {
+        .mobile-success-card {
+            border: 1px solid #e2e8f0;
+        }
+    }
+</style>
+
+<div class="@(isMobile ? "container-fluid px-2 py-3" : "container py-5")">
     <div class="row justify-content-center">
-        <div class="col-md-7 col-lg-5">
-            <div class="card border-0 shadow-sm rounded-4 text-center p-5 bg-white">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm rounded-4 text-center @(isMobile ? "p-3 p-sm-4 mobile-success-card" : "p-5") bg-white">
                 <!-- Icon thành công -->
-                <div class="mb-4">
-                    <div class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center shadow-sm" style="width: 80px; height: 80px; font-size: 2.5rem;">
+                <div class="mb-3 mb-md-4">
+                    <div class="rounded-circle bg-success-subtle text-success d-inline-flex align-items-center justify-content-center shadow-sm"
+                         style="width: @(isMobile ? "70px" : "80px"); height: @(isMobile ? "70px" : "80px"); font-size: @(isMobile ? "2rem" : "2.5rem");">
                         <i class="bi bi-check-lg"></i>
                     </div>
                 </div>
 
-                <h3 class="fw-bold text-dark mb-2">Đăng Ký Thành Công!</h3>
+                <h4 class="fw-bold text-dark mb-2 @(isMobile ? "fs-5" : "")">Đăng Ký Tuyển Sinh Thành Công!</h4>
 
-                @if (TempData["SuccessMessage"] != null)
-                {
-                    <p class="text-muted mb-4">
-                        @TempData["SuccessMessage"]
-                    </p>
-                }
-                else
-                {
-                    <p class="text-muted mb-4">
-                        Hồ sơ đăng ký học viên mới và ảnh giấy tờ Rửa tội của bạn đã được gửi thành công đến Ban Điều Hành giáo xứ. Hệ thống sẽ xét duyệt và liên hệ lại với phụ huynh trong thời gian sớm nhất.
-                    </p>
-                }
+                <div class="alert alert-success bg-success bg-opacity-10 border-0 rounded-4 text-start p-3 mb-3">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-info-circle-fill text-success fs-5 mt-1 flex-shrink-0"></i>
+                        <div class="small">
+                            @if (TempData["SuccessMessage"] != null)
+                            {
+                                @TempData["SuccessMessage"]
+                            }
+                            else
+                            {
+                                <span>Hồ sơ đăng ký học viên mới và ảnh chụp Giấy Chứng Nhận Rửa Tội đã được gửi thành công đến Ban Điều Hành Xứ Đoàn.</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-3 bg-light rounded-4 text-start mb-4">
+                    <div class="small fw-bold text-secondary mb-1">
+                        <i class="bi bi-clock-history me-1"></i>Bước tiếp theo dành cho Phụ huynh:
+                    </div>
+                    <ul class="small text-muted mb-0 ps-3">
+                        <li class="mb-1">Ban Điều Hành sẽ họp xét duyệt và phân lớp cho thiếu nhi trước Chúa Nhật.</li>
+                        <li class="mb-1">Phụ huynh có thể dùng <strong>Số điện thoại</strong> và <strong>Ngày sinh</strong> của em để kiểm tra kết quả bất cứ lúc nào.</li>
+                        <li>Khi hồ sơ được duyệt, hệ thống sẽ cấp <strong>Mã Thiếu Nhi</strong> để phụ huynh điểm danh và xem sổ điểm.</li>
+                    </ul>
+                </div>
 
                 <div class="d-grid gap-2">
-                    <a asp-action="Index" class="btn btn-primary rounded-pill py-2 fw-bold shadow-sm">
+                    <a asp-action="CheckStatus" class="btn btn-primary rounded-pill py-2 fw-bold shadow-sm touch-target-44">
+                        <i class="bi bi-search me-1"></i> Tra Cứu Tiến Độ Hồ Sơ
+                    </a>
+                    <a asp-action="Index" class="btn btn-outline-primary rounded-pill py-2 fw-semibold touch-target-44">
                         <i class="bi bi-plus-circle me-1"></i> Đăng ký thêm thiếu nhi khác
                     </a>
-                    <a href="~/" class="btn btn-outline-secondary rounded-pill py-2">
+                    <a href="~/" class="btn btn-outline-secondary rounded-pill py-2 text-muted">
                         <i class="bi bi-house-door me-1"></i> Về trang chủ giáo xứ
                     </a>
                 </div>
