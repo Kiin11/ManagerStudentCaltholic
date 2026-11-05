@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using ManagerStudentCaltholic.Models.Entities;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
@@ -63,4 +63,22 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public IFormFile? CertificateFile { get; set; }
     }
 
+    public class PublicRegistrationResubmitDto : PublicRegistrationSubmitDto
+    {
+        [Required]
+        public long Id { get; set; }
+
+        [Required]
+        public string OriginalParentPhone { get; set; } = string.Empty;
+
+        [Required]
+        [DataType(DataType.Date)]
+        public DateTime OriginalDateOfBirth { get; set; }
+
+        public string? RejectionReason { get; set; }
+        public string? ExistingCertificatePath { get; set; }
+        public string Status { get; set; } = "REJECTED";
+        public DateTime CreatedAt { get; set; }
+        public DateTime? ReviewedAt { get; set; }
+    }
 }
