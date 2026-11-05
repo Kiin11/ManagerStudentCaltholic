@@ -1,4 +1,4 @@
-﻿@using System.Security.Claims
+@using System.Security.Claims
 @using ManagerStudentCaltholic.Models.Entities
 @{
     var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
@@ -424,6 +424,16 @@
                                asp-controller="Dashboard" asp-action="Index">
                                 <i class="bi bi-speedometer2 text-warning"></i>
                                 <span class="sidebar-text">Executive Dashboard</span>
+                            </a>
+                        </li>
+                    }
+                    @if (isAuthenticated)
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(currentCtrl == "Account" && currentAct == "Profile" ? "active fw-bold" : "")"
+                               asp-controller="Account" asp-action="Profile">
+                                <i class="bi bi-person-badge-fill text-primary"></i>
+                                <span class="sidebar-text">Hồ Sơ Cá Nhân</span>
                             </a>
                         </li>
                     }

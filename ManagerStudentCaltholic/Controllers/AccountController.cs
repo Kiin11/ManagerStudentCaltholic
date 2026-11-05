@@ -1,6 +1,7 @@
-﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication;
@@ -286,11 +287,12 @@ namespace ManagerStudentCaltholic.Controllers
 
         /// <summary>
         /// 6. GET: /Account/Profile (TASK-616)
+        /// Hỗ trợ xem hồ sơ cá nhân hoặc xem hồ sơ của GLV khác (Admin / BĐH / Cha Tuyên Úy)
         /// </summary>
-        /// <returns></returns
+        /// <returns></returns>
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> Profile()
+        public async Task<IActionResult> Profile(long? id = null)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!long.TryParse(userIdStr, out var currentUserId))
@@ -298,9 +300,25 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Login));
             }
 
+            long targetUserId = currentUserId;
+            bool isViewingOther = false;
+            if (id.HasValue && id.Value > 0 && id.Value != currentUserId)
+            {
+                // Kiểm tra phân quyền: Chỉ Admin, Ban Điều Hành hoặc Cha Tuyên Úy mới được xem hồ sơ người khác
+                if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.SpiritualDirector))
+                {
+                    targetUserId = id.Value;
+                    isViewingOther = true;
+                }
+                else
+                {
+                    return Forbid();
+                }
+            }
+
             var user = await _context.Users
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
+                .FirstOrDefaultAsync(u => u.Id == targetUserId && u.IsActive);
 
             if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
 
@@ -366,6 +384,9 @@ namespace ManagerStudentCaltholic.Controllers
                 TeachingHistory = pastHistory
             };
 
+            ViewBag.IsViewingOther = isViewingOther;
+            ViewBag.TargetUserId = targetUserId;
+
             return View(viewModel);
         }
 
@@ -377,7 +398,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateProfile([Bind("ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address")] UserProfileViewModel model)
+        public async Task<IActionResult> UpdateProfile([Bind("Id,ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address")] UserProfileViewModel model)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!long.TryParse(userIdStr, out var currentUserId))
@@ -385,7 +406,22 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Login));
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == currentUserId && u.IsActive);
+            long targetUserId = currentUserId;
+            bool isViewingOther = false;
+            if (model.Id > 0 && model.Id != currentUserId)
+            {
+                if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard))
+                {
+                    targetUserId = model.Id;
+                    isViewingOther = true;
+                }
+                else
+                {
+                    return Forbid();
+                }
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == targetUserId && u.IsActive);
             if (user == null) return NotFound();
 
             // Bỏ qua kiểm tra ModelState đối với các trường chỉ hiển thị không gửi lên từ Form
@@ -395,7 +431,7 @@ namespace ManagerStudentCaltholic.Controllers
             if (!ModelState.IsValid)
             {
                 TempData["ErrorMessage"] = "Dữ liệu nhập chưa hợp lệ, vui lòng kiểm tra lại.";
-                return RedirectToAction(nameof(Profile));
+                return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
             }
 
             var cleanPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
@@ -409,7 +445,7 @@ namespace ManagerStudentCaltholic.Controllers
                 if (phoneExists)
                 {
                     TempData["ErrorMessage"] = "Số điện thoại này đã được sử dụng bởi một tài khoản khác.";
-                    return RedirectToAction(nameof(Profile));
+                    return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
                 }
             }
 
@@ -421,7 +457,7 @@ namespace ManagerStudentCaltholic.Controllers
                 if (emailExists)
                 {
                     TempData["ErrorMessage"] = "Địa chỉ Email này đã được sử dụng bởi một tài khoản khác.";
-                    return RedirectToAction(nameof(Profile));
+                    return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
                 }
             }
 
@@ -449,8 +485,10 @@ namespace ManagerStudentCaltholic.Controllers
 
             await _context.SaveChangesAsync();
 
-            TempData["SuccessMessage"] = "Cập nhật hồ sơ cá nhân thành công!";
-            return RedirectToAction(nameof(Profile));
+            TempData["SuccessMessage"] = isViewingOther 
+                ? $"Cập nhật hồ sơ tài khoản @{user.Username} thành công!"
+                : "Cập nhật hồ sơ cá nhân thành công!";
+            return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
         }
 
         /// <summary>

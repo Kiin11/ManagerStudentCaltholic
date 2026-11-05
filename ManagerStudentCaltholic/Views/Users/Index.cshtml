@@ -108,7 +108,9 @@
                     <!-- Header thẻ: Username + Badge vai trò & trạng thái -->
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
-                            <span class="fw-bold font-monospace text-primary fs-6">@u.Username</span>
+                            <a href="/Account/Profile?id=@u.Id" class="fw-bold font-monospace text-primary text-decoration-none fs-6 d-inline-flex align-items-center gap-1" title="Xem hồ sơ cá nhân">
+                                @u.Username <i class="bi bi-box-arrow-up-right" style="font-size: 0.75rem;"></i>
+                            </a>
                             @if (!string.IsNullOrEmpty(u.Email))
                             {
                                 <small class="text-muted d-block text-truncate" style="max-width: 200px;">@u.Email</small>
@@ -128,8 +130,10 @@
 
                     <!-- Họ và tên & Vai trò -->
                     <div class="mb-2">
-                        <div class="fw-bold text-dark fs-6">
-                            @(!string.IsNullOrEmpty(u.ChristianName) ? $"{u.ChristianName} " : "")@u.FirstName @u.LastName
+                        <div>
+                            <a href="/Account/Profile?id=@u.Id" class="fw-bold text-dark text-decoration-none fs-6" title="Xem hồ sơ cá nhân">
+                                @(!string.IsNullOrEmpty(u.ChristianName) ? $"{u.ChristianName} " : "")@u.FirstName @u.LastName
+                            </a>
                         </div>
                         <div class="d-flex flex-wrap gap-1 mt-1">
                             <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
@@ -168,19 +172,24 @@
                         </div>
                     </div>
 
-                    <!-- Nút thao tác -->
+                    <!-- Nút thao tác (Hồ Sơ, Đổi MK, Khóa/Mở) -->
                     <div class="row g-2 mobile-user-actions pt-2 border-top">
-                        <div class="col-6">
+                        <div class="col-4">
+                            <a href="/Account/Profile?id=@u.Id" class="btn btn-outline-primary w-100 rounded-pill touch-target-44" title="Xem hồ sơ / Lớp dạy">
+                                <i class="bi bi-person-vcard me-1"></i> Hồ Sơ
+                            </a>
+                        </div>
+                        <div class="col-4">
                             <button type="button" class="btn btn-outline-warning text-dark w-100 rounded-pill touch-target-44"
                                     onclick="openResetPasswordModal(@u.Id, '@u.Username')">
-                                <i class="bi bi-key-fill me-1"></i> Đặt Lại MK
+                                <i class="bi bi-key-fill me-1"></i> Đổi MK
                             </button>
                         </div>
-                        <div class="col-6">
+                        <div class="col-4">
                             <button type="button" class="btn @(u.IsActive ? "btn-outline-danger" : "btn-outline-success") w-100 rounded-pill touch-target-44"
                                     onclick="toggleUserStatus(@u.Id)">
                                 <i class="bi @(u.IsActive ? "bi-lock-fill" : "bi-unlock-fill") me-1"></i>
-                                @(u.IsActive ? "Khóa TK" : "Mở Khóa")
+                                @(u.IsActive ? "Khóa" : "Mở")
                             </button>
                         </div>
                     </div>
@@ -261,13 +270,19 @@ else
                             {
                                 <tr>
                                     <td class="ps-4">
-                                        <span class="fw-bold font-monospace text-dark">@u.Username</span>
+                                        <a href="/Account/Profile?id=@u.Id" class="fw-bold font-monospace text-primary text-decoration-none" title="Xem hồ sơ cá nhân">
+                                            @u.Username
+                                        </a>
                                         @if (!string.IsNullOrEmpty(u.Email))
                                         {
                                             <small class="d-block text-muted">@u.Email</small>
                                         }
                                     </td>
-                                    <td class="fw-semibold">@(!string.IsNullOrEmpty(u.ChristianName) ? $"{u.ChristianName} " : "")@u.FirstName @u.LastName</td>
+                                    <td>
+                                        <a href="/Account/Profile?id=@u.Id" class="fw-semibold text-dark text-decoration-none" title="Xem hồ sơ cá nhân">
+                                            @(!string.IsNullOrEmpty(u.ChristianName) ? $"{u.ChristianName} " : "")@u.FirstName @u.LastName
+                                        </a>
+                                    </td>
                                     <td>
                                         <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                                                                        u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
@@ -299,6 +314,10 @@ else
                                         @(u.LastLoginAt.HasValue? u.LastLoginAt.Value.ToString("dd/MM/yyyy HH:mm") : "Chưa đăng nhập")
                                     </td>
                                     <td class="text-center">
+                                        <a href="/Account/Profile?id=@u.Id" class="btn btn-sm btn-outline-primary rounded-circle me-1"
+                                           title="Xem hồ sơ / Lớp dạy">
+                                            <i class="bi bi-person-vcard"></i>
+                                        </a>
                                         <button class="btn btn-sm btn-outline-warning rounded-circle me-1"
                                                 title="Đặt lại mật khẩu" onclick="openResetPasswordModal(@u.Id, '@u.Username')">
                                             <i class="bi bi-key-fill"></i>
