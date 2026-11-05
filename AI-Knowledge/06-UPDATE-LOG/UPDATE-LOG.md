@@ -47,3 +47,25 @@
   - `AI-Knowledge/05-FEATURES/FEAT-P5-02-MOBILE-FIRST-UI.md`
   - `AI-Knowledge/06-UPDATE-LOG/UPDATE-REPORT.md` (đồng bộ với `UPDATE-REPORT.md` tại thư mục gốc)
 - **Kết quả kiểm tra (Validation):** Hoàn tất đồng bộ 100% các thay đổi từ commit `7c61591` đến `c0e828a`.
+
+---
+
+### Cập nhật Ngày 05/11/2026 - FEAT-P5-07: Quản Lý Kế Hoạch Lớp Theo Version Ngày Sửa
+- **Phân hệ:** `Học vụ & Giáo án` (`LessonPlans`)
+- **Mã tính năng:** `FEAT-P5-07` (Sub-tasks: `TASK-P5-07.1`, `TASK-P5-07.2`, `TASK-P5-07.3`, `TASK-P5-07.4`)
+- **Nội dung thực hiện:**
+  1. **TASK-P5-07.1 (Database & Sync):**
+     - Tạo Entity `ClassCurriculumDocument` (kế hoạch hiện hành, snapshot JSON `ContentJson`, thông tin file version mới nhất).
+     - Tạo Entity `ClassCurriculumVersion` (lịch sử phiên bản ngày sửa, bản chụp tuần học, đường dẫn file `.xlsx` tự động sinh).
+     - Cập nhật `ClassLessonPlan`: Bổ sung `CurriculumDocumentId`, `WeekNumber`, `Semester` và liên kết với `ClassCurriculumDocument`.
+     - Cấu hình Fluent API và tạo EF Migration `AddClassCurriculumDocumentsAndVersions`.
+  2. **TASK-P5-07.2 (Parser đa định dạng):**
+     - Xây dựng dịch vụ đọc file đa định dạng trong `ClassCurriculumService`: hỗ trợ `.xlsx` (ClosedXML), `.docx` (OpenXML), `.csv` (StreamReader với auto delimiter detection), `.md` (Markdown Table & List), và `.pdf` (PdfPig).
+     - Tự động chuẩn hóa số tuần, phát hiện ngày thi/nghỉ lễ, trả về DTOs nạp trực tiếp vào giao diện web mà không cần reload trang.
+  3. **TASK-P5-07.3 (Biên tập trực tuyến & Tự động sinh file version):**
+     - Trình biên tập bảng tuần tương tác: sửa tuần, ngày học, chủ đề, GLV, công tắc đánh dấu thi/nghỉ lễ, tính chuỗi Chúa Nhật tự động.
+     - Tự động sinh file Excel `.xlsx` chuẩn mẫu Giáo xứ gắn hậu tố version và ngày sửa (`KeHoach_{Class}_v{Version}_{YYYYMMDD}.xlsx`), lưu an toàn vào `PrivateUploads/curriculums`.
+     - Lưu phiên bản vào `ClassCurriculumVersions` và đồng bộ nguyên tử sang `ClassLessonPlans` qua `IExecutionStrategy`.
+  4. **TASK-P5-07.4 (Giao diện tích hợp, Xem lịch sử & Rollback):**
+     - Cập nhật `LessonPlansController` và View `Views/LessonPlans/Index.cshtml` với giao diện 3 Tab trực quan.
+     - Hỗ trợ xem lại snapshot từng phiên bản cũ, tải file `.xlsx` của ngày sửa bất kỳ, và chức năng Khôi phục (Rollback) an toàn.
