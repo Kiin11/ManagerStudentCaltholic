@@ -1,4 +1,4 @@
-﻿@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+@model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
 
 <div class="guide-container shadow-sm p-3 p-md-4 mb-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pb-3 mb-4 border-bottom">
@@ -8,9 +8,12 @@
             </span>
             <h5 class="fw-bold text-dark mb-0">Hướng Dẫn Nhập Sổ Điểm, Xét Duyệt Cuối Năm, Quản Lý Hồ Sơ & Cơ Sở Vật Chất</h5>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <a href="/Grades/Index" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold">
                 <i class="bi bi-journal-check me-1"></i> Mở Sổ Điểm Lớp
+            </a>
+            <a href="/Attendance/Index?classId=2&date=2026-11-05" class="btn btn-warning text-dark btn-sm rounded-pill px-3 fw-bold shadow-sm">
+                <i class="bi bi-calendar2-check-fill me-1"></i> Điểm Danh
             </a>
             <a href="/Students/Index" class="btn btn-outline-success btn-sm rounded-pill px-3 fw-bold">
                 <i class="bi bi-people-fill me-1"></i> Hồ Sơ Thiếu Nhi

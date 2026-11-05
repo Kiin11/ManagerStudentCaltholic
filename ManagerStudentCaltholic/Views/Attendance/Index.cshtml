@@ -1,10 +1,12 @@
-﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassAttendanceSheetViewModel
+@model ManagerStudentCaltholic.Models.ViewModels.ClassAttendanceSheetViewModel
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = $"Sổ Điểm Danh - {Model.ClassName}";
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
     var sessionCtx = ViewBag.SessionContext as ManagerStudentCaltholic.Models.DTOs.ClassSessionContextDto;
     bool canManageCache = User.IsInRole("Admin") || User.IsInRole("SpiritualDirector") || User.IsInRole("ExecutiveBoard") || User.IsInRole("BranchHead");
     int pendingDisputes = ViewBag.PendingDisputesCount != null ? (int)ViewBag.PendingDisputesCount : 0;
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 
 @Html.AntiForgeryToken()
@@ -117,30 +119,42 @@
                     </select>
                 </div>
                 <div class="col-lg-3 col-md-6">
-                    <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
-                    <div class="row g-2 mb-3">
-                        <div class="col-4">
-                            <label class="form-label small text-muted mb-1">Lễ Chúa Nhật (%)</label>
-                            <input type="number" id="ruleSundayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="40" onchange="autoBalanceClassWeight()" />
+                    @if (!isMobile)
+                    {
+                        <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Lễ Chúa Nhật (%)</label>
+                                <input type="number" id="ruleSundayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="40" onchange="autoBalanceClassWeight()" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Lễ Thứ Năm (%)</label>
+                                <input type="number" id="ruleThursdayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="20" onchange="autoBalanceClassWeight()" />
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small text-muted mb-1">Giờ Học GL (%)</label>
+                                <input type="number" id="ruleClassWeight" class="form-control form-control-sm text-center fw-bold bg-light" min="0" max="100" value="40" readonly />
+                            </div>
                         </div>
-                        <div class="col-4">
-                            <label class="form-label small text-muted mb-1">Lễ Thứ Năm (%)</label>
-                            <input type="number" id="ruleThursdayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="20" onchange="autoBalanceClassWeight()" />
-                        </div>
-                        <div class="col-4">
-                            <label class="form-label small text-muted mb-1">Giờ Học GL (%)</label>
-                            <input type="number" id="ruleClassWeight" class="form-control form-control-sm text-center fw-bold bg-light" min="0" max="100" value="40" readonly />
-                        </div>
-                    </div>
+                    }
+                    else
+                    {
+                        <input type="hidden" id="ruleSundayMassWeight" value="40" />
+                        <input type="hidden" id="ruleThursdayMassWeight" value="20" />
+                        <input type="hidden" id="ruleClassWeight" value="40" />
+                    }
                     <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
                 <div class="col-lg-6 col-md-12 d-flex justify-content-lg-end justify-content-start align-items-end gap-2 mt-3 mt-lg-0">
-                    <div>
-                        <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@Model.ClassId" target="_blank" class="btn btn-outline-info">
-                            <i class="bi bi-printer me-1"></i> In Thẻ QR Lớp
-                        </a>
-                    </div>
+                    @if (!isMobile)
+                    {
+                        <div>
+                            <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@Model.ClassId" target="_blank" class="btn btn-outline-info">
+                                <i class="bi bi-printer me-1"></i> In Thẻ QR Lớp
+                            </a>
+                        </div>
+                    }
                     @if (Model.DayOfWeek == DayOfWeek.Sunday)
                     {
                         <button type="button" class="btn btn-outline-success" onclick="markAllClass(true)">
@@ -234,8 +248,11 @@
                             <i class="bi bi-bell-fill me-1"></i>THÁNH LỄ (@(Model.DayOfWeek == DayOfWeek.Thursday ? "T5 17h45" : "CN 6h30"))
                         </th>
                         <th>Ghi Chú</th>
-                        <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
-                        <th class="text-center" style="width: 100px;">Xem lịch sử</th>
+                        @if (!isMobile)
+                        {
+                            <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
+                            <th class="text-center" style="width: 100px;">Xem lịch sử</th>
+                        }
                     </tr>
                 </thead>
                 <tbody>
@@ -300,38 +317,34 @@
                                 <td>
                                     <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
                                 </td>
-                                <td>
-                                    <!-- <button type="button" class="btn btn-outline-warning btn-sm rounded-pill ms-1"
-                                            title="Điểm danh bù"
-                                            data-enrollment-id="@s.EnrollmentId"
-                                            data-student-name="@($"{s.ChristianName} {s.FullName}".Trim())"
-                                            onclick="openMakeUpModalFromBtn(this)">
-                                        <i class="bi bi-arrow-repeat"></i> Bù
-                                    </button> -->
-                                    <!-- NÚT 1-CLICK COPY TIN BÁO VẮNG GỬI ZALO/VIBER (TASK-P3-07.4) -->
-                                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
-                                            title="1-Click Copy tin nhắn báo vắng / đi trễ gửi Phụ huynh"
-                                            data-enrollment-id="@s.EnrollmentId"
-                                            onclick="quickCopyAbsenceMessageFromRow(this)">
-                                        <i class="bi bi-chat-dots-fill"></i> Copy Tin
-                                    </button>
-                                </td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-outline-info rounded-circle ms-1 p-1"
-                                            title="Xem lịch sử điểm danh"
-                                            data-student-id="@s.StudentId"
-                                            data-student-name="@s.FullName"
-                                            onclick="openAuditTimelineFromBtn(this)">
-                                        <i class="bi bi-clock-history"></i>
-                                    </button>
-                                </td>
+                                @if (!isMobile)
+                                {
+                                    <td>
+                                        <!-- NÚT 1-CLICK COPY TIN BÁO VẮNG GỬI ZALO/VIBER (TASK-P3-07.4) -->
+                                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
+                                                title="1-Click Copy tin nhắn báo vắng / đi trễ gửi Phụ huynh"
+                                                data-enrollment-id="@s.EnrollmentId"
+                                                onclick="quickCopyAbsenceMessageFromRow(this)">
+                                            <i class="bi bi-chat-dots-fill"></i> Copy Tin
+                                        </button>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-info rounded-circle ms-1 p-1"
+                                                title="Xem lịch sử điểm danh"
+                                                data-student-id="@s.StudentId"
+                                                data-student-name="@s.FullName"
+                                                onclick="openAuditTimelineFromBtn(this)">
+                                            <i class="bi bi-clock-history"></i>
+                                        </button>
+                                    </td>
+                                }
                             </tr>
                         }
                     }
                     else
                     {
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="@(isMobile ? (Model.DayOfWeek == DayOfWeek.Sunday ? 6 : 5) : (Model.DayOfWeek == DayOfWeek.Sunday ? 8 : 7))" class="text-center py-5 text-muted">
                                 <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                                 Lớp chưa có thiếu nhi nào hoặc chưa được kích hoạt.
                             </td>
