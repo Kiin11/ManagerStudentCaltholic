@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FEAT-P3-06: Offline-First Attendance Engine (IndexedDB)
  * Quản lý Object Stores:
  *  - students_cache: Lưu danh sách thiếu nhi phục vụ quét QR & điểm danh khi mất mạng
@@ -79,8 +79,9 @@ const ParishOfflineEngine = (function () {
                 const store = tx.objectStore(STORE_STUDENTS);
 
                 data.students.forEach((stu) => {
+                    const mainCode = (stu.studentCode || '').trim().toUpperCase();
                     store.put({
-                        studentCode: (stu.studentCode || '').trim().toUpperCase(),
+                        studentCode: mainCode,
                         enrollmentId: stu.enrollmentId,
                         studentId: stu.studentId,
                         christianName: stu.christianName || '',
@@ -89,8 +90,32 @@ const ParishOfflineEngine = (function () {
                         classId: stu.classId,
                         className: stu.className || '',
                         gradeLevel: stu.gradeLevel || '',
+                        isHistoricalCode: false,
                         cachedAt: new Date().toISOString()
                     });
+
+                    // TASK-P5-04.2: Lưu mã năm cũ làm alias chỉ về học sinh này để phục vụ quét ngoại tuyến
+                    if (Array.isArray(stu.historicalCodes)) {
+                        stu.historicalCodes.forEach((oldCode) => {
+                            const cleanOld = (oldCode || '').trim().toUpperCase();
+                            if (cleanOld && cleanOld !== mainCode) {
+                                store.put({
+                                    studentCode: cleanOld,
+                                    enrollmentId: stu.enrollmentId,
+                                    studentId: stu.studentId,
+                                    christianName: stu.christianName || '',
+                                    fullName: stu.fullName || '',
+                                    gender: stu.gender || 'Nam',
+                                    classId: stu.classId,
+                                    className: stu.className || '',
+                                    gradeLevel: stu.gradeLevel || '',
+                                    isHistoricalCode: true,
+                                    originalStudentCode: mainCode,
+                                    cachedAt: new Date().toISOString()
+                                });
+                            }
+                        });
+                    }
                 });
 
                 tx.oncomplete = () => resolve();
@@ -180,14 +205,60 @@ const ParishOfflineEngine = (function () {
         }
     }
 
-    // 6. Đánh giá khung giờ điểm danh QR phía Client (Đồng bộ 100% với AttendanceTimeHelper.cs)
-    function evaluateOfflineCheckInTime(scanDate, gradeLevel) {
+    // 6. Đánh giá khung giờ điểm danh QR phía Client (Đồng bộ với Backend & hỗ trợ SessionMode)
+    function evaluateOfflineCheckInTime(scanDate, gradeLevel, sessionMode = 'AUTO') {
         const day = scanDate.getDay(); // 0: Sunday, 4: Thursday
         const hours = scanDate.getHours();
         const minutes = scanDate.getMinutes();
         const seconds = scanDate.getSeconds();
         const totalMinutes = hours * 60 + minutes;
         const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        const mode = (sessionMode || 'AUTO').toUpperCase();
+
+        if (mode === 'SUNDAY_MASS') {
+            let status = 'LATE';
+            if (totalMinutes < 6 * 60 + 35) status = 'LINED_UP';
+            else if (totalMinutes < 7 * 60) status = 'PRESENT';
+            return {
+                isMass: true,
+                isClass: false,
+                status: status,
+                activityTitle: 'THÁNH LỄ CHÚA NHẬT',
+                checkInTimeStr: timeStr
+            };
+        }
+
+        if (mode === 'THURSDAY_MASS') {
+            return {
+                isMass: true,
+                isClass: false,
+                status: 'PRESENT',
+                activityTitle: 'THÁNH LỄ THỨ NĂM',
+                checkInTimeStr: timeStr
+            };
+        }
+
+        if (mode === 'CATECHISM_CLASS') {
+            const isMorningGrade = gradeLevel !== 'Bao Đồng';
+            const isLate = isMorningGrade ? (totalMinutes >= 9 * 60 + 30) : (totalMinutes >= 15 * 60 + 15);
+            return {
+                isMass: false,
+                isClass: true,
+                status: isLate ? 'LATE' : 'PRESENT',
+                activityTitle: 'GIỜ HỌC GIÁO LÝ',
+                checkInTimeStr: timeStr
+            };
+        }
+
+        if (mode === 'CAMPAIGN_MONTH') {
+            return {
+                isMass: true,
+                isClass: false,
+                status: 'PRESENT',
+                activityTitle: 'CHIẾN DỊCH 1 THÁNG',
+                checkInTimeStr: timeStr
+            };
+        }
 
         // 1. Lễ Thứ Năm (17:30 - 19:30 -> 1050 - 1170 phút)
         if (day === 4 && totalMinutes >= 17 * 60 + 30 && totalMinutes <= 19 * 60 + 30) {
@@ -249,8 +320,8 @@ const ParishOfflineEngine = (function () {
         };
     }
 
-    // 7. Xử lý Quét mã QR Offline và đẩy vào pending_attendances (TASK-P3-06.3)
-    async function processOfflineQrScan(studentCode) {
+    // 7. Xử lý Quét mã QR Offline và đẩy vào pending_attendances (TASK-P3-06.3 / TASK-P5-04.2)
+    async function processOfflineQrScan(studentCode, sessionMode = 'AUTO') {
         const cleanCode = (studentCode || '').trim().toUpperCase();
         const student = await getCachedStudentByCode(cleanCode);
 
@@ -258,13 +329,16 @@ const ParishOfflineEngine = (function () {
             return {
                 success: false,
                 studentCode: cleanCode,
-                message: `Không tìm thấy mã '${cleanCode}' trong bộ nhớ đệm Offline! Hãy bấm "Tải dữ liệu Offline" khi có mạng.`
+                message: `Không tìm thấy mã '${cleanCode}' trong bộ nhớ đệm Offline! Hãy bấm "Tải DS Offline" khi có mạng.`
             };
         }
 
+        const isHistorical = student.isHistoricalCode === true;
+        const mainStudentCode = student.originalStudentCode || student.studentCode;
+
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
-        const evalResult = evaluateOfflineCheckInTime(now, student.gradeLevel);
+        const evalResult = evaluateOfflineCheckInTime(now, student.gradeLevel, sessionMode);
         const activityKey = evalResult.isMass ? 'MASS' : 'CLASS';
         const clientRecordId = `QR_${todayStr}_${student.enrollmentId}_${activityKey}`;
 
@@ -285,7 +359,7 @@ const ParishOfflineEngine = (function () {
                         recordType: 'QR_SCAN',
                         enrollmentId: student.enrollmentId,
                         classId: student.classId,
-                        studentCode: student.studentCode,
+                        studentCode: mainStudentCode,
                         attendanceDate: todayStr,
                         attendedMass: evalResult.isMass,
                         massStatus: evalResult.isMass ? evalResult.status : 'ABSENT_UNPERMITTED',
@@ -293,7 +367,8 @@ const ParishOfflineEngine = (function () {
                         classAttended: evalResult.isClass,
                         classStatus: evalResult.isClass ? evalResult.status : 'ABSENT_UNPERMITTED',
                         classCheckInTimeStr: evalResult.isClass ? evalResult.checkInTimeStr : null,
-                        note: '[Quét QR Offline]',
+                        sessionMode: sessionMode,
+                        note: isHistorical ? `[Quét QR Offline - Thẻ cũ: ${cleanCode}]` : '[Quét QR Offline]',
                         clientTimestampUtc: now.toISOString()
                     });
                 }
@@ -309,7 +384,7 @@ const ParishOfflineEngine = (function () {
             success: true,
             isOfflineSaved: true,
             isDuplicate: isDuplicate,
-            studentCode: student.studentCode,
+            studentCode: mainStudentCode,
             christianName: student.christianName,
             fullName: student.fullName,
             className: student.className,
@@ -317,9 +392,20 @@ const ParishOfflineEngine = (function () {
             activityType: `${evalResult.activityTitle} (OFFLINE)`,
             status: evalResult.status,
             checkInTimeStr: evalResult.checkInTimeStr,
+            isHistoricalCode: isHistorical,
+            oldCode: isHistorical ? cleanCode : null,
+            currentCode: mainStudentCode,
+            warningMessage: isHistorical
+                ? `CẢNH BÁO: Thẻ mã năm cũ (${cleanCode})! Mã mới: ${mainStudentCode} - Cần in lại thẻ mới!`
+                : null,
+            enrollmentId: student.enrollmentId,
+            classId: student.classId,
+            clientRecordId: clientRecordId,
             message: isDuplicate
                 ? `[Offline] Thiếu nhi đã được quét ${evalResult.activityTitle} trên máy này!`
-                : `[Lưu Offline] Điểm danh thành công: ${student.fullName}`
+                : (isHistorical
+                    ? `[Lưu Offline - Thẻ Cũ] Điểm danh thành công: ${student.fullName} (Nhớ đổi thẻ mới!)`
+                    : `[Lưu Offline] Điểm danh thành công: ${student.fullName}`)
         };
     }
 
@@ -530,11 +616,32 @@ const ParishOfflineEngine = (function () {
         }
     });
 
+    // 14. TASK-P5-04.3: Hoàn tác lượt quét QR Offline trong vòng 5 giây
+    async function undoOfflineQrScan(clientRecordId) {
+        if (!clientRecordId) return { success: false, message: 'Thiếu mã định danh bản ghi ngoại tuyến.' };
+        try {
+            const db = await openDatabase();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_PENDING, 'readwrite');
+                const store = tx.objectStore(STORE_PENDING);
+                store.delete(clientRecordId);
+                tx.oncomplete = () => resolve();
+                tx.onerror = (e) => reject(e.target.error);
+            });
+            await updateOfflineUiCounters();
+            return { success: true, message: 'Đã hoàn tác lượt quét điểm danh ngoại tuyến!' };
+        } catch (err) {
+            console.error('Lỗi khi hoàn tác offline:', err);
+            return { success: false, message: 'Lỗi hoàn tác ngoại tuyến: ' + err.message };
+        }
+    }
+
     return {
         prefetchStudentsCache,
         cacheStudentsFromDomTable,
         getCachedStudentByCode,
         processOfflineQrScan,
+        undoOfflineQrScan,
         saveBatchAttendanceOffline,
         syncPendingAttendances,
         clearCacheOnLogout,

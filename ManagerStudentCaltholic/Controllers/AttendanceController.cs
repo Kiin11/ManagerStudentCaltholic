@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using DocumentFormat.OpenXml.InkML;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
@@ -169,6 +169,20 @@ namespace ManagerStudentCaltholic.Controllers
         {
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             ViewBag.AcademicYearName = currentYear?.Name ?? "Chưa kích hoạt niên khóa";
+
+            // Gợi ý buổi quét phù hợp theo ngày giờ hiện tại
+            var now = DateTime.UtcNow.AddHours(7);
+            string recommendedMode = "SUNDAY_MASS";
+            if (now.DayOfWeek == DayOfWeek.Thursday)
+            {
+                recommendedMode = "THURSDAY_MASS";
+            }
+            else if (now.DayOfWeek == DayOfWeek.Sunday)
+            {
+                recommendedMode = now.TimeOfDay >= new TimeSpan(8, 30, 0) ? "CATECHISM_CLASS" : "SUNDAY_MASS";
+            }
+            ViewBag.RecommendedSessionMode = recommendedMode;
+
             return View();
         }
 
@@ -209,6 +223,30 @@ namespace ManagerStudentCaltholic.Controllers
                     StudentCode = request.StudentCode,
                     Message = "Lỗi hệ thống khi lưu kết quả quét QR."
                 });
+            }
+        }
+
+        /// <summary>
+        /// POST: /Attendance/UndoScanCheckIn (TASK-P5-04.3: Hoàn tác lượt quét QR trong vòng 5 giây)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UndoScanCheckIn([FromBody] UndoScanRequestDto request)
+        {
+            if (request == null || request.EnrollmentId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu yêu cầu hoàn tác không hợp lệ." });
+            }
+
+            try
+            {
+                var (success, message) = await _redisAttendance.UndoScanCheckInAsync(request);
+                return Json(new { success, message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi hoàn tác lượt quét QR cho EnrollmentId: {EnrollmentId}", request.EnrollmentId);
+                return Json(new { success = false, message = "Lỗi hệ thống khi hoàn tác lượt quét QR." });
             }
         }
 
@@ -1414,6 +1452,35 @@ namespace ManagerStudentCaltholic.Controllers
                 })
                 .AsNoTracking()
                 .ToListAsync();
+
+            // TASK-P5-04.2: Tải thêm danh sách mã cũ từ StudentCodeHistories để hỗ trợ tra cứu ngoại tuyến
+            if (students.Count > 0)
+            {
+                var studentIds = students.Select(s => s.StudentId).Distinct().ToList();
+                var historyCodes = await _context.StudentCodeHistories
+                    .AsNoTracking()
+                    .Where(h => studentIds.Contains(h.StudentId))
+                    .ToListAsync();
+
+                var historyMap = historyCodes
+                    .GroupBy(h => h.StudentId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Select(h => h.OriginalCode.Trim().ToUpper())
+                              .Concat(g.Select(h => h.ArchivedYearCode.Trim().ToUpper()))
+                              .Where(c => !string.IsNullOrEmpty(c))
+                              .Distinct()
+                              .ToList()
+                    );
+
+                foreach (var stu in students)
+                {
+                    if (historyMap.TryGetValue(stu.StudentId, out var oldCodes))
+                    {
+                        stu.HistoricalCodes = oldCodes;
+                    }
+                }
+            }
 
             return Json(new
             {

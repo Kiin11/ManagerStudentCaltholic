@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Services;
+using ManagerStudentCaltholic.Services;
 using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
@@ -70,6 +70,10 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         // Cho phép người dùng ghi đè ngày/giờ nếu cần kiểm thử hoặc quét bù
         public DateTime? ScanTimestamp { get; set; }
+
+        // TASK-P5-04.2: Chế độ quét buổi (Lễ Chúa Nhật, Lễ Thứ Năm, Giờ học Giáo lý, Chiến dịch đi lễ 1 tháng)
+        public string? SessionMode { get; set; } // "AUTO", "SUNDAY_MASS", "THURSDAY_MASS", "CATECHISM_CLASS", "CAMPAIGN_MONTH"
+        public long? CampaignId { get; set; }
     }
 
     // Kết quả trả về cho giao diện sau khi quét
@@ -86,6 +90,30 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string Status { get; set; } = string.Empty;       // "PRESENT" hoặc "LATE"
         public string CheckInTimeStr { get; set; } = string.Empty;
         public bool IsDuplicate { get; set; }                    // Cảnh báo nếu đã quét trước đó
+
+        // TASK-P5-04.2: Cảnh báo thẻ mã năm cũ
+        public bool IsHistoricalCode { get; set; }
+        public string? OldCode { get; set; }
+        public string? CurrentCode { get; set; }
+        public string? WarningMessage { get; set; }
+
+        // TASK-P5-04.3: Hỗ trợ Hoàn tác (Undo) trong 5 giây
+        public long EnrollmentId { get; set; }
+        public int ClassId { get; set; }
+        public string? SessionMode { get; set; }
+        public DateTime ScanDate { get; set; }
+    }
+
+    // TASK-P5-04.3: DTO yêu cầu hoàn tác lượt quét QR
+    public class UndoScanRequestDto
+    {
+        [Required]
+        public long EnrollmentId { get; set; }
+        public int ClassId { get; set; }
+        public string? StudentCode { get; set; }
+        public DateTime? AttendanceDate { get; set; }
+        public string? ActivityType { get; set; }
+        public string? SessionMode { get; set; }
     }
 
     public class PrintStudentBadgesViewModel
@@ -273,6 +301,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ClassId { get; set; }
         public string ClassName { get; set; } = string.Empty;
         public string GradeLevel { get; set; } = string.Empty;
+        public List<string> HistoricalCodes { get; set; } = new();
     }
 
     public class OfflineSyncItemDto

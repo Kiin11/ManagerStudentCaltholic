@@ -184,8 +184,8 @@
         </div>
     </div>
 
-    <!-- FEAT-P5-01: CỔNG TRA CỨU THIẾU NHI NỘI BỘ DÀNH CHO GLV / BAN ĐIỀU HÀNH -->
-    @if (User.Identity?.IsAuthenticated == true)
+    <!-- FEAT-P5-01: CỔNG TRA CỨU THIẾU NHI NỘI BỘ DÀNH CHO GLV / BAN ĐIỀU HÀNH (Chỉ hiển thị tại Tab Chung) -->
+    @if (User.Identity?.IsAuthenticated == true && (activeMaster?.MasterCode == "COMMON" || string.IsNullOrEmpty(Model.ActiveMasterCode)))
     {
         @await Html.PartialAsync("_StaffStudentLookupWidget", Model)
     }

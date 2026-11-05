@@ -31,7 +31,7 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 ### 3.1. Khởi tạo Widget tại Trang chủ (`GET /Home/Index`)
 1. Khi người dùng đã xác thực (`User.Identity?.IsAuthenticated == true`), `HomeController.Index` lấy `userId` từ `ClaimTypes.NameIdentifier`.
 2. Gọi `_lookupService.GetRecentLookupsAsync(userId, 5)` và `_lookupService.GetViewOptionsAsync()` để gán vào `MasterWorkspaceViewModel.RecentStaffLookups` và `MasterWorkspaceViewModel.LookupOptions`.
-3. `Views/Home/Index.cshtml` render partial `_StaffStudentLookupWidget.cshtml` kèm các chip "Đã xem gần đây" và 4 nút Option.
+3. `Views/Home/Index.cshtml` render partial `_StaffStudentLookupWidget.cshtml` kèm các chip "Đã xem gần đây" và 4 nút Option (chỉ hiển thị khi đang ở phân khu Tab "Chung" `COMMON`, ẩn ở các tab còn lại như "Điểm Danh", "Học Vụ", "Bí Tích", "Quản Trị").
 
 ### 3.2. Gợi ý Tìm kiếm Đa khóa (`GET /Home/StaffSearchSuggestions?term=...`)
 1. Người dùng gõ từ khóa (tối thiểu 2 ký tự) vào ô `#staffLookupSearchInput`.

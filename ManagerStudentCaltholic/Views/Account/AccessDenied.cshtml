@@ -1,27 +1,91 @@
-﻿@{
+@using ManagerStudentCaltholic.Extensions
+@{
     ViewData["Title"] = "Từ chối truy cập";
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 
-<div class="container text-center py-5">
-    <div class="card border-0 shadow-sm p-4 mx-auto" style="max-width: 550px; border-radius: 16px;">
-        <div class="mb-3">
-            <i class="bi bi-shield-lock-fill text-danger" style="font-size: 4rem;"></i>
-        </div>
-        <h3 class="fw-bold text-danger">Không có quyền truy cập</h3>
-        <p class="text-muted mt-2">
-            Tài khoản hiện tại không có thẩm quyền truy cập vào chức năng hoặc tài nguyên này.
-            Vui lòng liên hệ <strong>Ban Điều Hành</strong> hoặc <strong>Quản trị viên</strong> nếu bạn cần được cấp quyền.
-        </p>
-        <div class="mt-4">
-            <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary px-4 me-2">
-                <i class="bi bi-house me-1"></i> Trang chủ
-            </a>
-            <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
-                @Html.AntiForgeryToken()
-                <button type="submit" class="btn btn-danger px-4">
-                    <i class="bi bi-box-arrow-right me-1"></i> Đăng nhập tài khoản khác
-                </button>
-            </form>
+@if (isMobile)
+{
+    <style>
+        .mobile-access-denied-wrap {
+            padding: 1.5rem 0.75rem 2.5rem;
+        }
+        .mobile-access-denied-card {
+            border-radius: 20px;
+            background: #ffffff;
+            border: 1px solid rgba(220, 53, 69, 0.14);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            padding: 1.75rem 1.25rem;
+        }
+        .mobile-access-icon-box {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 2.35rem;
+        }
+        .mobile-access-btn {
+            min-height: 46px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+        }
+    </style>
+
+    <div class="mobile-access-denied-wrap text-center">
+        <div class="mobile-access-denied-card mx-auto" style="max-width: 440px;">
+            <div class="mobile-access-icon-box">
+                <i class="bi bi-shield-lock-fill"></i>
+            </div>
+            <h4 class="fw-bold text-danger mb-2">Không có quyền truy cập</h4>
+            <p class="text-muted small mb-4" style="line-height: 1.55;">
+                Tài khoản hiện tại không có thẩm quyền truy cập vào chức năng hoặc tài nguyên này.
+                Vui lòng liên hệ <strong>Ban Điều Hành</strong> hoặc <strong>Quản trị viên</strong> nếu bạn cần được cấp quyền.
+            </p>
+            <div class="d-grid gap-2">
+                <a asp-controller="Home" asp-action="Index" class="btn btn-primary rounded-pill fw-bold shadow-sm mobile-access-btn touch-target-44">
+                    <i class="bi bi-house-door-fill me-2"></i>Quay về Trang chủ
+                </a>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="d-grid"
+                      onsubmit="if(window.ParishOfflineEngine) window.ParishOfflineEngine.clearAllData();">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-danger rounded-pill fw-bold mobile-access-btn touch-target-44">
+                        <i class="bi bi-box-arrow-right me-2"></i>Đăng nhập tài khoản khác
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
-</div>
+}
+else
+{
+    <div class="container text-center py-5">
+        <div class="card border-0 shadow-sm p-4 mx-auto" style="max-width: 550px; border-radius: 16px;">
+            <div class="mb-3">
+                <i class="bi bi-shield-lock-fill text-danger" style="font-size: 4rem;"></i>
+            </div>
+            <h3 class="fw-bold text-danger">Không có quyền truy cập</h3>
+            <p class="text-muted mt-2">
+                Tài khoản hiện tại không có thẩm quyền truy cập vào chức năng hoặc tài nguyên này.
+                Vui lòng liên hệ <strong>Ban Điều Hành</strong> hoặc <strong>Quản trị viên</strong> nếu bạn cần được cấp quyền.
+            </p>
+            <div class="mt-4">
+                <a asp-controller="Home" asp-action="Index" class="btn btn-outline-primary px-4 me-2">
+                    <i class="bi bi-house me-1"></i> Trang chủ
+                </a>
+                <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger px-4">
+                        <i class="bi bi-box-arrow-right me-1"></i> Đăng nhập tài khoản khác
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+}

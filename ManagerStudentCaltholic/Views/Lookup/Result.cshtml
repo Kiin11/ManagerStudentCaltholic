@@ -1,6 +1,8 @@
-﻿@model ManagerStudentCaltholic.Models.ViewModels.StudentLookupResultViewModel
+@model ManagerStudentCaltholic.Models.ViewModels.StudentLookupResultViewModel
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = $"Kết Quả Tra Cứu - {Model.ChristianName} {Model.FullName}";
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 @Html.AntiForgeryToken()
 
@@ -61,25 +63,95 @@
         border-color: #e2e8f0;
         color: #94a3b8;
     }
+
+    /* Tối ưu chuyên biệt cho Mobile Web (FEAT-P5-02) */
+    @@media (max-width: 768px) {
+        .stat-grid-box {
+            padding: 8px 4px;
+            border-radius: 10px;
+        }
+        .stat-grid-box .fs-4 {
+            font-size: 1.25rem !important;
+        }
+        .campaign-cal-grid {
+            grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+            gap: 6px;
+        }
+        .campaign-day-tile {
+            padding: 6px 3px;
+            min-height: 48px;
+        }
+        .campaign-day-tile .small {
+            font-size: 0.72rem;
+        }
+        .mobile-student-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e2e8f0;
+        }
+        .mobile-day-log-card {
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            transition: box-shadow 0.2s ease;
+        }
+        .mobile-day-log-card:active {
+            background-color: #f8fafc;
+        }
+        /* Ngăn iOS Safari tự zoom màn hình khi chạm vào ô nhập liệu */
+        .modal input, .modal select, .modal textarea {
+            font-size: 16px !important;
+        }
+    }
 </style>
 
-<div class="container py-4">
-    <!-- Thanh điều hướng trên cùng -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <a asp-controller="Lookup" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
-            <i class="bi bi-arrow-left me-1"></i> Tra cứu thiếu nhi khác
-        </a>
-        <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold"
-                    onclick="openDisputeModal('@DateTime.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
-                <i class="bi bi-flag-fill me-1"></i> Báo Sai Sót Điểm Danh
-            </button>
-            <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm"
-                    data-bs-toggle="modal" data-bs-target="#absenceRequestModal">
-                <i class="bi bi-envelope-paper-fill me-1"></i> Nộp Đơn Xin Nghỉ Phép
-            </button>
+<div class="@(isMobile ? "container-fluid px-2 py-2" : "container py-4")">
+    <!-- THANH ĐIỀU HƯỚNG TRÊN CÙNG & HÀNH ĐỘNG NHANH -->
+    @if (isMobile)
+    {
+        <!-- GIAO DIỆN MOBILE: THANH ĐIỀU HƯỚNG GỌN & NÚT BẤM DỄ CHẠM -->
+        <div class="mb-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <a asp-controller="Lookup" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 fw-semibold">
+                    <i class="bi bi-arrow-left me-1"></i> Tra cứu khác
+                </a>
+                <span class="badge bg-light text-secondary border px-2 py-1 small">
+                    <i class="bi bi-mortarboard me-1"></i>@Model.AcademicYearName
+                </span>
+            </div>
+            <div class="row g-2">
+                <div class="col-6">
+                    <button type="button" class="btn btn-outline-danger w-100 rounded-pill py-2 fw-bold text-nowrap touch-target-44 shadow-sm"
+                            onclick="openDisputeModal('@DateTime.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
+                        <i class="bi bi-flag-fill me-1"></i> Báo Sai Sót
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button type="button" class="btn btn-primary w-100 rounded-pill py-2 fw-bold text-nowrap touch-target-44 shadow-sm"
+                            data-bs-toggle="modal" data-bs-target="#absenceRequestModal">
+                        <i class="bi bi-envelope-paper-fill me-1"></i> Nộp Đơn Nghỉ
+                    </button>
+                </div>
+            </div>
         </div>
-    </div>
+    }
+    else
+    {
+        <!-- GIAO DIỆN DESKTOP: THANH ĐIỀU HƯỚNG TRÊN CÙNG -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <a asp-controller="Lookup" asp-action="Index" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Tra cứu thiếu nhi khác
+            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold"
+                        onclick="openDisputeModal('@DateTime.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
+                    <i class="bi bi-flag-fill me-1"></i> Báo Sai Sót Điểm Danh
+                </button>
+                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                        data-bs-toggle="modal" data-bs-target="#absenceRequestModal">
+                    <i class="bi bi-envelope-paper-fill me-1"></i> Nộp Đơn Xin Nghỉ Phép
+                </button>
+            </div>
+        </div>
+    }
 
     @if (ViewBag.CodeRolloverNotice != null)
     {
@@ -90,63 +162,108 @@
     }
 
     <!-- 1. THẺ THÔNG TIN HỒ SƠ & MÃ QR -->
-    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-        <div class="card-body p-4">
-            <div class="row align-items-center g-3">
-                <div class="col-md-9">
-                    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                        <span class="badge bg-primary rounded-pill px-3 py-1 font-monospace fs-6">
-                            <i class="bi bi-qr-code me-1"></i>@Model.StudentCode
-                        </span>
-                        <span class="badge bg-info-subtle text-primary border px-3 py-1 rounded-pill">
-                            Lớp: @Model.ClassName (@Model.GradeLevel)
-                        </span>
-                        <span class="badge bg-light text-secondary border px-3 py-1 rounded-pill">
-                            Niên khóa: @Model.AcademicYearName
-                        </span>
-                    </div>
-
-                    <h3 class="fw-bold text-dark mb-1">@Model.ChristianName @Model.FullName</h3>
-                    <div class="row g-2 small text-muted mt-2">
-                        <div class="col-sm-4">
-                            <i class="bi bi-calendar-event me-1"></i>Ngày sinh: <strong class="text-dark">@Model.DateOfBirth.ToString("dd/MM/yyyy")</strong> (@Model.Gender)
-                        </div>
-                        <div class="col-sm-4">
-                            <i class="bi bi-geo-alt me-1"></i>Phòng học: <strong class="text-dark">@Model.RoomNumber</strong>
-                        </div>
-                        <div class="col-sm-4">
-                            <i class="bi bi-telephone-shield me-1"></i>SĐT Phụ huynh: <strong class="text-dark">@Model.MaskedParentPhone</strong>
-                        </div>
-                        @if (Model.Teachers.Any())
-                        {
-                            <div class="col-12 mt-1">
-                                <i class="bi bi-person-badge me-1"></i>GLV Phụ trách: <strong class="text-primary">@string.Join(", ", Model.Teachers)</strong>
+    @if (isMobile)
+    {
+        <!-- MOBILE STUDENT PROFILE CARD -->
+        <div class="card border-0 shadow-sm rounded-4 mb-3 overflow-hidden mobile-student-card">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-start gap-3">
+                    @if (!string.IsNullOrEmpty(Model.QrCodeBase64))
+                    {
+                        <div class="text-center flex-shrink-0" onclick="showQrModal()" style="cursor: pointer;">
+                            <img src="@Model.QrCodeBase64" alt="QR Code" class="img-fluid rounded-3 border p-1 shadow-sm bg-white" style="width: 82px; height: 82px; object-fit: contain;" />
+                            <div class="text-primary fw-semibold mt-1" style="font-size: 0.68rem;">
+                                <i class="bi bi-zoom-in me-1"></i>Mở QR lớn
                             </div>
+                        </div>
+                    }
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+                            <span class="badge bg-primary rounded-pill px-2 py-1 font-monospace" style="font-size: 0.75rem;">
+                                <i class="bi bi-qr-code me-1"></i>@Model.StudentCode
+                            </span>
+                            <span class="badge bg-info-subtle text-primary border rounded-pill px-2 py-1" style="font-size: 0.72rem;">
+                                Lớp @Model.ClassName
+                            </span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1 text-truncate">@Model.ChristianName @Model.FullName</h5>
+                        <div class="small text-muted lh-sm">
+                            <div class="mb-1"><i class="bi bi-calendar-event me-1"></i>Ngày sinh: <strong class="text-dark">@Model.DateOfBirth.ToString("dd/MM/yyyy")</strong> (@Model.Gender)</div>
+                            <div class="mb-1"><i class="bi bi-geo-alt me-1"></i>Phòng: <strong class="text-dark">@Model.RoomNumber</strong></div>
+                            <div><i class="bi bi-telephone me-1"></i>SĐT PH: <strong class="text-dark">@Model.MaskedParentPhone</strong></div>
+                        </div>
+                    </div>
+                </div>
+                @if (Model.Teachers.Any())
+                {
+                    <div class="small border-top pt-2 mt-2 text-muted">
+                        <i class="bi bi-person-badge text-primary me-1"></i>GLV: <strong class="text-dark">@string.Join(", ", Model.Teachers)</strong>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- DESKTOP STUDENT PROFILE CARD -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+            <div class="card-body p-4">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-9">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <span class="badge bg-primary rounded-pill px-3 py-1 font-monospace fs-6">
+                                <i class="bi bi-qr-code me-1"></i>@Model.StudentCode
+                            </span>
+                            <span class="badge bg-info-subtle text-primary border px-3 py-1 rounded-pill">
+                                Lớp: @Model.ClassName (@Model.GradeLevel)
+                            </span>
+                            <span class="badge bg-light text-secondary border px-3 py-1 rounded-pill">
+                                Niên khóa: @Model.AcademicYearName
+                            </span>
+                        </div>
+
+                        <h3 class="fw-bold text-dark mb-1">@Model.ChristianName @Model.FullName</h3>
+                        <div class="row g-2 small text-muted mt-2">
+                            <div class="col-sm-4">
+                                <i class="bi bi-calendar-event me-1"></i>Ngày sinh: <strong class="text-dark">@Model.DateOfBirth.ToString("dd/MM/yyyy")</strong> (@Model.Gender)
+                            </div>
+                            <div class="col-sm-4">
+                                <i class="bi bi-geo-alt me-1"></i>Phòng học: <strong class="text-dark">@Model.RoomNumber</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <i class="bi bi-telephone-shield me-1"></i>SĐT Phụ huynh: <strong class="text-dark">@Model.MaskedParentPhone</strong>
+                            </div>
+                            @if (Model.Teachers.Any())
+                            {
+                                <div class="col-12 mt-1">
+                                    <i class="bi bi-person-badge me-1"></i>GLV Phụ trách: <strong class="text-primary">@string.Join(", ", Model.Teachers)</strong>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center border-start-md">
+                        @if (!string.IsNullOrEmpty(Model.QrCodeBase64))
+                        {
+                            <img src="@Model.QrCodeBase64" alt="QR Code" class="img-fluid rounded-3 border p-1 shadow-sm" style="max-width: 115px;" />
+                            <div class="small text-muted mt-1">Mã QR Điểm Danh</div>
                         }
                     </div>
                 </div>
-                <div class="col-md-3 text-center border-start-md">
-                    @if (!string.IsNullOrEmpty(Model.QrCodeBase64))
-                    {
-                        <img src="@Model.QrCodeBase64" alt="QR Code" class="img-fluid rounded-3 border p-1 shadow-sm" style="max-width: 115px;" />
-                        <div class="small text-muted mt-1">Mã QR Điểm Danh</div>
-                    }
-                </div>
             </div>
         </div>
-    </div>
+    }
 
     <!-- 2. BA Ô TỔNG KẾT ĐI LỄ & ĐI HỌC (STAT-GRID TRỰC QUAN - KHÔNG DÙNG %) -->
-    <div class="row g-3 mb-4">
+    <div class="row g-2 g-md-3 mb-3 mb-md-4">
         <!-- Ô 1: Thánh Lễ Chúa Nhật -->
-        <div class="col-lg-4">
+        <div class="col-12 col-lg-4">
             <div class="card border-0 shadow-sm rounded-4 h-100">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                        <div class="fw-bold text-success">
+                        <div class="fw-bold text-success small">
                             <i class="bi bi-bell-fill me-1"></i>Thánh Lễ Chúa Nhật
                         </div>
-                        <span class="badge bg-success-subtle text-success border rounded-pill px-3 py-1">
+                        <span class="badge bg-success-subtle text-success border rounded-pill px-2 py-1 small">
                             Tham dự: @Model.AttendedSunMassCount / @Model.TotalSunMassSessions buổi
                         </span>
                     </div>
@@ -181,14 +298,14 @@
         </div>
 
         <!-- Ô 2: Thánh Lễ Thứ Năm -->
-        <div class="col-lg-4">
+        <div class="col-12 col-lg-4">
             <div class="card border-0 shadow-sm rounded-4 h-100">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                        <div class="fw-bold text-warning-emphasis">
+                        <div class="fw-bold text-warning-emphasis small">
                             <i class="bi bi-brightness-high-fill me-1 text-warning"></i>Thánh Lễ Thứ Năm
                         </div>
-                        <span class="badge bg-warning-subtle text-dark border rounded-pill px-3 py-1">
+                        <span class="badge bg-warning-subtle text-dark border rounded-pill px-2 py-1 small">
                             Tham dự: @Model.AttendedThuMassCount / @Model.TotalThuMassSessions buổi
                         </span>
                     </div>
@@ -211,14 +328,14 @@
         </div>
 
         <!-- Ô 3: Học Giáo Lý Chúa Nhật -->
-        <div class="col-lg-4">
+        <div class="col-12 col-lg-4">
             <div class="card border-0 shadow-sm rounded-4 h-100">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                        <div class="fw-bold text-primary">
+                        <div class="fw-bold text-primary small">
                             <i class="bi bi-book-half me-1"></i>Học Giáo Lý Chúa Nhật
                         </div>
-                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-2 py-1 small">
                             Tham dự: @Model.AttendedClassCount / @Model.TotalClassSessions buổi
                         </span>
                     </div>
@@ -257,30 +374,30 @@
                     <span class="badge bg-warning text-dark rounded-pill px-3 py-1 mb-1 fw-bold">
                         <i class="bi bi-calendar2-heart-fill me-1"></i>Chiến Dịch Đi Lễ 1 Tháng Chuẩn Bị Bí Tích
                     </span>
-                    <h5 class="fw-bold text-dark mb-0">@camp.CampaignName</h5>
+                    <h5 class="fw-bold text-dark mb-0 @(isMobile ? "fs-6" : "")">@camp.CampaignName</h5>
                     <small class="text-muted">
                         Thời gian: <strong>@camp.StartDate.ToString("dd/MM/yyyy") - @camp.EndDate.ToString("dd/MM/yyyy")</strong> |
                         Chỉ tiêu cần đạt: <strong>@camp.TargetDaysCount buổi</strong>
                     </small>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <span class="badge bg-success-subtle text-success border px-3 py-2 rounded-pill">
-                        Đã đi: <strong>@camp.AttendedDays / @camp.TargetDaysCount</strong> buổi
+                    <span class="badge bg-success-subtle text-success border px-2 px-md-3 py-1 py-md-2 rounded-pill small">
+                        Đã đi: <strong>@camp.AttendedDays / @camp.TargetDaysCount</strong>
                     </span>
-                    <span class="badge bg-danger-subtle text-danger border px-3 py-2 rounded-pill">
-                        <i class="bi bi-fire me-1"></i>Chuỗi liên tiếp: <strong>@camp.CurrentStreak ngày</strong> (Max: @camp.MaxStreak)
+                    <span class="badge bg-danger-subtle text-danger border px-2 px-md-3 py-1 py-md-2 rounded-pill small">
+                        <i class="bi bi-fire me-1"></i>Chuỗi: <strong>@camp.CurrentStreak ngày</strong> (Max: @camp.MaxStreak)
                     </span>
                     @if (camp.IsTargetMet)
                     {
-                        <span class="badge bg-success px-3 py-2 rounded-pill">
-                            <i class="bi bi-patch-check-fill me-1"></i>Đạt chỉ tiêu Chiến dịch
+                        <span class="badge bg-success px-2 px-md-3 py-1 py-md-2 rounded-pill small">
+                            <i class="bi bi-patch-check-fill me-1"></i>Đạt chỉ tiêu
                         </span>
                     }
                 </div>
             </div>
             <div class="card-body p-3">
                 <div class="small text-muted mb-2">
-                    <i class="bi bi-hand-index-thumb me-1"></i>Bấm vào ô ngày bất kỳ bên dưới nếu cần gửi yêu cầu <strong>Báo sai sót điểm danh chiến dịch</strong> cho Giáo lý viên chủ nhiệm:
+                    <i class="bi bi-hand-index-thumb me-1"></i>Bấm vào ô ngày bất kỳ bên dưới nếu cần gửi yêu cầu <strong>Báo sai sót điểm danh chiến dịch</strong> cho Giáo lý viên:
                 </div>
                 <div class="campaign-cal-grid">
                     @foreach (var d in camp.CampaignDays)
@@ -322,121 +439,242 @@
 
     <!-- 4. NHẬT KÝ CHI TIẾT TỪNG NGÀY ĐI HỌC & ĐI LỄ + NÚT BÁO SAI SÓT (FEAT-P4-05) -->
     <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
-        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+        <div class="card-header bg-white py-3 @(isMobile ? "px-3" : "") d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
             <div>
-                <h5 class="fw-bold text-dark mb-0">
+                <h5 class="fw-bold text-dark mb-0 @(isMobile ? "fs-6" : "")">
                     <i class="bi bi-calendar-check-fill text-primary me-2"></i>Nhật Ký Từng Ngày Đi Lễ &amp; Học Giáo Lý
                 </h5>
-                <small class="text-muted">Xem chi tiết em đi học, đi lễ ngày nào và bấm <strong>Báo sai sót</strong> nếu kết quả ghi nhận chưa đúng</small>
+                <small class="text-muted">Xem chi tiết từng ngày và bấm <strong>Báo sai sót</strong> nếu kết quả ghi nhận chưa đúng</small>
             </div>
-            <div class="btn-group btn-group-sm" role="group">
-                <button type="button" class="btn btn-outline-primary active" onclick="filterDayLogs('ALL', this)">
+            <div class="btn-group btn-group-sm @(isMobile ? "w-100 mt-2" : "")" role="group">
+                <button type="button" class="btn btn-outline-primary active @(isMobile ? "py-2 fw-semibold" : "")" onclick="filterDayLogs('ALL', this)">
                     Tất cả (@Model.AttendanceHistoryLogs.Count ngày)
                 </button>
-                <button type="button" class="btn btn-outline-danger" onclick="filterDayLogs('ABSENT_OR_LATE', this)">
+                <button type="button" class="btn btn-outline-danger @(isMobile ? "py-2 fw-semibold" : "")" onclick="filterDayLogs('ABSENT_OR_LATE', this)">
                     Các buổi Vắng / Đi trễ
                 </button>
             </div>
         </div>
 
-        <div class="table-responsive" style="max-height: 460px;">
-            <table class="table table-hover align-middle mb-0 small" id="dayLogsTable">
-                <thead class="table-light sticky-top">
-                    <tr>
-                        <th class="ps-3">Ngày Sinh Hoạt</th>
-                        <th>Thánh Lễ</th>
-                        <th>Giờ Học Giáo Lý</th>
-                        <th>Ghi Chú / Phản Hồi Của GLV</th>
-                        <th class="text-end pe-3">Báo Sai Sót</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model.AttendanceHistoryLogs.Any())
+        @if (isMobile)
+        {
+            <!-- GIAO DIỆN MOBILE: DANH SÁCH THẺ TỪNG NGÀY TRỰC QUAN -->
+            <div id="dayLogsMobileList" class="p-2 bg-light">
+                @if (Model.AttendanceHistoryLogs.Any())
+                {
+                    foreach (var log in Model.AttendanceHistoryLogs)
                     {
-                        foreach (var log in Model.AttendanceHistoryLogs)
-                        {
-                            var massScope = log.IsSunday ? "REGULAR_MASS_SUN" : "REGULAR_MASS_THU";
-                            <tr class="day-log-row" data-has-issue="@log.HasAnyAbsenceOrLate.ToString().ToLower()">
-                                <td class="ps-3">
-                                    <div class="fw-bold text-dark">@log.FormattedDate</div>
-                                    <span class="badge @(log.IsSunday ? "bg-primary-subtle text-primary" : "bg-warning-subtle text-dark") border">
+                        var massScope = log.IsSunday ? "REGULAR_MASS_SUN" : "REGULAR_MASS_THU";
+                        <div class="day-log-row card border-0 shadow-sm rounded-4 mb-2 overflow-hidden mobile-day-log-card" data-has-issue="@log.HasAnyAbsenceOrLate.ToString().ToLower()">
+                            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge @(log.IsSunday ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-warning-subtle text-dark border border-warning-subtle") rounded-pill px-2 py-1">
                                         @log.DayLabel
                                     </span>
-                                </td>
-
-                                <!-- Trạng thái Lễ -->
-                                <td>
-                                    @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime, log.IsMakeUp)
-                                    @if (!string.IsNullOrEmpty(log.MassCorrectionStatus))
-                                    {
-                                        <span class="badge bg-info-subtle text-info-emphasis border ms-1">
-                                            Khiếu nại: @log.MassCorrectionStatus
-                                        </span>
-                                    }
-                                </td>
-
-                                <!-- Trạng thái Học Giáo Lý -->
-                                <td>
-                                    @if (log.HasClassSession)
-                                    {
-                                        @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime, log.IsMakeUp)
-                                        @if (!string.IsNullOrEmpty(log.ClassCorrectionStatus))
+                                    <strong class="text-dark">@log.FormattedDate</strong>
+                                </div>
+                                @if (log.HasAnyAbsenceOrLate)
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1" style="font-size: 0.68rem;">
+                                        <i class="bi bi-exclamation-circle-fill me-1"></i>Có vắng/trễ
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1" style="font-size: 0.68rem;">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Đạt
+                                    </span>
+                                }
+                            </div>
+                            <div class="card-body p-3">
+                                <!-- Dòng Thánh Lễ -->
+                                <div class="d-flex align-items-center justify-content-between py-1 border-bottom">
+                                    <div class="text-secondary small fw-semibold">
+                                        <i class="bi bi-bell-fill text-warning me-1"></i>Thánh Lễ:
+                                    </div>
+                                    <div class="text-end">
+                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime, log.IsMakeUp)
+                                        @if (!string.IsNullOrEmpty(log.MassCorrectionStatus))
                                         {
-                                            <span class="badge bg-info-subtle text-info-emphasis border ms-1">
-                                                Khiếu nại: @log.ClassCorrectionStatus
+                                            <span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size: 0.65rem;">
+                                                Khiếu nại: @log.MassCorrectionStatus
                                             </span>
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted fst-italic">Không có tiết học</span>
-                                    }
-                                </td>
+                                    </div>
+                                </div>
 
-                                <!-- Ghi chú -->
-                                <td>
-                                    @if (!string.IsNullOrEmpty(log.Note))
-                                    {
-                                        <div class="text-dark">@log.Note</div>
-                                    }
-                                    @if (!string.IsNullOrEmpty(log.TeacherNote))
-                                    {
-                                        <div class="text-primary fw-semibold">
-                                            <i class="bi bi-chat-left-quote-fill me-1"></i>Phản hồi GLV: @log.TeacherNote
-                                        </div>
-                                    }
-                                </td>
-
-                                <!-- Nút Báo sai sót -->
-                                <td class="text-end pe-3">
-                                    <div class="btn-group btn-group-sm">
-                                        <button type="button" class="btn btn-outline-danger rounded-pill px-2 py-1"
-                                                onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', '@massScope', null, 'Thánh Lễ ngày @log.FormattedDate')">
-                                            <i class="bi bi-flag"></i> Báo sai Lễ
-                                        </button>
+                                <!-- Dòng Giờ Học Giáo Lý -->
+                                <div class="d-flex align-items-center justify-content-between py-1 @(!string.IsNullOrEmpty(log.Note) || !string.IsNullOrEmpty(log.TeacherNote) ? "border-bottom" : "")">
+                                    <div class="text-secondary small fw-semibold">
+                                        <i class="bi bi-book-half text-primary me-1"></i>Học Giáo Lý:
+                                    </div>
+                                    <div class="text-end">
                                         @if (log.HasClassSession)
                                         {
-                                            <button type="button" class="btn btn-outline-warning text-dark rounded-pill px-2 py-1 ms-1"
-                                                    onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', 'REGULAR_CLASS', null, 'Giờ Học Giáo Lý ngày @log.FormattedDate')">
-                                                <i class="bi bi-flag"></i> Báo sai Học
-                                            </button>
+                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime, log.IsMakeUp)
+                                            @if (!string.IsNullOrEmpty(log.ClassCorrectionStatus))
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size: 0.65rem;">
+                                                    Khiếu nại: @log.ClassCorrectionStatus
+                                                </span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small fst-italic">Không có tiết học</span>
                                         }
                                     </div>
+                                </div>
+
+                                <!-- Ghi chú hoặc phản hồi GLV nếu có -->
+                                @if (!string.IsNullOrEmpty(log.Note) || !string.IsNullOrEmpty(log.TeacherNote))
+                                {
+                                    <div class="mt-2 p-2 rounded-3 bg-light small">
+                                        @if (!string.IsNullOrEmpty(log.Note))
+                                        {
+                                            <div class="text-dark"><i class="bi bi-pencil-square me-1"></i>@log.Note</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(log.TeacherNote))
+                                        {
+                                            <div class="text-primary fw-semibold mt-1">
+                                                <i class="bi bi-chat-left-quote-fill me-1"></i>GLV: @log.TeacherNote
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <!-- Nút Báo Sai Sót -->
+                                <div class="row g-2 mt-2 pt-1">
+                                    <div class="@(log.HasClassSession ? "col-6" : "col-12")">
+                                        <button type="button" class="btn btn-outline-danger btn-sm w-100 rounded-pill py-2 fw-semibold touch-target-44"
+                                                onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', '@massScope', null, 'Thánh Lễ ngày @log.FormattedDate')">
+                                            <i class="bi bi-flag me-1"></i> Báo sai Lễ
+                                        </button>
+                                    </div>
+                                    @if (log.HasClassSession)
+                                    {
+                                        <div class="col-6">
+                                            <button type="button" class="btn btn-outline-warning text-dark btn-sm w-100 rounded-pill py-2 fw-semibold touch-target-44"
+                                                    onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', 'REGULAR_CLASS', null, 'Giờ Học Giáo Lý ngày @log.FormattedDate')">
+                                                <i class="bi bi-flag me-1"></i> Báo sai Học
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted small">
+                        Chưa có dữ liệu nhật ký điểm danh trong niên khóa hiện tại.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <!-- GIAO DIỆN DESKTOP: BẢNG DỮ LIỆU CUỘN -->
+            <div class="table-responsive" style="max-height: 460px;">
+                <table class="table table-hover align-middle mb-0 small" id="dayLogsTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th class="ps-3">Ngày Sinh Hoạt</th>
+                            <th>Thánh Lễ</th>
+                            <th>Giờ Học Giáo Lý</th>
+                            <th>Ghi Chú / Phản Hồi Của GLV</th>
+                            <th class="text-end pe-3">Báo Sai Sót</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.AttendanceHistoryLogs.Any())
+                        {
+                            foreach (var log in Model.AttendanceHistoryLogs)
+                            {
+                                var massScope = log.IsSunday ? "REGULAR_MASS_SUN" : "REGULAR_MASS_THU";
+                                <tr class="day-log-row" data-has-issue="@log.HasAnyAbsenceOrLate.ToString().ToLower()">
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">@log.FormattedDate</div>
+                                        <span class="badge @(log.IsSunday ? "bg-primary-subtle text-primary" : "bg-warning-subtle text-dark") border">
+                                            @log.DayLabel
+                                        </span>
+                                    </td>
+
+                                    <!-- Trạng thái Lễ -->
+                                    <td>
+                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime, log.IsMakeUp)
+                                        @if (!string.IsNullOrEmpty(log.MassCorrectionStatus))
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border ms-1">
+                                                Khiếu nại: @log.MassCorrectionStatus
+                                            </span>
+                                        }
+                                    </td>
+
+                                    <!-- Trạng thái Học Giáo Lý -->
+                                    <td>
+                                        @if (log.HasClassSession)
+                                        {
+                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime, log.IsMakeUp)
+                                            @if (!string.IsNullOrEmpty(log.ClassCorrectionStatus))
+                                            {
+                                                <span class="badge bg-info-subtle text-info-emphasis border ms-1">
+                                                    Khiếu nại: @log.ClassCorrectionStatus
+                                                </span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted fst-italic">Không có tiết học</span>
+                                        }
+                                    </td>
+
+                                    <!-- Ghi chú -->
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(log.Note))
+                                        {
+                                            <div class="text-dark">@log.Note</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(log.TeacherNote))
+                                        {
+                                            <div class="text-primary fw-semibold">
+                                                <i class="bi bi-chat-left-quote-fill me-1"></i>Phản hồi GLV: @log.TeacherNote
+                                            </div>
+                                        }
+                                    </td>
+
+                                    <!-- Nút Báo sai sót -->
+                                    <td class="text-end pe-3">
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-danger rounded-pill px-2 py-1"
+                                                    onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', '@massScope', null, 'Thánh Lễ ngày @log.FormattedDate')">
+                                                <i class="bi bi-flag"></i> Báo sai Lễ
+                                            </button>
+                                            @if (log.HasClassSession)
+                                            {
+                                                <button type="button" class="btn btn-outline-warning text-dark rounded-pill px-2 py-1 ms-1"
+                                                        onclick="openDisputeModal('@log.Date.ToString("yyyy-MM-dd")', 'REGULAR_CLASS', null, 'Giờ Học Giáo Lý ngày @log.FormattedDate')">
+                                                    <i class="bi bi-flag"></i> Báo sai Học
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">
+                                    Chưa có dữ liệu nhật ký điểm danh trong niên khóa hiện tại.
                                 </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="5" class="text-center py-4 text-muted">
-                                Chưa có dữ liệu nhật ký điểm danh trong niên khóa hiện tại.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 
     <!-- 5. DANH SÁCH YÊU CẦU BÁO SAI SÓT ĐÃ GỬI (NẾU CÓ) -->
@@ -444,64 +682,117 @@
     {
         <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-header bg-white py-3 border-bottom">
-                <h6 class="fw-bold text-dark mb-0">
+                <h6 class="fw-bold text-dark mb-0 @(isMobile ? "small" : "")">
                     <i class="bi bi-clock-history text-danger me-2"></i>Lịch Sử Yêu Cầu Đính Chính Điểm Danh Của Gia Đình
                 </h6>
             </div>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle mb-0 small">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-3">Ngày Báo</th>
-                            <th>Buổi Cần Sửa</th>
-                            <th>Đề Nghị</th>
-                            <th>Lý Do Phụ Huynh Gửi</th>
-                            <th>Trạng Thái</th>
-                            <th class="pe-3">Phản Hồi Của GLV</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var d in Model.SubmittedDisputes)
-                        {
+            @if (isMobile)
+            {
+                <!-- GIAO DIỆN MOBILE: DANH SÁCH THẺ YÊU CẦU -->
+                <div class="p-2 bg-light">
+                    @foreach (var d in Model.SubmittedDisputes)
+                    {
+                        <div class="card border-0 shadow-sm rounded-4 mb-2 p-3 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <div>
+                                    <strong class="text-dark">@d.AttendanceDate.ToString("dd/MM/yyyy")</strong>
+                                    <span class="badge bg-light text-secondary border ms-1 small">@d.SessionScopeLabel</span>
+                                </div>
+                                @if (d.Status == "APPROVED")
+                                {
+                                    <span class="badge bg-success rounded-pill px-2 py-1" style="font-size: 0.68rem;">Đã sửa</span>
+                                }
+                                else if (d.Status == "REJECTED")
+                                {
+                                    <span class="badge bg-danger rounded-pill px-2 py-1" style="font-size: 0.68rem;">Từ chối</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark rounded-pill px-2 py-1" style="font-size: 0.68rem;">Chờ duyệt</span>
+                                }
+                            </div>
+                            <div class="small mb-1">
+                                <span class="text-muted">Đề nghị:</span>
+                                <span class="badge bg-secondary">@d.CurrentRecordedStatus</span>
+                                <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                                <span class="badge bg-success">@d.RequestedStatus</span>
+                            </div>
+                            <div class="small text-dark mb-1">
+                                <span class="text-muted">Lý do:</span> @d.Reason
+                            </div>
+                            @if (!string.IsNullOrEmpty(d.TeacherResponseNote))
+                            {
+                                <div class="small p-2 rounded-3 bg-info-subtle text-info-emphasis mt-2">
+                                    <i class="bi bi-chat-dots-fill me-1"></i>GLV: @d.TeacherResponseNote
+                                </div>
+                            }
+                            <div class="text-muted text-end mt-2" style="font-size: 0.7rem;">
+                                Gửi: @d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- GIAO DIỆN DESKTOP: BẢNG LỊCH SỬ KHIẾU NẠI -->
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0 small">
+                        <thead class="table-light">
                             <tr>
-                                <td class="ps-3">@d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")</td>
-                                <td><strong>@d.AttendanceDate.ToString("dd/MM/yyyy")</strong> - @d.SessionScopeLabel</td>
-                                <td>
-                                    <span class="badge bg-secondary">@d.CurrentRecordedStatus</span>
-                                    <i class="bi bi-arrow-right mx-1"></i>
-                                    <span class="badge bg-success">@d.RequestedStatus</span>
-                                </td>
-                                <td>@d.Reason</td>
-                                <td>
-                                    @if (d.Status == "APPROVED")
-                                    {
-                                        <span class="badge bg-success">Đã chấp nhận &amp; sửa</span>
-                                    }
-                                    else if (d.Status == "REJECTED")
-                                    {
-                                        <span class="badge bg-danger">Từ chối</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-warning text-dark">Đang chờ GLV duyệt</span>
-                                    }
-                                </td>
-                                <td class="pe-3">@(d.TeacherResponseNote ?? "—")</td>
+                                <th class="ps-3">Ngày Báo</th>
+                                <th>Buổi Cần Sửa</th>
+                                <th>Đề Nghị</th>
+                                <th>Lý Do Phụ Huynh Gửi</th>
+                                <th>Trạng Thái</th>
+                                <th class="pe-3">Phản Hồi Của GLV</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in Model.SubmittedDisputes)
+                            {
+                                <tr>
+                                    <td class="ps-3">@d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td><strong>@d.AttendanceDate.ToString("dd/MM/yyyy")</strong> - @d.SessionScopeLabel</td>
+                                    <td>
+                                        <span class="badge bg-secondary">@d.CurrentRecordedStatus</span>
+                                        <i class="bi bi-arrow-right mx-1"></i>
+                                        <span class="badge bg-success">@d.RequestedStatus</span>
+                                    </td>
+                                    <td>@d.Reason</td>
+                                    <td>
+                                        @if (d.Status == "APPROVED")
+                                        {
+                                            <span class="badge bg-success">Đã chấp nhận &amp; sửa</span>
+                                        }
+                                        else if (d.Status == "REJECTED")
+                                        {
+                                            <span class="badge bg-danger">Từ chối</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">Đang chờ GLV duyệt</span>
+                                        }
+                                    </td>
+                                    <td class="pe-3">@(d.TeacherResponseNote ?? "—")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
     }
 
     <!-- 6. BẢNG ĐIỂM HỌC KỲ 1, HỌC KỲ 2 & TỔNG KẾT NĂM -->
-    <div class="row g-3">
-        <div class="col-md-6">
+    <div class="row g-2 g-md-3">
+        <div class="col-12 col-md-6">
             <div class="card border-0 shadow-sm rounded-4 h-100">
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold text-primary mb-0"><i class="bi bi-journal-text me-2"></i>Bảng Điểm Học Kỳ 1</h6>
-                    <span class="badge bg-primary rounded-pill px-3">
+                    <h6 class="fw-bold text-primary mb-0 @(isMobile ? "small" : "")">
+                        <i class="bi bi-journal-text me-2"></i>Bảng Điểm Học Kỳ 1
+                    </h6>
+                    <span class="badge bg-primary rounded-pill px-2 px-md-3 py-1">
                         ĐTB HK1: @(Model.HK1.SemesterAverage?.ToString("0.00") ?? "--")
                     </span>
                 </div>
@@ -526,13 +817,14 @@
             </div>
         </div>
 
-        <div class="col-md-6">
+        <div class="col-12 col-md-6">
             <div class="card border-0 shadow-sm rounded-4 h-100">
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold text-success mb-0"><i class="bi bi-journal-check me-2"></i>Bảng Điểm Học Kỳ 2 &amp; Cả Năm</h6>
-                    <span class="badge bg-success rounded-pill px-3">
-                        ĐTB HK2: @(Model.HK2.SemesterAverage?.ToString("0.00") ?? "--") |
-                        Cả Năm: @(Model.YearAverage?.ToString("0.00") ?? "--") (@Model.OverallRank)
+                    <h6 class="fw-bold text-success mb-0 @(isMobile ? "small" : "")">
+                        <i class="bi bi-journal-check me-2"></i>Bảng Điểm HK2 &amp; Cả Năm
+                    </h6>
+                    <span class="badge bg-success rounded-pill px-2 px-md-3 py-1">
+                        ĐTB HK2: @(Model.HK2.SemesterAverage?.ToString("0.00") ?? "--") | Cả Năm: @(Model.YearAverage?.ToString("0.00") ?? "--") (@Model.OverallRank)
                     </span>
                 </div>
                 <div class="card-body p-3">
@@ -558,6 +850,38 @@
     </div>
 </div>
 
+<!-- MODAL PHÓNG TO MÃ QR THIẾU NHI (TIỆN ĐIỂM DANH TRÊN MOBILE) -->
+@if (!string.IsNullOrEmpty(Model.QrCodeBase64))
+{
+    <div class="modal fade" id="qrZoomModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden text-center">
+                <div class="modal-header bg-primary text-white py-2 px-3">
+                    <h6 class="modal-title fw-bold mb-0">
+                        <i class="bi bi-qr-code-scan me-1"></i>Mã QR Điểm Danh
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="badge bg-light text-dark border px-3 py-1 mb-2 font-monospace fs-6">
+                        @Model.StudentCode
+                    </div>
+                    <h6 class="fw-bold text-dark mb-3">@Model.ChristianName @Model.FullName</h6>
+                    <div class="p-3 bg-white rounded-3 border d-inline-block shadow-sm mb-2">
+                        <img src="@Model.QrCodeBase64" alt="QR Code" class="img-fluid" style="width: 200px; height: 200px;" />
+                    </div>
+                    <div class="small text-muted mt-2">
+                        <i class="bi bi-brightness-high text-warning me-1"></i>Xuất trình mã này cho Huynh trưởng / GLV quét khi vào cổng
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm rounded-pill w-100" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 <!-- MODAL BÁO SAI SÓT ĐIỂM DANH (FEAT-P4-05) -->
 <div class="modal fade" id="disputeModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -573,11 +897,11 @@
                 <input type="hidden" id="dispCampaignId" value="" />
 
                 <div class="row g-2 mb-3">
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label small fw-bold">Ngày điểm danh cần sửa <span class="text-danger">*</span></label>
                         <input type="date" id="dispDateIso" class="form-control form-control-sm" required />
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <label class="form-label small fw-bold">Buổi sinh hoạt <span class="text-danger">*</span></label>
                         <select id="dispSessionScope" class="form-select form-select-sm">
                             <option value="REGULAR_MASS_SUN">Thánh Lễ Chúa Nhật</option>
@@ -612,7 +936,7 @@
             </div>
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Hủy</button>
-                <button type="button" id="btnSubmitDispute" class="btn btn-danger btn-sm rounded-pill px-4 fw-bold" onclick="submitParentDispute()">
+                <button type="button" id="btnSubmitDispute" class="btn btn-danger btn-sm rounded-pill px-4 fw-bold touch-target-44" onclick="submitParentDispute()">
                     <i class="bi bi-send-check me-1"></i> Gửi Yêu Cầu Cho GLV
                 </button>
             </div>
@@ -652,7 +976,7 @@
             </div>
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold" onclick="submitOnlineAbsence()">Gửi Đơn Xin Phép</button>
+                <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold touch-target-44" onclick="submitOnlineAbsence()">Gửi Đơn Xin Phép</button>
             </div>
         </div>
     </div>
@@ -688,7 +1012,7 @@
             btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            document.querySelectorAll('#dayLogsTable tbody .day-log-row').forEach(row => {
+            document.querySelectorAll('.day-log-row').forEach(row => {
                 const hasIssue = row.getAttribute('data-has-issue') === 'true';
                 if (mode === 'ALL' || (mode === 'ABSENT_OR_LATE' && hasIssue)) {
                     row.style.display = '';
@@ -696,6 +1020,13 @@
                     row.style.display = 'none';
                 }
             });
+        }
+
+        function showQrModal() {
+            const el = document.getElementById('qrZoomModal');
+            if (el) {
+                bootstrap.Modal.getOrCreateInstance(el).show();
+            }
         }
 
         function openDisputeModal(dateIso, scope, campaignId, labelText) {

@@ -73,13 +73,22 @@
 <div class="offcanvas offcanvas-end border-0 shadow-lg d-flex flex-column" tabindex="-1" id="mobileMenuOffcanvas" aria-labelledby="mobileMenuOffcanvasLabel" style="width: 82%; max-width: 360px;">
     <!-- HEADER CỐ ĐỊNH -->
     <div class="offcanvas-header bg-primary text-white py-3 px-3 flex-shrink-0">
-        <div class="d-flex align-items-center gap-2">
-            <div class="rounded-circle bg-white text-primary p-2 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+        <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0">
+            <div class="rounded-circle bg-white text-primary p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
                 <i class="bi bi-person-circle fs-4"></i>
             </div>
-            <div class="lh-sm overflow-hidden">
-                <div class="fw-bold text-white text-truncate" style="max-width: 200px;">@fullName</div>
-                <small class="text-white-50" style="font-size: 0.72rem;">
+            <div class="lh-sm overflow-hidden flex-grow-1">
+                @if (isAuthenticated)
+                {
+                    <a asp-controller="Account" asp-action="Profile" class="text-white text-decoration-none d-block">
+                        <div class="fw-bold text-white text-truncate" style="max-width: 190px;">@fullName</div>
+                    </a>
+                }
+                else
+                {
+                    <div class="fw-bold text-white text-truncate" style="max-width: 190px;">@fullName</div>
+                }
+                <small class="text-white-50 d-block text-truncate" style="font-size: 0.72rem;">
                     @if (isAuthenticated)
                     {
                         @(role == UserRole.Admin ? "Quản trị viên" :
@@ -92,6 +101,12 @@
                         <span>Khách / Phụ huynh</span>
                     }
                 </small>
+                @if (isAuthenticated)
+                {
+                    <a asp-controller="Account" asp-action="Profile" class="badge bg-white bg-opacity-25 text-white text-decoration-none px-2 py-0 mt-1 d-inline-flex align-items-center gap-1">
+                        <i class="bi bi-person-badge"></i> Xem Hồ Sơ
+                    </a>
+                }
             </div>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -102,6 +117,13 @@
         <!-- LỐI TẮT CHÍNH -->
         <div class="small fw-bold text-uppercase text-muted mb-2" style="font-size: 0.7rem; letter-spacing: 0.05em;">Lối Tắt Nhanh</div>
         <div class="list-group list-group-flush rounded-3 border-0 mb-3">
+            @if (isAuthenticated)
+            {
+                <a asp-controller="Account" asp-action="Profile" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2 @(currentCtrl == "Account" && currentAct == "Profile" ? "bg-primary-subtle text-primary fw-bold" : "")">
+                    <i class="bi bi-person-badge-fill text-primary fs-5"></i>
+                    <span class="fw-medium">Hồ Sơ Cá Nhân</span>
+                </a>
+            }
             <a asp-controller="Home" asp-action="Index" class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 px-2 border-0 rounded-2">
                 <i class="bi bi-house-door-fill text-primary fs-5"></i>
                 <span class="fw-medium">Trang Chủ Không Gian</span>

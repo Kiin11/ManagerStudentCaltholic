@@ -1,4 +1,4 @@
-﻿using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
@@ -377,7 +377,8 @@ namespace ManagerStudentCaltholic.Services
         }
 
         /// <summary>
-        /// 5. TASK-P3-12.3: Quét mã QR tốc độ cao trực tiếp trên bộ đệm Redis
+        /// <summary>
+        /// 5. TASK-P3-12.3: Quét mã QR tốc độ cao trực tiếp trên bộ đệm Redis (Nâng cấp FEAT-P5-04)
         /// </summary>
         public async Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request)
         {
@@ -388,7 +389,10 @@ namespace ManagerStudentCaltholic.Services
             var qrKey = RedisAttendanceKeys.QrStudentLookup(todayUtc, cleanCode);
             var lookupItem = await _cache.GetAsync<RedisQrStudentLookupItem>(qrKey);
 
-            // Nếu chưa được Pre-warm trong Redis thì tìm nhanh trong DB và nạp cả lớp đó lên Redis
+            bool isHistoricalCode = false;
+            string? oldCode = null;
+
+            // Nếu chưa được Pre-warm trong Redis thì tìm trong DB (hỗ trợ cả mã chính và mã năm cũ trong StudentCodeHistories)
             if (lookupItem == null)
             {
                 var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
@@ -405,6 +409,34 @@ namespace ManagerStudentCaltholic.Services
                                               e.ClassRoom.AcademicYearId == currentYear.Id &&
                                               e.Student.IsActive);
 
+                // TASK-P5-04.2: Nếu không khớp mã hiện hành, tra cứu trong bảng lịch sử StudentCodeHistories
+                if (enrollment == null)
+                {
+                    var history = await _context.StudentCodeHistories
+                        .Include(h => h.Student)
+                        .AsNoTracking()
+                        .Where(h => h.OriginalCode.ToUpper() == cleanCode || h.ArchivedYearCode.ToUpper() == cleanCode)
+                        .OrderByDescending(h => h.ChangedAt)
+                        .FirstOrDefaultAsync();
+
+                    if (history?.Student != null && history.Student.IsActive)
+                    {
+                        enrollment = await _context.Enrollments
+                            .Include(e => e.Student)
+                            .Include(e => e.ClassRoom)
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(e => e.StudentId == history.StudentId &&
+                                                      e.ClassRoom.AcademicYearId == currentYear.Id &&
+                                                      e.Student.IsActive);
+
+                        if (enrollment != null)
+                        {
+                            isHistoricalCode = true;
+                            oldCode = cleanCode;
+                        }
+                    }
+                }
+
                 if (enrollment == null)
                 {
                     return new QrScanResponseDto
@@ -416,23 +448,143 @@ namespace ManagerStudentCaltholic.Services
                 }
 
                 await GetOrLoadClassSheetAsync(enrollment.ClassRoomId, todayUtc);
-                lookupItem = await _cache.GetAsync<RedisQrStudentLookupItem>(qrKey);
+                var officialCode = enrollment.Student.StudentCode.Trim().ToUpperInvariant();
+                var officialKey = RedisAttendanceKeys.QrStudentLookup(todayUtc, officialCode);
+                lookupItem = await _cache.GetAsync<RedisQrStudentLookupItem>(officialKey);
 
                 if (lookupItem == null)
                 {
                     return new QrScanResponseDto { Success = false, Message = "Không thể nạp bộ đệm điểm danh cho học sinh này." };
                 }
-            }
 
-            // Đánh giá khung giờ đi Lễ / đi Học bằng AttendanceTimeHelper
-            var (isMass, isClass, status, timeOfDay, _) = AttendanceTimeHelper.EvaluateCheckIn(scanTime, lookupItem.GradeLevel);
-            if (!isMass && !isClass)
+                // Nếu quét bằng mã năm cũ, cache thêm alias trỏ về cùng lookupItem để lần quét kế tiếp đạt O(1)
+                if (isHistoricalCode && !string.IsNullOrEmpty(oldCode))
+                {
+                    await _cache.SetAsync(qrKey, lookupItem, DefaultCacheTtl);
+                }
+            }
+            else
             {
-                isClass = true;
-                status = AttendanceStatus.Present;
+                // Kiểm tra nếu lookupItem có mã chính thức khác với mã vừa quét -> thẻ quét là mã năm cũ
+                if (!string.Equals(lookupItem.StudentCode, cleanCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    isHistoricalCode = true;
+                    oldCode = cleanCode;
+                }
             }
 
-            var activityTitle = isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ";
+            // TASK-P5-04.2: Xử lý theo SessionMode được chọn nhanh trên giao diện Camera
+            bool isMass = false;
+            bool isClass = false;
+            string status = AttendanceStatus.Present;
+            var timeOfDay = scanTime.TimeOfDay;
+            string sessionMode = (request.SessionMode ?? "AUTO").ToUpperInvariant();
+
+            switch (sessionMode)
+            {
+                case "SUNDAY_MASS":
+                    isMass = true;
+                    isClass = false;
+                    if (timeOfDay < new TimeSpan(6, 35, 0)) status = AttendanceStatus.LinedUp;
+                    else if (timeOfDay < new TimeSpan(7, 0, 0)) status = AttendanceStatus.Present;
+                    else status = AttendanceStatus.Late;
+                    break;
+
+                case "THURSDAY_MASS":
+                    isMass = true;
+                    isClass = false;
+                    status = AttendanceStatus.Present;
+                    break;
+
+                case "CATECHISM_CLASS":
+                    isMass = false;
+                    isClass = true;
+                    bool isMorning = lookupItem.GradeLevel != "Bao Đồng";
+                    if (isMorning)
+                    {
+                        status = timeOfDay < new TimeSpan(9, 30, 0) ? AttendanceStatus.Present : AttendanceStatus.Late;
+                    }
+                    else
+                    {
+                        status = timeOfDay < new TimeSpan(15, 15, 0) ? AttendanceStatus.Present : AttendanceStatus.Late;
+                    }
+                    break;
+
+                case "CAMPAIGN_MONTH":
+                    isMass = true;
+                    isClass = false;
+                    status = AttendanceStatus.Present;
+
+                    // Tự động đối chiếu và ghi nhận vào bảng MassCampaignRecords nếu lớp có chiến dịch đang mở
+                    try
+                    {
+                        var activeCampaign = await _context.MassCampaigns
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(c => c.ClassRoomId == lookupItem.ClassId &&
+                                                      c.Status == "ACTIVE" &&
+                                                      todayUtc >= c.StartDate.Date &&
+                                                      todayUtc <= c.EndDate.Date);
+
+                        if (activeCampaign != null)
+                        {
+                            var campRecord = await _context.MassCampaignRecords
+                                .FirstOrDefaultAsync(r => r.CampaignId == activeCampaign.Id &&
+                                                          r.EnrollmentId == lookupItem.EnrollmentId &&
+                                                          r.AttendanceDate == todayUtc);
+                            if (campRecord == null)
+                            {
+                                _context.MassCampaignRecords.Add(new MassCampaignRecord
+                                {
+                                    CampaignId = activeCampaign.Id,
+                                    StudentId = lookupItem.StudentId,
+                                    EnrollmentId = lookupItem.EnrollmentId,
+                                    AttendanceDate = todayUtc,
+                                    Status = "PRESENT",
+                                    CheckInMethod = "QR_SCAN",
+                                    CheckInTime = DateTime.UtcNow,
+                                    LastModifiedBy = "Camera QR HUD",
+                                    LastModifiedAt = DateTime.UtcNow
+                                });
+                            }
+                            else
+                            {
+                                campRecord.Status = "PRESENT";
+                                campRecord.CheckInMethod = "QR_SCAN";
+                                campRecord.CheckInTime = DateTime.UtcNow;
+                                campRecord.LastModifiedBy = "Camera QR HUD";
+                                campRecord.LastModifiedAt = DateTime.UtcNow;
+                            }
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Lỗi cập nhật chiến dịch đi lễ cho EnrollmentId {EnrollmentId}", lookupItem.EnrollmentId);
+                    }
+                    break;
+
+                default: // "AUTO"
+                    var eval = AttendanceTimeHelper.EvaluateCheckIn(scanTime, lookupItem.GradeLevel);
+                    isMass = eval.isMass;
+                    isClass = eval.isClass;
+                    status = eval.calculatedStatus;
+                    if (!isMass && !isClass)
+                    {
+                        isClass = true;
+                        status = AttendanceStatus.Present;
+                    }
+                    break;
+            }
+
+            string activityTitle = sessionMode switch
+            {
+                "CAMPAIGN_MONTH" => "CHIẾN DỊCH 1 THÁNG",
+                "THURSDAY_MASS" => "THÁNH LỄ THỨ NĂM",
+                "SUNDAY_MASS" => "THÁNH LỄ CHÚA NHẬT",
+                "CATECHISM_CLASS" => "GIỜ HỌC GIÁO LÝ",
+                _ => (isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ")
+            };
+
             var sheetKey = RedisAttendanceKeys.ClassSheet(lookupItem.ClassId, todayUtc);
             var sheetVm = await GetOrLoadClassSheetAsync(lookupItem.ClassId, todayUtc);
 
@@ -494,11 +646,25 @@ namespace ManagerStudentCaltholic.Services
                 await MarkClassDirtyAsync(lookupItem.ClassId, todayUtc);
             }
 
+            string resultMsg;
+            if (isDuplicate)
+            {
+                resultMsg = $"Thiếu nhi đã được điểm danh {activityTitle} trước đó!";
+            }
+            else if (isHistoricalCode)
+            {
+                resultMsg = $"[Thẻ Cũ] Điểm danh thành công: {lookupItem.FullName} - Nhớ in đổi thẻ mới!";
+            }
+            else
+            {
+                resultMsg = $"[Redis Fast Check-in] Điểm danh thành công: {lookupItem.FullName} ({status})";
+            }
+
             return new QrScanResponseDto
             {
                 Success = true,
                 IsDuplicate = isDuplicate,
-                StudentCode = cleanCode,
+                StudentCode = lookupItem.StudentCode,
                 ChristianName = lookupItem.ChristianName,
                 FullName = lookupItem.FullName,
                 ClassName = lookupItem.ClassName,
@@ -506,10 +672,116 @@ namespace ManagerStudentCaltholic.Services
                 ActivityType = activityTitle,
                 Status = status,
                 CheckInTimeStr = timeOfDay.ToString(@"hh\:mm\:ss"),
-                Message = isDuplicate
-                    ? $"Thiếu nhi đã được điểm danh {activityTitle} trước đó!"
-                    : $"[Redis Fast Check-in] Điểm danh thành công: {lookupItem.FullName} ({status})"
+                IsHistoricalCode = isHistoricalCode,
+                OldCode = isHistoricalCode ? oldCode : null,
+                CurrentCode = lookupItem.StudentCode,
+                WarningMessage = isHistoricalCode
+                    ? $"CẢNH BÁO: Thẻ mã năm cũ ({oldCode})! Mã mới: {lookupItem.StudentCode} - Cần in lại thẻ mới!"
+                    : null,
+                EnrollmentId = lookupItem.EnrollmentId,
+                ClassId = lookupItem.ClassId,
+                SessionMode = sessionMode,
+                ScanDate = todayUtc,
+                Message = resultMsg
             };
+        }
+
+        /// <summary>
+        /// TASK-P5-04.3: Hoàn tác lượt quét QR vừa thực hiện trong vòng 5 giây
+        /// </summary>
+        public async Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto)
+        {
+            if (dto.EnrollmentId <= 0 || dto.ClassId <= 0)
+            {
+                return (false, "Dữ liệu yêu cầu hoàn tác không hợp lệ.");
+            }
+
+            var date = dto.AttendanceDate ?? DateTime.UtcNow.AddHours(7).Date;
+            var todayUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            var sheetKey = RedisAttendanceKeys.ClassSheet(dto.ClassId, todayUtc);
+            var sheetVm = await GetOrLoadClassSheetAsync(dto.ClassId, todayUtc);
+
+            var targetRow = sheetVm.Students.FirstOrDefault(s => s.EnrollmentId == dto.EnrollmentId);
+            string studentName = targetRow?.FullName ?? dto.StudentCode ?? "Thiếu nhi";
+
+            bool undoMass = string.IsNullOrWhiteSpace(dto.ActivityType) ||
+                            dto.ActivityType.Contains("LỄ") ||
+                            dto.ActivityType.Contains("MASS") ||
+                            dto.ActivityType.Contains("CHIẾN DỊCH");
+
+            bool undoClass = string.IsNullOrWhiteSpace(dto.ActivityType) ||
+                             dto.ActivityType.Contains("GIÁO LÝ") ||
+                             dto.ActivityType.Contains("CLASS");
+
+            if (targetRow != null)
+            {
+                if (undoMass)
+                {
+                    targetRow.AttendedMass = false;
+                    targetRow.MassStatus = AttendanceStatus.AbsentUnpermitted;
+                    targetRow.MassCheckInTime = null;
+                }
+
+                if (undoClass)
+                {
+                    targetRow.ClassAttended = false;
+                    targetRow.ClassStatus = AttendanceStatus.AbsentUnpermitted;
+                    targetRow.ClassCheckInTime = null;
+                }
+
+                var updatedPayload = new RedisClassAttendancePayload
+                {
+                    ClassId = dto.ClassId,
+                    ClassName = sheetVm.ClassName,
+                    GradeLevel = sheetVm.GradeLevel,
+                    AttendanceDate = todayUtc,
+                    CachedAtUtc = DateTime.UtcNow,
+                    LastModifiedAtUtc = DateTime.UtcNow,
+                    IsDirty = true,
+                    Students = sheetVm.Students
+                };
+
+                await _cache.SetAsync(sheetKey, updatedPayload, DefaultCacheTtl);
+                await MarkClassDirtyAsync(dto.ClassId, todayUtc);
+            }
+
+            // Đồng bộ trực tiếp xuống cơ sở dữ liệu PostgreSQL
+            var att = await _context.Attendances
+                .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == todayUtc);
+            if (att != null)
+            {
+                if (undoMass)
+                {
+                    att.AttendedMass = false;
+                    att.MassStatus = AttendanceStatus.AbsentUnpermitted;
+                    att.MassCheckInTime = null;
+                }
+
+                if (undoClass)
+                {
+                    att.ClassAttended = false;
+                    att.ClassStatus = AttendanceStatus.AbsentUnpermitted;
+                    att.ClassCheckInTime = null;
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
+            // Hoàn tác bản ghi chiến dịch nếu thuộc chiến dịch
+            if (!string.IsNullOrWhiteSpace(dto.ActivityType) && dto.ActivityType.Contains("CHIẾN DỊCH"))
+            {
+                var campRecord = await _context.MassCampaignRecords
+                    .FirstOrDefaultAsync(r => r.EnrollmentId == dto.EnrollmentId && r.AttendanceDate == todayUtc);
+                if (campRecord != null)
+                {
+                    campRecord.Status = "ABSENT";
+                    campRecord.LastModifiedBy = "Camera QR HUD (Undo)";
+                    campRecord.LastModifiedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            return (true, $"Đã hoàn tác điểm danh thành công cho thiếu nhi {studentName}!");
         }
 
         /// <summary>

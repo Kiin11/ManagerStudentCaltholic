@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using ManagerStudentCaltholic.Data;
@@ -24,8 +24,8 @@ namespace ManagerStudentCaltholic.Services
 
         public async Task EnsureDefaultRulesSeededAsync()
         {
-            if (await _context.FeaturePermissionRules.AnyAsync())
-                return;
+            var existingRules = await _context.FeaturePermissionRules.ToListAsync();
+            var existingMap = existingRules.ToDictionary(r => r.FeatureCode);
 
             var defaults = new List<FeaturePermissionRule>
             {
@@ -46,10 +46,11 @@ namespace ManagerStudentCaltholic.Services
 
                 // 3. Phân khu ACADEMIC (Học vụ & Bảng điểm)
                 new() { FeatureCode = "ACD_GRADEBOOK", MasterCode = "ACADEMIC", DisplayName = "Sổ Điểm Giáo Lý & Xét Duyệt Cuối Năm", Description = "Nhập điểm HK1, HK2 và bấm Xét Lên Lớp / Xét Bí Tích / Xét Tuyên Hứa", IconClass = "bi-journal-check", TargetUrl = "/Grades/Index", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 1 },
-                new() { FeatureCode = "ACD_STUDENTS", MasterCode = "ACADEMIC", DisplayName = "Hồ Sơ Thiếu Nhi & In Thẻ QR", Description = "Quản lý danh sách thiếu nhi, sinh mã theo tên lớp (TS3A001) & in thẻ QR", IconClass = "bi-people-fill", TargetUrl = "/Students/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 2 },
-                new() { FeatureCode = "ACD_CLASSES", MasterCode = "ACADEMIC", DisplayName = "Quản Lý Lớp Học & Phân Công GLV", Description = "Danh sách các lớp Giáo lý, sĩ số, phân công Giáo lý viên đứng lớp", IconClass = "bi-mortarboard-fill", TargetUrl = "/Classes/Index", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 3 },
-                new() { FeatureCode = "ACD_LESSON_PLANS", MasterCode = "ACADEMIC", DisplayName = "Kế Hoạch Bài Giảng & Giáo Án", Description = "Tải tài liệu bài giảng, phân phối chương trình học từng tuần", IconClass = "bi-calendar3-week-fill", TargetUrl = "/LessonPlans/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 4 },
-                new() { FeatureCode = "ACD_FACILITIES", MasterCode = "ACADEMIC", DisplayName = "Sơ Đồ Phòng Học & Cơ Sở Vật Chất", Description = "Sơ đồ phòng học các khu nhà, sĩ số thực tế và báo cáo sự cố thiết bị", IconClass = "bi-building-gear", TargetUrl = "/Facilities/Index", BadgeColor = "dark", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 5 },
+                new() { FeatureCode = "ACD_ATTENDANCE_DIRECT", MasterCode = "ACADEMIC", DisplayName = "Điểm Danh Lớp", Description = "Mở trực tiếp Sổ điểm danh lớp học được phân công", IconClass = "bi-calendar2-check-fill", TargetUrl = "/Attendance/Index?classId={class_id}", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 2 },
+                new() { FeatureCode = "ACD_STUDENTS", MasterCode = "ACADEMIC", DisplayName = "Hồ Sơ Thiếu Nhi & In Thẻ QR", Description = "Quản lý danh sách thiếu nhi, sinh mã theo tên lớp (TS3A001) & in thẻ QR", IconClass = "bi-people-fill", TargetUrl = "/Students/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 3 },
+                new() { FeatureCode = "ACD_CLASSES", MasterCode = "ACADEMIC", DisplayName = "Quản Lý Lớp Học & Phân Công GLV", Description = "Danh sách các lớp Giáo lý, sĩ số, phân công Giáo lý viên đứng lớp", IconClass = "bi-mortarboard-fill", TargetUrl = "/Classes/Index", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 4 },
+                new() { FeatureCode = "ACD_LESSON_PLANS", MasterCode = "ACADEMIC", DisplayName = "Kế Hoạch Bài Giảng & Giáo Án", Description = "Tải tài liệu bài giảng, phân phối chương trình học từng tuần", IconClass = "bi-calendar3-week-fill", TargetUrl = "/LessonPlans/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 5 },
+                new() { FeatureCode = "ACD_FACILITIES", MasterCode = "ACADEMIC", DisplayName = "Sơ Đồ Phòng Học & Cơ Sở Vật Chất", Description = "Sơ đồ phòng học các khu nhà, sĩ số thực tế và báo cáo sự cố thiết bị", IconClass = "bi-building-gear", TargetUrl = "/Facilities/Index", BadgeColor = "dark", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 6 },
 
                 // 4. Phân khu SACRAMENT (Bí tích & Kết chuyển)
                 new() { FeatureCode = "SAC_REGISTRY", MasterCode = "SACRAMENT", DisplayName = "Sổ Bộ Bí Tích Điện Tử", Description = "Quản lý sổ bộ Rửa Tội, Rước Lễ Lần Đầu, Thêm Sức, Tuyên Hứa Bao Đồng", IconClass = "bi-journal-bookmark-fill", TargetUrl = "/Sacraments/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 1 },
@@ -66,8 +67,38 @@ namespace ManagerStudentCaltholic.Services
                 new() { FeatureCode = "GOV_SYSTEM_LOGS", MasterCode = "GOVERNANCE", DisplayName = "System Health & Nhật Ký Hệ Thống", Description = "Giám sát kết nối PostgreSQL/Redis, tra cứu Audit Log và lỗi hệ thống", IconClass = "bi-terminal-fill", TargetUrl = "/Admin/Logs", BadgeColor = "dark", AllowedRolesCsv = "Admin", SortOrder = 6 }
             };
 
-            _context.FeaturePermissionRules.AddRange(defaults);
-            await _context.SaveChangesAsync();
+            bool changed = false;
+            foreach (var rule in defaults)
+            {
+                if (!existingMap.TryGetValue(rule.FeatureCode, out var existing))
+                {
+                    _context.FeaturePermissionRules.Add(rule);
+                    changed = true;
+                }
+                else
+                {
+                    if (rule.FeatureCode == "ACD_ATTENDANCE_DIRECT")
+                    {
+                        if (existing.TargetUrl != rule.TargetUrl || existing.SortOrder != 2 || !existing.IsEnabled)
+                        {
+                            existing.TargetUrl = rule.TargetUrl;
+                            existing.SortOrder = 2;
+                            existing.IsEnabled = true;
+                            changed = true;
+                        }
+                    }
+                    else if (rule.MasterCode == "ACADEMIC" && existing.SortOrder != rule.SortOrder)
+                    {
+                        existing.SortOrder = rule.SortOrder;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task<MasterWorkspaceViewModel> GetAuthorizedWorkspaceAsync(
@@ -178,6 +209,23 @@ namespace ManagerStudentCaltholic.Services
                                     currentRole == UserRole.SpiritualDirector ||
                                     currentRole == UserRole.ExecutiveBoard;
 
+            // Xác định classId mặc định được phân quyền cho User đang đăng nhập
+            int? defaultClassId = null;
+            if (userClassIds.Any())
+            {
+                defaultClassId = userClassIds.First();
+            }
+            else if (currentYear != null)
+            {
+                var firstClass = await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.AcademicYearId == currentYear.Id)
+                    .OrderBy(c => c.GradeLevel)
+                    .ThenBy(c => c.Name)
+                    .FirstOrDefaultAsync();
+                defaultClassId = firstClass?.Id;
+            }
+
             foreach (var master in masterDefinitions)
             {
                 var rulesInMaster = allEnabledRules.Where(r => r.MasterCode == master.MasterCode).ToList();
@@ -187,6 +235,21 @@ namespace ManagerStudentCaltholic.Services
                     if (!IsRuleVisibleForUser(rule, vm.IsAuthenticated, currentRole, isFullAccessRole, hasSacramentClass, userClassIds))
                         continue;
 
+                    // Thay thế tham số {class_id} động theo quyền lớp của tài khoản đang đăng nhập
+                    string finalTargetUrl = rule.TargetUrl;
+                    if (finalTargetUrl.Contains("{class_id}"))
+                    {
+                        finalTargetUrl = defaultClassId.HasValue && defaultClassId.Value > 0
+                            ? finalTargetUrl.Replace("{class_id}", defaultClassId.Value.ToString())
+                            : "/Attendance/Index";
+                    }
+                    else if (rule.FeatureCode == "ACD_ATTENDANCE_DIRECT")
+                    {
+                        finalTargetUrl = defaultClassId.HasValue && defaultClassId.Value > 0
+                            ? $"/Attendance/Index?classId={defaultClassId.Value}"
+                            : "/Attendance/Index";
+                    }
+
                     master.Features.Add(new FeatureActionCardDto
                     {
                         FeatureCode = rule.FeatureCode,
@@ -194,7 +257,7 @@ namespace ManagerStudentCaltholic.Services
                         DisplayName = rule.DisplayName,
                         Description = rule.Description ?? string.Empty,
                         IconClass = rule.IconClass,
-                        TargetUrl = rule.TargetUrl,
+                        TargetUrl = finalTargetUrl,
                         BadgeColor = rule.BadgeColor,
                         SacramentClassesOnly = rule.SacramentClassesOnly
                     });
