@@ -1,11 +1,11 @@
 /**
  * FEAT-P5-02: GIAO DIỆN MOBILE WEB (MOBILE-FIRST)
- * TASK-P5-02.1: Khung Mobile-First, Header Thu Gọn & Bottom Navigation Bar
+ * TASK-P5-02.1: Khung Mobile-First, Header Thu Gọn & Bottom Navigation Bar (YouTube Floating Pill Dock)
  */
 
 :root {
     --mobile-header-height: 56px;
-    --mobile-bottom-nav-height: 62px;
+    --mobile-bottom-nav-height: 58px;
     --mobile-primary: #1e40af;
     --mobile-primary-rgb: 30, 64, 175;
     --mobile-accent: #f59e0b;
@@ -98,30 +98,34 @@ body.mobile-mode {
 }
 
 /* =======================================================
-   3. THANH ĐIỀU HƯỚNG ĐÁY 5 PHÂN KHU (SUB-TASK 02.1.1)
+   3. THANH ĐIỀU HƯỚNG NỔI DẠNG YOUTUBE (YOUTUBE FLOATING PILL DOCK)
    ======================================================= */
 .mobile-bottom-nav {
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: max(12px, calc(var(--safe-inset-bottom) + 8px));
+    left: 50%;
+    transform: translateX(-50%) translateZ(0);
+    width: calc(100% - 28px);
+    max-width: 400px;
+    height: var(--mobile-bottom-nav-height);
     z-index: 1035;
-    background: #ffffff;
+    background: rgba(18, 18, 18, 0.94);
     /* TASK-P5-02.4: bỏ backdrop-filter blur, tách lớp riêng cho thanh cố định */
-    transform: translateZ(0);
     contain: layout paint;
-    border-top: 1px solid #e2e8f0;
-    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
-    padding-bottom: max(6px, var(--safe-inset-bottom));
-    padding-left: var(--safe-inset-left);
-    padding-right: var(--safe-inset-right);
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.28);
+    padding: 0 6px;
+    display: flex;
+    align-items: center;
 }
 
 .mobile-nav-items {
     display: flex;
     align-items: center;
-    justify-content: space-around;
-    height: var(--mobile-bottom-nav-height);
+    justify-content: space-between;
+    width: 100%;
+    height: 100%;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -129,31 +133,42 @@ body.mobile-mode {
 
 .mobile-nav-item {
     flex: 1;
-    max-width: 20%;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 .mobile-nav-link {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
-    min-height: 48px;
-    color: #64748b;
+    width: 100%;
+    height: 46px;
+    color: rgba(255, 255, 255, 0.85);
     text-decoration: none;
-    font-size: 0.68rem;
-    font-weight: 600;
-    padding: 4px 2px;
-    transition: color 0.15s ease;
+    padding: 0;
+    transition: transform 0.16s ease, color 0.16s ease;
     position: relative;
     user-select: none;
 }
 
+.yt-nav-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    min-width: 62px;
+    padding: 0 16px;
+    border-radius: 9999px;
+    background: transparent;
+    transition: background-color 0.2s ease, transform 0.18s ease;
+}
+
 .mobile-nav-link i {
-    font-size: 1.35rem;
+    font-size: 1.45rem;
     line-height: 1;
-    margin-bottom: 3px;
+    color: rgba(255, 255, 255, 0.88);
     transition: transform 0.18s ease, color 0.18s ease;
 }
 
@@ -161,65 +176,79 @@ body.mobile-mode {
     transform: scale(0.92);
 }
 
-.mobile-nav-link.active {
-    color: var(--mobile-primary);
+/* Trạng thái Active: Viên thuốc xám bo tròn đặc trưng của YouTube */
+.mobile-nav-link.active .yt-nav-pill {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .mobile-nav-link.active i {
-    color: var(--mobile-primary);
-    transform: translateY(-2px);
-}
-
-.mobile-nav-link.active::after {
-    content: '';
-    position: absolute;
-    bottom: 2px;
-    width: 16px;
-    height: 3px;
-    border-radius: 999px;
-    background-color: var(--mobile-primary);
-}
-
-/* Nút quét QR trung tâm nổi bật */
-.mobile-nav-link.qr-highlight {
     color: #ffffff;
 }
 
-.mobile-nav-link.qr-highlight .qr-circle {
-    width: 44px;
-    height: 44px;
+/* Nút trung tâm vòng tròn kiểu YouTube (+ / Quét QR) */
+.yt-center-circle {
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%);
-    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.4);
-    display: flex;
+    border: 1.8px solid rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.06);
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-top: -16px;
-    margin-bottom: 2px;
-    border: 3px solid #ffffff;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
-.mobile-nav-link.qr-highlight:active .qr-circle {
-    transform: scale(0.9);
+.yt-center-circle i {
+    font-size: 1.15rem !important;
+    color: #ffffff !important;
+    margin: 0 !important;
 }
 
-.mobile-nav-link.qr-highlight .qr-circle i {
+.mobile-nav-link.active .yt-center-circle {
+    background: #ffffff;
+    border-color: #ffffff;
+}
+
+.mobile-nav-link.active .yt-center-circle i {
+    color: #0f0f0f !important;
+}
+
+/* Huy hiệu Avatar tròn kiểu YouTube ('K' màu xanh cổ vịt) */
+.yt-avatar-badge {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #00897b;
     color: #ffffff;
-    font-size: 1.35rem;
-    margin-bottom: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-.mobile-nav-link.qr-highlight span {
-    color: #1e40af;
-    font-weight: 700;
+.yt-avatar-badge.yt-avatar-guest {
+    background: #334155;
+}
+
+.yt-avatar-badge i {
+    font-size: 1rem !important;
+    color: #ffffff !important;
+    margin: 0 !important;
+}
+
+.mobile-nav-link.active .yt-avatar-badge {
+    box-shadow: 0 0 0 2px #ffffff, 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 /* =======================================================
    4. NỘI DUNG CHÍNH (MAIN WRAPPER CHO MOBILE)
    ======================================================= */
 .mobile-main-wrapper {
-    padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-inset-bottom) + 20px) !important;
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-inset-bottom) + 32px) !important;
     overflow-x: hidden;
 }
 
