@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Security.Claims;
 using ManagerStudentCaltholic.Services;
 using Serilog;
@@ -22,6 +22,7 @@ namespace ManagerStudentCaltholic.Extensions
                     .MinimumLevel.Information()
                     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
                     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+                    .MinimumLevel.Override("Microsoft.AspNetCore.Antiforgery", LogEventLevel.Fatal)
                     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
                     .Enrich.FromLogContext()
                     .WriteTo.Console(outputTemplate: StandardOutputTemplate)
