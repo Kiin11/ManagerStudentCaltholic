@@ -7,6 +7,7 @@ using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -239,12 +240,23 @@ namespace ManagerStudentCaltholic.Extensions
         }
 
         /// <summary>
-        /// Thêm cấu hình chống CSRF toàn cục và Cookie nghiêm ngặt
+        /// Thêm cấu hình chống CSRF toàn cục, lưu trữ bền vững Data Protection Key Ring và Cookie nghiêm ngặt
         /// </summary>
         /// <param name="services"></param>
         /// <returns></returns>
         public static IServiceCollection AddStrictSecurityConfigurations(this IServiceCollection services)
         {
+            // Lưu trữ bền vững Data Protection Key Ring xuống ổ đĩa/Docker Volume để không mất khóa giải mã Cookie & Antiforgery khi restart/deploy
+            var keysDirectory = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "dataprotection-keys"));
+            if (!keysDirectory.Exists)
+            {
+                keysDirectory.Create();
+            }
+
+            services.AddDataProtection()
+                .SetApplicationName("ManagerStudentCaltholic")
+                .PersistKeysToFileSystem(keysDirectory);
+
             // TASK-708: Tự động kiểm tra Anti-CSRF Token cho tất cả POST, PUT, DELETE
             services.AddControllersWithViews(options =>
             {

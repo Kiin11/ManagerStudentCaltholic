@@ -1,4 +1,4 @@
-﻿# Stage 1: Build
+# Stage 1: Build
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["ManagerStudentCaltholic.csproj", "./"]
@@ -14,8 +14,8 @@ WORKDIR /app
 ENV TZ=Asia/Ho_Chi_Minh
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Tạo sẵn thư mục lưu Log và Upload Giáo án, sau đó gán quyền sở hữu cho user phi đặc quyền ($APP_UID)
-RUN mkdir -p /app/logs /app/wwwroot/uploads/lesson_plans \
+# Tạo sẵn thư mục lưu Log, DataProtection Keys và Upload Giáo án, sau đó gán quyền sở hữu cho user phi đặc quyền ($APP_UID)
+RUN mkdir -p /app/logs /app/dataprotection-keys /app/wwwroot/uploads/lesson_plans \
     && chown -R $APP_UID:$APP_UID /app
 
 COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
