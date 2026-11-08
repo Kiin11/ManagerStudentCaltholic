@@ -48,16 +48,17 @@ Phương thức mở rộng `Context.Request.IsMobileDevice()` trong `Extensions
 
 ### 4.2. Thanh Điều hướng Đáy 5 Phân khu (`_LayoutMobileBottomNav.cshtml`)
 - **Dải Sub-module Pills (`.mobile-subnav-strip`):** Nằm phía trên nội dung chính, cho phép vuốt ngang chọn nhanh các chức năng con thuộc phân khu hiện tại.
-- **Bottom Navigation Bar (`.mobile-bottom-nav`):**
-  - Cố định tại đáy màn hình (`position: fixed; bottom: 0; height: calc(64px + env(safe-area-inset-bottom))`).
-  - 5 nút điều hướng chính:
-    1. **Chung** (`COMMON` - `/Home/Index?master=COMMON`)
-    2. **Học Vụ** (`ACADEMIC` - `/Home/Index?master=ACADEMIC`)
-    3. **Nút trung tâm nổi (FAB):**
-       - Nếu đã đăng nhập (`isAuthenticated`): **Quét QR** (`/Attendance/ScanQr`).
-       - Nếu là phụ huynh/khách: **Tra Cứu** (`/TraCuu`).
-    4. **Bí Tích** (`SACRAMENT` - `/Home/Index?master=SACRAMENT`)
-    5. **Quản Trị** (`GOVERNANCE` - `/Home/Index?master=GOVERNANCE`, hoặc `ATTENDANCE` nếu phân khu Quản trị bị khóa quyền).
+- **Bottom Navigation Bar — YouTube Floating Pill Dock (`.mobile-bottom-nav.yt-floating-nav`):**
+  - Thiết kế nổi dạng viên thuốc bo tròn (`position: fixed; bottom: max(12px, calc(env(safe-area-inset-bottom) + 8px)); border-radius: 9999px; background: rgba(18, 18, 18, 0.94)`).
+  - Trạng thái tab đang chọn hiển thị khung viên thuốc xám bo tròn (`.yt-nav-pill` với `background: rgba(255, 255, 255, 0.2)`) giống giao diện YouTube Mobile.
+  - 5 nút điều hướng chính (biểu tượng tối giản chuẩn vùng chạm `44x44px`):
+    1. **Chung** (`COMMON` - `/Home/Index?master=COMMON`) — Biểu tượng ngôi nhà.
+    2. **Học Vụ** (`ACADEMIC` - `/Home/Index?master=ACADEMIC`) — Biểu tượng mũ tốt nghiệp.
+    3. **Nút trung tâm vòng tròn (`.yt-center-circle`):**
+       - Nếu là nhân sự nội bộ (`isStaff`): **Quét QR** (`/Attendance/ScanQr`).
+       - Nếu là phụ huynh/khách: **Điểm Danh** (`/Home/Index?master=ATTENDANCE`).
+    4. **Bí Tích** (`SACRAMENT` - `/Home/Index?master=SACRAMENT`) — Biểu tượng huy chương.
+    5. **Quản Trị / Cá Nhân (`.yt-avatar-badge`):** Huy hiệu Avatar tròn màu xanh cổ vịt (`#00897b`) hiển thị chữ cái đầu tên người dùng (hoặc biểu tượng khách), điều hướng tới `GOVERNANCE`, `Account/Profile`, hoặc `Lookup/Index`.
 
 ### 4.3. Tối ưu Hiệu năng Di động (Performance Optimizations)
 1. **Loại bỏ `backdrop-filter: blur(...)` trên Mobile:** Tránh hiện tượng giật khung hình (scroll jank) trên chip đồ họa di động khi cuộn qua các phần tử cố định.

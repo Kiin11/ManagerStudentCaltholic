@@ -1,3 +1,4 @@
+@using System.Security.Claims
 @using ManagerStudentCaltholic.Models.Entities
 @{
     var currentCtrl = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Home";
@@ -19,92 +20,111 @@
     bool isLead = isAuthenticated && (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.SpiritualDirector) || User.IsInRole(UserRole.ExecutiveBoard));
     bool isStaff = isLead || (isAuthenticated && (User.IsInRole(UserRole.BranchHead) || User.IsInRole(UserRole.Teacher)));
     bool canViewGovernance = isLead || (isAuthenticated && User.IsInRole(UserRole.BranchHead));
+
+    var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "";
+    string avatarInitial = !string.IsNullOrWhiteSpace(fullName)
+        ? fullName.Trim().Substring(0, 1).ToUpperInvariant()
+        : "U";
+
+    bool isHomeActive = currentMaster == "COMMON" && currentCtrl != "Account" && currentCtrl != "Lookup";
 }
 
-<!-- FEAT-P5-02 / TASK-P5-02.1: THANH ĐIỀU HƯỚNG ĐÁY CỐ ĐỊNH 5 PHÂN KHU (SUB-TASK 02.1.1) -->
-<nav class="mobile-bottom-nav" aria-label="Thanh điều hướng nhanh phía dưới">
+<!-- FEAT-P5-02: THANH ĐIỀU HƯỚNG NỔI DẠNG VIÊN THUỐC (YOUTUBE FLOATING PILL DOCK) -->
+<nav class="mobile-bottom-nav yt-floating-nav" aria-label="Thanh điều hướng nhanh phía dưới">
     <ul class="mobile-nav-items">
-        <!-- 1. PHÂN KHU CHUNG -->
+        <!-- 1. TRANG CHỦ / PHÂN KHU CHUNG (Biểu tượng Ngôi nhà kèm Pill xám khi Active) -->
         <li class="mobile-nav-item">
-            <a class="mobile-nav-link @(currentMaster == "COMMON" ? "active" : "")"
+            <a class="mobile-nav-link touch-target-44 @(isHomeActive ? "active" : "")"
                asp-controller="Home" asp-action="Index" asp-route-master="COMMON"
-               title="Phân khu Chung">
-                <i class="bi @(currentMaster == "COMMON" ? "bi-house-heart-fill" : "bi-house-heart")"></i>
-                <span>Chung</span>
+               title="Phân khu Chung" aria-label="Phân khu Chung">
+                <span class="yt-nav-pill">
+                    <i class="bi @(isHomeActive ? "bi-house-door-fill" : "bi-house-door")"></i>
+                </span>
             </a>
         </li>
 
-        <!-- 2. PHÂN KHU ĐIỂM DANH (NỔI BẬT THAO TÁC 1-CHẠM) -->
+        <!-- 2. PHÂN KHU HỌC VỤ -->
+        <li class="mobile-nav-item">
+            <a class="mobile-nav-link touch-target-44 @(currentMaster == "ACADEMIC" ? "active" : "")"
+               asp-controller="Home" asp-action="Index" asp-route-master="ACADEMIC"
+               title="Phân khu Học Vụ" aria-label="Phân khu Học Vụ">
+                <span class="yt-nav-pill">
+                    <i class="bi @(currentMaster == "ACADEMIC" ? "bi-mortarboard-fill" : "bi-mortarboard")"></i>
+                </span>
+            </a>
+        </li>
+
+        <!-- 3. NÚT TRUNG TÂM VÒNG TRÒN KIỂU YOUTUBE (+ / QUÉT QR ĐIỂM DANH) -->
         <li class="mobile-nav-item">
             @if (isStaff)
             {
-                <a class="mobile-nav-link qr-highlight @(currentMaster == "ATTENDANCE" ? "active" : "")"
+                <a class="mobile-nav-link yt-center-action touch-target-44 @(currentMaster == "ATTENDANCE" ? "active" : "")"
                    asp-controller="Attendance" asp-action="ScanQr"
-                   title="Quét QR Điểm Danh">
-                    <div class="qr-circle">
-                        <i class="bi bi-qr-code-scan"></i>
-                    </div>
-                    <span>Quét QR</span>
+                   title="Quét QR Điểm Danh" aria-label="Quét QR Điểm Danh">
+                    <span class="yt-nav-pill">
+                        <span class="yt-center-circle">
+                            <i class="bi bi-qr-code-scan"></i>
+                        </span>
+                    </span>
                 </a>
             }
             else
             {
-                <a class="mobile-nav-link @(currentMaster == "ATTENDANCE" ? "active" : "")"
+                <a class="mobile-nav-link yt-center-action touch-target-44 @(currentMaster == "ATTENDANCE" ? "active" : "")"
                    asp-controller="Home" asp-action="Index" asp-route-master="ATTENDANCE"
-                   title="Phân khu Điểm Danh">
-                    <i class="bi @(currentMaster == "ATTENDANCE" ? "bi-calendar-check-fill" : "bi-calendar-check")"></i>
-                    <span>Điểm Danh</span>
+                   title="Phân khu Điểm Danh" aria-label="Phân khu Điểm Danh">
+                    <span class="yt-nav-pill">
+                        <span class="yt-center-circle">
+                            <i class="bi bi-plus-lg"></i>
+                        </span>
+                    </span>
                 </a>
             }
-        </li>
-
-        <!-- 3. PHÂN KHU HỌC VỤ -->
-        <li class="mobile-nav-item">
-            <a class="mobile-nav-link @(currentMaster == "ACADEMIC" ? "active" : "")"
-               asp-controller="Home" asp-action="Index" asp-route-master="ACADEMIC"
-               title="Phân khu Học Vụ">
-                <i class="bi @(currentMaster == "ACADEMIC" ? "bi-mortarboard-fill" : "bi-mortarboard")"></i>
-                <span>Học Vụ</span>
-            </a>
         </li>
 
         <!-- 4. PHÂN KHU BÍ TÍCH -->
         <li class="mobile-nav-item">
-            <a class="mobile-nav-link @(currentMaster == "SACRAMENT" ? "active" : "")"
+            <a class="mobile-nav-link touch-target-44 @(currentMaster == "SACRAMENT" ? "active" : "")"
                asp-controller="Home" asp-action="Index" asp-route-master="SACRAMENT"
-               title="Phân khu Bí Tích">
-                <i class="bi @(currentMaster == "SACRAMENT" ? "bi-award-fill" : "bi-award")"></i>
-                <span>Bí Tích</span>
+               title="Phân khu Bí Tích" aria-label="Phân khu Bí Tích">
+                <span class="yt-nav-pill">
+                    <i class="bi @(currentMaster == "SACRAMENT" ? "bi-award-fill" : "bi-award")"></i>
+                </span>
             </a>
         </li>
 
-        <!-- 5. PHÂN KHU QUẢN TRỊ / MENU -->
+        <!-- 5. CÁ NHÂN / QUẢN TRỊ (AVATAR TRÒN KIỂU YOUTUBE 'K') -->
         <li class="mobile-nav-item">
             @if (canViewGovernance)
             {
-                <a class="mobile-nav-link @(currentMaster == "GOVERNANCE" ? "active" : "")"
+                <a class="mobile-nav-link touch-target-44 @(currentMaster == "GOVERNANCE" ? "active" : "")"
                    asp-controller="Home" asp-action="Index" asp-route-master="GOVERNANCE"
-                   title="Phân khu Quản Trị">
-                    <i class="bi @(currentMaster == "GOVERNANCE" ? "bi-shield-lock-fill" : "bi-shield-lock")"></i>
-                    <span>Quản Trị</span>
+                   title="Phân khu Quản Trị" aria-label="Phân khu Quản Trị">
+                    <span class="yt-nav-pill">
+                        <span class="yt-avatar-badge">@avatarInitial</span>
+                    </span>
                 </a>
             }
             else if (isAuthenticated)
             {
-                <a class="mobile-nav-link @(currentCtrl == "Account" ? "active" : "")"
+                <a class="mobile-nav-link touch-target-44 @(currentCtrl == "Account" ? "active" : "")"
                    asp-controller="Account" asp-action="Profile"
-                   title="Hồ Sơ Cá Nhân">
-                    <i class="bi @(currentCtrl == "Account" ? "bi-person-circle" : "bi-person")"></i>
-                    <span>Cá Nhân</span>
+                   title="Hồ Sơ Cá Nhân" aria-label="Hồ Sơ Cá Nhân">
+                    <span class="yt-nav-pill">
+                        <span class="yt-avatar-badge">@avatarInitial</span>
+                    </span>
                 </a>
             }
             else
             {
-                <a class="mobile-nav-link @(currentCtrl == "Lookup" ? "active" : "")"
+                <a class="mobile-nav-link touch-target-44 @(currentCtrl == "Lookup" ? "active" : "")"
                    asp-controller="Lookup" asp-action="Index"
-                   title="Tra Cứu Học Sinh">
-                    <i class="bi @(currentCtrl == "Lookup" ? "bi-search-heart-fill" : "bi-search")"></i>
-                    <span>Tra Cứu</span>
+                   title="Tra Cứu Học Sinh" aria-label="Tra Cứu Học Sinh">
+                    <span class="yt-nav-pill">
+                        <span class="yt-avatar-badge yt-avatar-guest">
+                            <i class="bi bi-person-fill"></i>
+                        </span>
+                    </span>
                 </a>
             }
         </li>
