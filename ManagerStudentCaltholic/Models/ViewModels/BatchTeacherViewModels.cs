@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
@@ -22,7 +22,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
     public class BatchCreateTeachersRequestDto
     {
-        public string DefaultPassword { get; set; } = "GLV@2026!"; // Mật khẩu khởi tạo chung
+        public string? DefaultPassword { get; set; } = "GLV@2026!"; // Mật khẩu khởi tạo chung
         public List<BatchTeacherItemDto> Teachers { get; set; } = new();
     }
 

@@ -34,7 +34,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0@(isMobile ? ", viewport-fit=cover" : "")" />
     <!-- TASK-P5-02.4: Mở sớm kết nối tới CDN để rút ngắn thời gian tải CSS/JS -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin="anonymous" />
     <title>@ViewData["Title"] - Hệ Thống Quản Lý Giáo Lý</title>
 
     <!-- Bootstrap 5 & Bootstrap Icons -->
@@ -47,7 +47,7 @@
     @if (!isMobile)
     {
         <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     }
 
