@@ -146,7 +146,7 @@
                     <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
-                <div class="col-lg-6 col-md-12 d-flex justify-content-lg-end justify-content-start align-items-end gap-2 mt-3 mt-lg-0">
+                <div class="col-lg-6 col-md-12 d-flex flex-wrap justify-content-lg-end justify-content-start align-items-end gap-2 mt-3 mt-lg-0">
                     @if (!isMobile)
                     {
                         <div>
@@ -218,7 +218,7 @@
 
     <!-- Bảng Điểm Danh Chuyên Cần -->
     <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-0">
+        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-0">
             <div>
                 <h5 class="fw-bold text-dark mb-0">
                     <i class="bi bi-card-checklist me-2 text-primary"></i>Sổ Chuyên Cần: @Model.ClassName
@@ -231,52 +231,68 @@
                 <i class="bi bi-qr-code-scan me-1"></i> Chế độ Quét QR Cổng
             </a>
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="tableAttendance">
-                <thead class="table-light">
-                    <tr>
-                        <th class="ps-3 text-center" style="width: 45px;">STT</th>
-                        <th>Mã QR</th>
-                        <th>Họ Và Tên</th>
-                        @if (Model.DayOfWeek == DayOfWeek.Sunday)
-                        {
-                            <th class="text-center bg-primary-subtle text-primary border-start border-end" style="width: 230px;">
-                                <i class="bi bi-book me-1"></i>GIỜ HỌC GIÁO LÝ
-                            </th>
-                        }
-                        <th class="text-center bg-success-subtle text-success border-end" style="width: 230px;">
-                            <i class="bi bi-bell-fill me-1"></i>THÁNH LỄ (@(Model.DayOfWeek == DayOfWeek.Thursday ? "T5 17h45" : "CN 6h30"))
-                        </th>
-                        <th>Ghi Chú</th>
-                        @if (!isMobile)
-                        {
-                            <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
-                            <th class="text-center" style="width: 100px;">Xem lịch sử</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model.Students.Any())
-                    {
-                        var stt = 1;
-                        foreach (var s in Model.Students)
-                        {
-                            <tr data-enrollment-id="@s.EnrollmentId">
-                                <td class="ps-3 text-center fw-bold text-muted">@(stt++)</td>
-                                <td>
-                                    <span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span>
-                                </td>
-                                <td>
-                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
-                                    <small class="text-muted">Giới tính: @s.Gender</small>
-                                </td>
 
-                                <!-- CỘT CHUYÊN CẦN HỌC GIÁO LÝ -->
-                                @if (Model.DayOfWeek == DayOfWeek.Sunday)
-                                {
-                                    <td class="border-start border-end bg-light-subtle">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="form-check form-switch mb-0">
+        @if (isMobile)
+        {
+            <!-- GIAO DIỆN MOBILE: DẠNG THẺ HỌC SINH THEO 2 TRƯỜNG HỢP (CHÚA NHẬT 2 CỘT / THỨ 5 1 CỘT) -->
+            <div id="tableAttendance" class="mobile-att-list">
+                @if (Model.Students.Any())
+                {
+                    var stt = 1;
+                    foreach (var s in Model.Students)
+                    {
+                        <div class="mobile-att-card"
+                             data-enrollment-id="@s.EnrollmentId"
+                             data-student-id="@s.StudentId"
+                             data-student-code="@s.StudentCode"
+                             data-student-name="@s.ChristianName @s.FullName">
+
+                            <!-- HÀNG TRÊN: THÔNG TIN HỌC SINH -->
+                            <div class="mobile-att-info">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <div>
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <span class="badge bg-secondary-subtle text-secondary rounded-pill">#@(stt++)</span>
+                                            <span class="badge bg-light text-dark border font-monospace student-code-badge">@s.StudentCode</span>
+                                            <small class="text-muted">(@s.Gender)</small>
+                                        </div>
+                                        <div class="mobile-att-student-name student-fullname-text">@s.ChristianName @s.FullName</div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2 py-1"
+                                                title="Copy tin nhắn báo vắng gửi Phụ huynh"
+                                                data-enrollment-id="@s.EnrollmentId"
+                                                onclick="quickCopyAbsenceMessageFromRow(this)">
+                                            <i class="bi bi-chat-dots-fill"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-info btn-sm rounded-circle p-1 px-2"
+                                                title="Xem lịch sử điểm danh"
+                                                data-student-id="@s.StudentId"
+                                                data-student-name="@s.FullName"
+                                                onclick="openAuditTimelineFromBtn(this)">
+                                            <i class="bi bi-clock-history"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <input type="text" class="form-control form-control-sm input-note mt-1"
+                                       placeholder="Ghi chú lý do vắng/trễ..." value="@s.Note" />
+                            </div>
+
+                            <!-- HÀNG DƯỚI: TRƯỜNG HỢP CHÚA NHẬT (2 CỘT: ĐI HỌC CN | ĐI LỄ CHÚA NHẬT) HOẶC THỨ 5 (1 CỘT: ĐI LỄ THỨ 5) -->
+                            @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                            {
+                                <div class="mobile-att-split-row">
+                                    <!-- CỘT TRÁI: ĐI HỌC CN -->
+                                    <div class="mobile-att-col mobile-att-col-left">
+                                        <div class="mobile-att-slot-label text-primary">
+                                            <span><i class="bi bi-book me-1"></i>Đi học CN</span>
+                                            @if (s.ClassCheckInTime.HasValue)
+                                            {
+                                                <small class="text-muted fw-normal">@s.ClassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                            }
+                                        </div>
+                                        <div class="mobile-att-controls">
+                                            <div class="form-check form-switch">
                                                 <input class="form-check-input chk-class" type="checkbox" role="switch"
                                                        @(s.ClassAttended ? "checked" : "") onchange="onClassToggle(this)" />
                                             </div>
@@ -287,16 +303,48 @@
                                                 <!option value="ABSENT_UNPERMITTED" @(s.ClassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
                                             </select>
                                         </div>
-                                        @if (s.ClassCheckInTime.HasValue)
+                                    </div>
+
+                                    <!-- CỘT PHẢI: ĐI LỄ CHÚA NHẬT -->
+                                    <div class="mobile-att-col mobile-att-col-right">
+                                        <div class="mobile-att-slot-label text-success">
+                                            <span><i class="bi bi-bell-fill me-1"></i>Đi lễ Chúa Nhật</span>
+                                            @if (s.MassCheckInTime.HasValue)
+                                            {
+                                                <small class="text-muted fw-normal">@s.MassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                            }
+                                        </div>
+                                        <div class="mobile-att-controls">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input chk-mass" type="checkbox" role="switch"
+                                                       @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
+                                            </div>
+                                            <select class="form-select form-select-sm select-mass-status">
+                                                <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
+                                                <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
+                                                <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
+                                                <!option value="ABSENT_PERMITTED" @(s.MassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
+                                                <!option value="ABSENT_UNPERMITTED" @(s.MassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <!-- TRƯỜNG HỢP 2: NGÀY THỨ 5 (CHỈ ĐI LỄ THỨ 5 - 1 CỘT TOÀN CHIỀU NGANG) -->
+                                <div class="mobile-att-single-row">
+                                    <div class="mobile-att-slot-label text-success">
+                                        <span>
+                                            <i class="bi bi-bell-fill me-1"></i>@(Model.DayOfWeek == DayOfWeek.Thursday ? "Đi lễ Thứ 5 (17h45)" : "Đi lễ")
+                                        </span>
+                                        @if (s.MassCheckInTime.HasValue)
                                         {
-                                            <small class="text-muted d-block mt-1">Giờ vào: @s.ClassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                            <small class="text-muted fw-normal">Giờ quét: @s.MassCheckInTime.Value.ToString(@"hh\:mm")</small>
                                         }
-                                    </td>
-                                }
-                                <!-- CỘT CHUYÊN CẦN THÁNH LỄ -->
-                                <td class="border-end bg-light-subtle">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="form-check form-switch mb-0">
+                                    </div>
+                                    <div class="mobile-att-controls">
+                                        <div class="form-check form-switch">
                                             <input class="form-check-input chk-mass" type="checkbox" role="switch"
                                                    @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
                                         </div>
@@ -308,17 +356,109 @@
                                             <!option value="ABSENT_UNPERMITTED" @(s.MassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
                                         </select>
                                     </div>
-                                    @if (s.MassCheckInTime.HasValue)
-                                    {
-                                        <small class="text-muted d-block mt-1">Giờ quét: @s.MassCheckInTime.Value.ToString(@"hh\:mm")</small>
-                                    }
-                                </td>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted bg-white rounded-3 border">
+                        <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                        Lớp chưa có thiếu nhi nào hoặc chưa được kích hoạt.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <!-- GIAO DIỆN DESKTOP (GIỮ NGUYÊN BẢNG GỐC) -->
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tableAttendance">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 text-center" style="width: 45px;">STT</th>
+                            <th>Mã QR</th>
+                            <th>Họ Và Tên</th>
+                            @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                            {
+                                <th class="text-center bg-primary-subtle text-primary border-start border-end" style="width: 230px;">
+                                    <i class="bi bi-book me-1"></i>GIỜ HỌC GIÁO LÝ
+                                </th>
+                            }
+                            <th class="text-center bg-success-subtle text-success border-end" style="width: 230px;">
+                                <i class="bi bi-bell-fill me-1"></i>THÁNH LỄ (@(Model.DayOfWeek == DayOfWeek.Thursday ? "T5 17h45" : "CN 6h30"))
+                            </th>
+                            <th>Ghi Chú</th>
+                            <th class="text-center" style="width: 100px;">Điểm Danh Bù</th>
+                            <th class="text-center" style="width: 100px;">Xem lịch sử</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Students.Any())
+                        {
+                            var stt = 1;
+                            foreach (var s in Model.Students)
+                            {
+                                <tr data-enrollment-id="@s.EnrollmentId"
+                                    data-student-id="@s.StudentId"
+                                    data-student-code="@s.StudentCode"
+                                    data-student-name="@s.ChristianName @s.FullName">
+                                    <td class="ps-3 text-center fw-bold text-muted">@(stt++)</td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border font-monospace student-code-badge">@s.StudentCode</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark student-fullname-text">@s.ChristianName @s.FullName</div>
+                                        <small class="text-muted">Giới tính: @s.Gender</small>
+                                    </td>
 
-                                <td>
-                                    <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
-                                </td>
-                                @if (!isMobile)
-                                {
+                                    <!-- CỘT CHUYÊN CẦN HỌC GIÁO LÝ -->
+                                    @if (Model.DayOfWeek == DayOfWeek.Sunday)
+                                    {
+                                        <td class="border-start border-end bg-light-subtle">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="form-check form-switch mb-0">
+                                                    <input class="form-check-input chk-class" type="checkbox" role="switch"
+                                                           @(s.ClassAttended ? "checked" : "") onchange="onClassToggle(this)" />
+                                                </div>
+                                                <select class="form-select form-select-sm select-class-status">
+                                                    <!option value="PRESENT" @(s.ClassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
+                                                    <!option value="LATE" @(s.ClassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
+                                                    <!option value="ABSENT_PERMITTED" @(s.ClassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
+                                                    <!option value="ABSENT_UNPERMITTED" @(s.ClassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
+                                                </select>
+                                            </div>
+                                            @if (s.ClassCheckInTime.HasValue)
+                                            {
+                                                <small class="text-muted d-block mt-1">Giờ vào: @s.ClassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                            }
+                                        </td>
+                                    }
+                                    <!-- CỘT CHUYÊN CẦN THÁNH LỄ -->
+                                    <td class="border-end bg-light-subtle">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input chk-mass" type="checkbox" role="switch"
+                                                       @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
+                                            </div>
+                                            <select class="form-select form-select-sm select-mass-status">
+                                                <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
+                                                <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
+                                                <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
+                                                <!option value="ABSENT_PERMITTED" @(s.MassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
+                                                <!option value="ABSENT_UNPERMITTED" @(s.MassStatus == "ABSENT_UNPERMITTED" ? "selected" : "")>Vắng k.phép</!option>
+                                            </select>
+                                        </div>
+                                        @if (s.MassCheckInTime.HasValue)
+                                        {
+                                            <small class="text-muted d-block mt-1">Giờ quét: @s.MassCheckInTime.Value.ToString(@"hh\:mm")</small>
+                                        }
+                                    </td>
+
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
+                                    </td>
                                     <td>
                                         <!-- NÚT 1-CLICK COPY TIN BÁO VẮNG GỬI ZALO/VIBER (TASK-P3-07.4) -->
                                         <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
@@ -337,23 +477,22 @@
                                             <i class="bi bi-clock-history"></i>
                                         </button>
                                     </td>
-                                }
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="@(Model.DayOfWeek == DayOfWeek.Sunday ? 8 : 7)" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                    Lớp chưa có thiếu nhi nào hoặc chưa được kích hoạt.
+                                </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="@(isMobile ? (Model.DayOfWeek == DayOfWeek.Sunday ? 6 : 5) : (Model.DayOfWeek == DayOfWeek.Sunday ? 8 : 7))" class="text-center py-5 text-muted">
-                                <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-                                Lớp chưa có thiếu nhi nào hoặc chưa được kích hoạt.
-                            </td>
-                        </tr>
-                    }
-                
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </div>
 
@@ -594,7 +733,7 @@
         }
 
         function onClassToggle(chk) {
-            const row = chk.closest('tr');
+            const row = chk.closest('[data-enrollment-id]');
             const selectStatus = row.querySelector('.select-class-status');
             if (chk.checked) {
                 if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
@@ -606,7 +745,7 @@
         }
 
         function onMassToggle(chk) {
-            const row = chk.closest('tr');
+            const row = chk.closest('[data-enrollment-id]');
             const selectStatus = row.querySelector('.select-mass-status');
             if (chk.checked) {
                 if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
@@ -618,7 +757,7 @@
         }
 
         function markAllClass(isPresent) {
-            document.querySelectorAll('#tableAttendance tbody tr').forEach(row => {
+            document.querySelectorAll('#tableAttendance [data-enrollment-id]').forEach(row => {
                 const chk = row.querySelector('.chk-class');
                 const sel = row.querySelector('.select-class-status');
                 if (chk && sel) {
@@ -629,7 +768,7 @@
         }
 
         function markAllMass(isAttended) {
-            document.querySelectorAll('#tableAttendance tbody tr').forEach(row => {
+            document.querySelectorAll('#tableAttendance [data-enrollment-id]').forEach(row => {
                 const chk = row.querySelector('.chk-mass');
                 const sel = row.querySelector('.select-mass-status');
                 if (chk && sel) {
@@ -666,11 +805,11 @@
         // Tự động lưu danh sách học sinh của lớp đang hiển thị vào IndexedDB ngay khi mở trang
         document.addEventListener('DOMContentLoaded', function () {
             const domStudents = [];
-            document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]').forEach(r => {
+            document.querySelectorAll('#tableAttendance [data-enrollment-id]').forEach(r => {
                 const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
-                const code = r.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
-                const fullName = r.querySelector('td:nth-child(3) .fw-bold')?.textContent?.trim() || '';
-                const studentId = parseInt(r.querySelector('button[data-student-id]')?.getAttribute('data-student-id') || '0');
+                const code = r.getAttribute('data-student-code') || r.querySelector('.student-code-badge')?.textContent?.trim() || '';
+                const fullName = r.getAttribute('data-student-name') || r.querySelector('.student-fullname-text')?.textContent?.trim() || '';
+                const studentId = parseInt(r.getAttribute('data-student-id') || r.querySelector('button[data-student-id]')?.getAttribute('data-student-id') || '0');
                 domStudents.push({
                     enrollmentId: enrollmentId,
                     studentId: studentId,
@@ -699,7 +838,7 @@
         async function saveBatchAttendance() {
             const classId = parseInt(document.getElementById('selectClass').value);
             const date = document.getElementById('inputDate').value;
-            const rows = document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]');
+            const rows = document.querySelectorAll('#tableAttendance [data-enrollment-id]');
 
             if (rows.length === 0) {
                 alert('Không có học sinh để lưu điểm danh!');
@@ -709,7 +848,7 @@
             const items = [];
             rows.forEach(r => {
                 const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
-                const code = r.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
+                const code = r.getAttribute('data-student-code') || r.querySelector('.student-code-badge')?.textContent?.trim() || '';
 
                 const chkClass = r.querySelector('.chk-class');
                 const selClass = r.querySelector('.select-class-status');
@@ -1033,10 +1172,10 @@
             const studentSelect = document.getElementById('modalStudentSelect');
             studentSelect.innerHTML = '<option value="">-- Chọn thiếu nhi trong lớp --</option>';
 
-            document.querySelectorAll('#tableAttendance tbody tr[data-enrollment-id]').forEach(row => {
+            document.querySelectorAll('#tableAttendance [data-enrollment-id]').forEach(row => {
                 const enrollmentId = row.getAttribute('data-enrollment-id');
-                const nameText = row.querySelector('td:nth-child(3) .fw-bold')?.innerText || 'Thiếu nhi';
-                const codeText = row.querySelector('td:nth-child(2) .badge')?.innerText || '';
+                const nameText = row.getAttribute('data-student-name') || row.querySelector('.student-fullname-text')?.innerText || 'Thiếu nhi';
+                const codeText = row.getAttribute('data-student-code') || row.querySelector('.student-code-badge')?.innerText || '';
 
                 const opt = document.createElement('option');
                 opt.value = enrollmentId;
@@ -1166,7 +1305,7 @@
 
         // TASK-P3-07.4: 1-Click Copy tin nhắn báo vắng / đi trễ ngay trên dòng Sổ Điểm Danh
         async function quickCopyAbsenceMessageFromRow(btn) {
-            const row = btn.closest('tr');
+            const row = btn.closest('[data-enrollment-id]');
             const enrollmentId = parseInt(btn.getAttribute('data-enrollment-id'));
             const date = document.getElementById('inputDate')?.value || new Date().toISOString().split('T')[0];
 
@@ -1180,8 +1319,8 @@
             const classAttended = chkClass ? chkClass.checked : false;
             const classStatus = selClass ? selClass.value : 'ABSENT_UNPERMITTED';
 
-            const studentName = row.querySelector('td:nth-child(3) .fw-bold')?.textContent?.trim() || 'Thiếu nhi';
-            const studentCode = row.querySelector('td:nth-child(2) .badge')?.textContent?.trim() || '';
+            const studentName = row.getAttribute('data-student-name') || row.querySelector('.student-fullname-text')?.textContent?.trim() || 'Thiếu nhi';
+            const studentCode = row.getAttribute('data-student-code') || row.querySelector('.student-code-badge')?.textContent?.trim() || '';
 
             try {
                 let compiledText = '';

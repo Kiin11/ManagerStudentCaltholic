@@ -323,3 +323,105 @@ body.mobile-mode .scroll-floating-controls {
     align-items: center;
     justify-content: space-between;
 }
+
+/* =======================================================
+   7. THẺ ĐIỂM DANH LỚP TRÊN MOBILE (CHÚA NHẬT 2 CỘT / THỨ 5 1 CỘT)
+   ======================================================= */
+.mobile-att-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+}
+
+.mobile-att-card {
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+/* Hàng trên: Thông tin học sinh (100% chiều ngang) */
+.mobile-att-info {
+    padding: 10px 12px;
+    border-bottom: 1.5px solid #cbd5e1;
+    background: #ffffff;
+}
+
+.mobile-att-student-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+/* Hàng dưới Trường hợp 1 (Chúa Nhật): Chia đôi 2 cột 50% | 50% có vách ngăn dọc */
+.mobile-att-split-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    background: #f8fafc;
+}
+
+.mobile-att-col {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.mobile-att-col-left {
+    border-right: 1.5px solid #cbd5e1;
+    background: rgba(239, 246, 255, 0.45);
+}
+
+.mobile-att-col-right {
+    background: rgba(240, 253, 244, 0.45);
+}
+
+/* Hàng dưới Trường hợp 2 (Thứ 5 / Chỉ đi lễ): 1 ô 100% chiều ngang */
+.mobile-att-single-row {
+    padding: 10px 12px;
+    background: rgba(240, 253, 244, 0.45);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mobile-att-slot-label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+.mobile-att-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mobile-att-controls .form-switch {
+    margin-bottom: 0;
+    padding-left: 2.25em;
+    flex-shrink: 0;
+}
+
+.mobile-att-controls .form-switch .form-check-input {
+    width: 2.1em;
+    height: 1.15em;
+    cursor: pointer;
+}
+
+.mobile-att-controls .form-select-sm {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 24px 4px 8px;
+    border-radius: 8px;
+}
