@@ -119,30 +119,6 @@
                     </select>
                 </div>
                 <div class="col-lg-3 col-md-6">
-                    @if (!isMobile)
-                    {
-                        <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
-                        <div class="row g-2 mb-3">
-                            <div class="col-4">
-                                <label class="form-label small text-muted mb-1">Lễ Chúa Nhật (%)</label>
-                                <input type="number" id="ruleSundayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="40" onchange="autoBalanceClassWeight()" />
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small text-muted mb-1">Lễ Thứ Năm (%)</label>
-                                <input type="number" id="ruleThursdayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="20" onchange="autoBalanceClassWeight()" />
-                            </div>
-                            <div class="col-4">
-                                <label class="form-label small text-muted mb-1">Giờ Học GL (%)</label>
-                                <input type="number" id="ruleClassWeight" class="form-control form-control-sm text-center fw-bold bg-light" min="0" max="100" value="40" readonly />
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <input type="hidden" id="ruleSundayMassWeight" value="40" />
-                        <input type="hidden" id="ruleThursdayMassWeight" value="20" />
-                        <input type="hidden" id="ruleClassWeight" value="40" />
-                    }
                     <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-calendar3 me-1"></i>Ngày Điểm Danh:</label>
                     <input type="date" id="inputDate" class="form-control" value="@ViewBag.SelectedDate" onchange="onFilterChange()" />
                 </div>
@@ -630,22 +606,20 @@
             <div class="modal-body p-4">
                 <input type="hidden" id="ruleClassId" />
 
-                <!-- Tỷ trọng Lễ / Học -->
+                <!-- Tỷ trọng Lễ CN / Lễ T5 / Học GL -->
                 <label class="form-label fw-bold small text-dark">1. Tỷ Trọng Tính Điểm (Tổng = 100%)</label>
                 <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text bg-light">Thánh Lễ</span>
-                            <input type="number" id="ruleMassWeight" class="form-control text-center fw-bold" min="0" max="100" onchange="autoBalanceClassWeight(this)" />
-                            <span class="input-group-text">%</span>
-                        </div>
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Lễ Chúa Nhật (%)</label>
+                        <input type="number" id="ruleSundayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="40" onchange="autoBalanceClassWeight()" />
                     </div>
-                    <div class="col-6">
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text bg-light">Giờ Học</span>
-                            <input type="number" id="ruleClassWeight" class="form-control text-center fw-bold" min="0" max="100" readonly />
-                            <span class="input-group-text">%</span>
-                        </div>
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Lễ Thứ Năm (%)</label>
+                        <input type="number" id="ruleThursdayMassWeight" class="form-control form-control-sm text-center fw-bold" min="0" max="100" value="20" onchange="autoBalanceClassWeight()" />
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small text-muted mb-1">Giờ Học GL (%)</label>
+                        <input type="number" id="ruleClassWeight" class="form-control form-control-sm text-center fw-bold bg-light" min="0" max="100" value="40" readonly />
                     </div>
                 </div>
 
@@ -990,48 +964,6 @@
             } catch (err) {
                 alert('Lỗi kết nối máy chủ: ' + err);
             }
-        }
-        function openAuditTimeline(studentId, studentName) {
-            document.getElementById('auditStudentName').innerText = studentName;
-            const modal = new bootstrap.Modal(document.getElementById('auditTimelineModal'));
-            modal.show();
-
-            const loading = document.getElementById('timelineLoading');
-            const list = document.getElementById('timelineList');
-            loading.style.display = 'block';
-            list.style.display = 'none';
-            list.innerHTML = '';
-
-            const selectedDate = document.getElementById('attendanceDatePicker')?.value || new Date().toISOString().split('T')[0];
-
-            fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${selectedDate}`)
-                .then(res => res.json())
-                .then(response => {
-                    loading.style.display = 'none';
-                    list.style.display = 'block';
-
-                    if (!response.success || response.data.length === 0) {
-                        list.innerHTML = '<li class="text-muted small">Không tìm thấy thông tin kiểm toán.</li>';
-                        return;
-                    }
-
-                    response.data.forEach(item => {
-                        const li = document.createElement('li');
-                        li.className = 'timeline-item';
-                        li.innerHTML = `
-                            <span class="timeline-badge"></span>
-                            <div class="fw-semibold text-primary small">${item.timeDisplay}</div>
-                            <div class="text-dark small">${item.description}</div>
-                            <div class="text-muted fst-italic" style="font-size: 0.75rem;">Thực hiện bởi: ${item.performedBy}</div>
-                        `;
-                        list.appendChild(li);
-                    });
-                })
-                .catch(err => {
-                    loading.style.display = 'none';
-                    list.style.display = 'block';
-                    list.innerHTML = '<li class="text-danger small">Lỗi kết nối khi tải lịch sử.</li>';
-                });
         }
 
         // Tự động lưu cache danh sách học sinh của lớp đang mở vào LocalStorage

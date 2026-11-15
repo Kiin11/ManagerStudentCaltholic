@@ -353,6 +353,107 @@ else
             </div>
         </div>
     </div>
+
+    <!-- FEAT-P4-02: Modal Xét Duyệt Cuối Năm Theo Loại Lớp -->
+    <div class="modal fade" id="modalClassEvaluation" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white rounded-top-4">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="evalModalTitle">
+                            <i class="bi @Model.EvaluationAction.IconClass me-2"></i>@Model.EvaluationAction.ModalTitle
+                        </h5>
+                        <div class="small opacity-75" id="evalModalSubtitle">@Model.EvaluationAction.TargetDescription</div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body p-3">
+                    <!-- Thẻ KPI Tóm tắt -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded-3 bg-light border text-center">
+                                <div class="text-muted small">Tổng sĩ số lớp</div>
+                                <div class="fs-5 fw-bold text-dark" id="evalKpiTotal">0</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded-3 bg-success-subtle border border-success-subtle text-center">
+                                <div class="text-success small">Đạt tự động</div>
+                                <div class="fs-5 fw-bold text-success" id="evalKpiAutoPass">0</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded-3 bg-warning-subtle border border-warning-subtle text-center">
+                                <div class="text-warning-emphasis small">Đề xuất đặc cách</div>
+                                <div class="fs-5 fw-bold text-warning-emphasis" id="evalKpiSpecial">0</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 rounded-3 bg-danger-subtle border border-danger-subtle text-center">
+                                <div class="text-danger small">Chưa đạt / Ở lại</div>
+                                <div class="fs-5 fw-bold text-danger" id="evalKpiRetain">0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Thông báo Chiến dịch đi lễ 1 tháng nếu là lớp RL2 / TS3 / BĐ3 / DB4 -->
+                    <div id="evalCampaignBanner" class="alert alert-info py-2 px-3 small d-none mb-3"></div>
+
+                    <!-- Bộ lọc nhanh trong Modal -->
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary active" onclick="filterEvaluationRows('ALL', this)">Tất cả</button>
+                            <button type="button" class="btn btn-outline-success" onclick="filterEvaluationRows('ELIGIBLE', this)">Đủ điều kiện</button>
+                            <button type="button" class="btn btn-outline-danger" onclick="filterEvaluationRows('INELIGIBLE', this)">Thiếu điều kiện (Cần xem xét)</button>
+                        </div>
+                        <div class="small text-muted">
+                            Ngưỡng chuẩn: ĐTB Năm ≥ <strong id="lblMinAvg">5.0</strong> | Chuyên cần ≥ <strong id="lblMinAtt">80%</strong>
+                        </div>
+                    </div>
+
+                    <!-- Bảng danh sách xét duyệt từng thiếu nhi -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle small mb-0">
+                            <thead class="table-light text-center">
+                                <tr>
+                                    <th>Mã TN</th>
+                                    <th class="text-start">Tên Thánh & Họ Tên</th>
+                                    <th>ĐTB HK1</th>
+                                    <th>ĐTB HK2</th>
+                                    <th>ĐTB Năm</th>
+                                    <th class="col-sacrament-only d-none">Khảo Hạch</th>
+                                    <th>Chuyên Cần</th>
+                                    <th class="col-campaign-only d-none">Chiến Dịch Lễ</th>
+                                    <th>Đánh Giá Hệ Thống</th>
+                                    <th style="min-width: 170px;">Đề Xuất Của GLV</th>
+                                    <th class="col-sacrament-only d-none" style="min-width: 150px;">Người Đỡ Đầu</th>
+                                    <th style="min-width: 190px;">Ghi Chú / Lý Do Đặc Cách</th>
+                                </tr>
+                            </thead>
+                            <tbody id="evalTableBody">
+                                <tr>
+                                    <td colspan="12" class="text-center py-4 text-muted">Đang tải dữ liệu xét duyệt của lớp...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="modal-footer justify-content-between">
+                    <div class="small text-muted">
+                        <i class="bi bi-shield-check me-1"></i>Mọi đề xuất và ghi chú đặc cách đều được lưu vết kiểm toán (Audit Log).
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                        <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btnSubmitClassEvaluation" onclick="submitClassEvaluation()">
+                            <i class="bi bi-send-check-fill me-1"></i> Lưu & Trình Kết Quả Xét Duyệt
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 }
 
 @section Scripts {
@@ -520,109 +621,7 @@ else
             }
         }
 
-                <!-- FEAT-P4-02: Modal Xét Duyệt Cuối Năm Theo Loại Lớp -->
-        <div class="modal fade" id="modalClassEvaluation" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                <div class="modal-content rounded-4 border-0 shadow-lg">
-                    <div class="modal-header bg-primary text-white rounded-top-4">
-                        <div>
-                            <h5 class="modal-title fw-bold mb-0" id="evalModalTitle">
-                                <i class="bi @Model.EvaluationAction.IconClass me-2"></i>@Model.EvaluationAction.ModalTitle
-                            </h5>
-                            <div class="small opacity-75" id="evalModalSubtitle">@Model.EvaluationAction.TargetDescription</div>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-
-                    <div class="modal-body p-3">
-                        <!-- Thẻ KPI Tóm tắt -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-3 col-6">
-                                <div class="p-2 rounded-3 bg-light border text-center">
-                                    <div class="text-muted small">Tổng sĩ số lớp</div>
-                                    <div class="fs-5 fw-bold text-dark" id="evalKpiTotal">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <div class="p-2 rounded-3 bg-success-subtle border border-success-subtle text-center">
-                                    <div class="text-success small">Đạt tự động</div>
-                                    <div class="fs-5 fw-bold text-success" id="evalKpiAutoPass">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <div class="p-2 rounded-3 bg-warning-subtle border border-warning-subtle text-center">
-                                    <div class="text-warning-emphasis small">Đề xuất đặc cách</div>
-                                    <div class="fs-5 fw-bold text-warning-emphasis" id="evalKpiSpecial">0</div>
-                                </div>
-                            </div>
-                            <div class="col-md-3 col-6">
-                                <div class="p-2 rounded-3 bg-danger-subtle border border-danger-subtle text-center">
-                                    <div class="text-danger small">Chưa đạt / Ở lại</div>
-                                    <div class="fs-5 fw-bold text-danger" id="evalKpiRetain">0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Thông báo Chiến dịch đi lễ 1 tháng nếu là lớp RL2 / TS3 / BĐ3 / DB4 -->
-                        <div id="evalCampaignBanner" class="alert alert-info py-2 px-3 small d-none mb-3"></div>
-
-                        <!-- Bộ lọc nhanh trong Modal -->
-                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-secondary active" onclick="filterEvaluationRows('ALL', this)">Tất cả</button>
-                                <button type="button" class="btn btn-outline-success" onclick="filterEvaluationRows('ELIGIBLE', this)">Đủ điều kiện</button>
-                                <button type="button" class="btn btn-outline-danger" onclick="filterEvaluationRows('INELIGIBLE', this)">Thiếu điều kiện (Cần xem xét)</button>
-                            </div>
-                            <div class="small text-muted">
-                                Ngưỡng chuẩn: ĐTB Năm ≥ <strong id="lblMinAvg">5.0</strong> | Chuyên cần ≥ <strong id="lblMinAtt">80%</strong>
-                            </div>
-                        </div>
-
-                        <!-- Bảng danh sách xét duyệt từng thiếu nhi -->
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover align-middle small mb-0">
-                                <thead class="table-light text-center">
-                                    <tr>
-                                        <th>Mã TN</th>
-                                        <th class="text-start">Tên Thánh & Họ Tên</th>
-                                        <th>ĐTB HK1</th>
-                                        <th>ĐTB HK2</th>
-                                        <th>ĐTB Năm</th>
-                                        <th class="col-sacrament-only d-none">Khảo Hạch</th>
-                                        <th>Chuyên Cần</th>
-                                        <th class="col-campaign-only d-none">Chiến Dịch Lễ</th>
-                                        <th>Đánh Giá Hệ Thống</th>
-                                        <th style="min-width: 170px;">Đề Xuất Của GLV</th>
-                                        <th class="col-sacrament-only d-none" style="min-width: 150px;">Người Đỡ Đầu</th>
-                                        <th style="min-width: 190px;">Ghi Chú / Lý Do Đặc Cách</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="evalTableBody">
-                                    <tr>
-                                        <td colspan="12" class="text-center py-4 text-muted">Đang tải dữ liệu xét duyệt của lớp...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="modal-footer justify-content-between">
-                        <div class="small text-muted">
-                            <i class="bi bi-shield-check me-1"></i>Mọi đề xuất và ghi chú đặc cách đều được lưu vết kiểm toán (Audit Log).
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
-                            <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btnSubmitClassEvaluation" onclick="submitClassEvaluation()">
-                                <i class="bi bi-send-check-fill me-1"></i> Lưu & Trình Kết Quả Xét Duyệt
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <script>
-            let currentEvaluationSheet = null;
+        let currentEvaluationSheet = null;
 
             function getGradeCsrfToken() {
                 return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';

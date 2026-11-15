@@ -242,8 +242,7 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         StudentId = entity.Id,
                         ClassRoomId = selectedClass.Id,
-                        //AcademicYearId = selectedClass.AcademicYearId,
-                        //EnrollDate = DateTime.UtcNow
+                        AcademicYearId = selectedClass.AcademicYearId
                     });
                     await _context.SaveChangesAsync();
                 }

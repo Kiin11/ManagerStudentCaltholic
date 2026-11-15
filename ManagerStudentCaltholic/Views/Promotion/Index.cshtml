@@ -535,15 +535,5 @@
                 btn.innerHTML = '<i class="bi bi-rocket-takeoff me-1"></i> Xác Nhận Thực Thi';
             }
         }
-
-        const selectedMode = document.querySelector('input[name="codeTransitionMode"]:checked')?.value || 'SUFFIX_ONLY';
-        const payload = {
-            sourceAcademicYearId: @Model.SourceYearId,
-            sourceClassId: @Model.SelectedClassId,
-            targetAcademicYearId: @Model.TargetYearId,
-            useSmartBalancing: document.getElementById('chkSmartBalancing').checked,
-            codeTransitionMode: selectedMode,
-            decisions: decisions
-        };
     </script>
 }
