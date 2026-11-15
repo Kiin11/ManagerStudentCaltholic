@@ -35,6 +35,14 @@ Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong
 - **StaffQuickLookupLogs ↔ Students (n-1):** Khóa ngoại `StudentId` (`[ForeignKey(nameof(StudentId))]`). DeleteBehavior: `Cascade`. Index trên `StudentId`.
 - **LookupViewOptions (Bảng cấu hình độc lập):** Khóa chính `Id`, Unique Index trên `OptionCode`. Được seed sẵn 4 cấu hình chế độ xem (`OVERVIEW`, `ATTENDANCE_DETAIL`, `ACADEMIC_2Y_SACRAMENT`, `PARENT_CONTACT`) trong `ParishDbContext.OnModelCreating`.
 
+## 7. Lesson Plans & Class Curriculum Versioning (`FEAT-P5-07`)
+- **ClassCurriculumDocuments ↔ Classes, AcademicYears (n-1):** Khóa ngoại `ClassRoomId`, `AcademicYearId`. DeleteBehavior: `Cascade`. Index trên `(ClassRoomId, AcademicYearId)` và `AcademicYearId`.
+- **ClassCurriculumDocuments ↔ Users (n-1):** Khóa ngoại `CreatedByUserId`, `UpdatedByUserId`. DeleteBehavior: `SetNull`.
+- **ClassCurriculumVersions ↔ ClassCurriculumDocuments (n-1):** Khóa ngoại `ClassCurriculumDocumentId`. DeleteBehavior: `Cascade`. Index trên `(ClassCurriculumDocumentId, VersionNumber)` và `CreatedAt`.
+- **ClassCurriculumVersions ↔ Users (n-1):** Khóa ngoại `CreatedByUserId`. DeleteBehavior: `SetNull`.
+- **ClassLessonPlans ↔ Classes, AcademicYears (n-1):** DeleteBehavior: `Cascade`. Khóa ngoại `AssignedTeacherUserId` → `Users` (`SetNull`). Index trên `(ClassRoomId, LessonDate)`, `AcademicYearId`, `AssignedTeacherUserId`.
+- **ClassLessonPlans ↔ ClassCurriculumDocuments (n-1):** Khóa ngoại `CurriculumDocumentId`. DeleteBehavior: `SetNull`. Index trên `CurriculumDocumentId`.
+
 ```mermaid
 erDiagram
     Students ||--o{ Enrollments : "1-N"
@@ -51,6 +59,11 @@ erDiagram
     Users ||--o{ RefreshTokens : "1-N"
     Users ||--o{ StaffQuickLookupLogs : "1-N"
     Students ||--o{ StaffQuickLookupLogs : "1-N"
+    Classes ||--o{ ClassCurriculumDocuments : "1-N"
+    AcademicYears ||--o{ ClassCurriculumDocuments : "1-N"
+    ClassCurriculumDocuments ||--o{ ClassCurriculumVersions : "1-N"
+    ClassCurriculumDocuments ||--o{ ClassLessonPlans : "1-N"
+    Classes ||--o{ ClassLessonPlans : "1-N"
 ```
 
 ### 3. TABLE-INDEX.json
@@ -221,6 +234,40 @@ erDiagram
           "primaryKeys": ["Id"],
           "foreignKeys": [],
           "indexes": ["OptionCode"]
+        },
+        {
+          "tableName": "ClassLessonPlans",
+          "columns": ["Id", "ClassRoomId", "AcademicYearId", "CurriculumDocumentId", "WeekNumber", "Semester", "LessonDate", "LiturgicalDay", "LessonCode", "TopicTitle", "KeyPoints", "AssignedTeacherUserId", "AssignedTeacherName", "EventNotes", "IsExamDay", "IsDayOff"],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" },
+            { "column": "AcademicYearId", "principalTable": "AcademicYears", "principalColumn": "Id" },
+            { "column": "AssignedTeacherUserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "CurriculumDocumentId", "principalTable": "ClassCurriculumDocuments", "principalColumn": "Id" }
+          ],
+          "indexes": ["ClassRoomId, LessonDate", "AcademicYearId", "AssignedTeacherUserId", "CurriculumDocumentId"]
+        },
+        {
+          "tableName": "ClassCurriculumDocuments",
+          "columns": ["Id", "ClassRoomId", "AcademicYearId", "Title", "Description", "CurrentVersion", "VersionNumber", "ContentJson", "LastAttachmentFileName", "LastAttachmentFilePath", "LastAttachmentFileSize", "LastAttachmentContentType", "CreatedBy", "CreatedByUserId", "CreatedAt", "UpdatedBy", "UpdatedByUserId", "UpdatedAt", "IsActive"],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" },
+            { "column": "AcademicYearId", "principalTable": "AcademicYears", "principalColumn": "Id" },
+            { "column": "CreatedByUserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "UpdatedByUserId", "principalTable": "Users", "principalColumn": "Id" }
+          ],
+          "indexes": ["ClassRoomId, AcademicYearId", "AcademicYearId"]
+        },
+        {
+          "tableName": "ClassCurriculumVersions",
+          "columns": ["Id", "ClassCurriculumDocumentId", "VersionNumber", "VersionTag", "ChangeSummary", "ContentJson", "FileName", "StoredFileName", "FilePath", "FileSize", "ContentType", "CreatedBy", "CreatedByUserId", "CreatedAt"],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassCurriculumDocumentId", "principalTable": "ClassCurriculumDocuments", "principalColumn": "Id" },
+            { "column": "CreatedByUserId", "principalTable": "Users", "principalColumn": "Id" }
+          ],
+          "indexes": ["ClassCurriculumDocumentId, VersionNumber", "CreatedAt"]
         }
       ]
     }

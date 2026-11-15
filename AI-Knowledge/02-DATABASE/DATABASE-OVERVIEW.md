@@ -57,3 +57,5 @@ Mối liên hệ giữa C# Code và Database được xác nhận thông qua c�
 
 ## C. Database Context Configuration
 - Tất cả cấu hình Foreign Key, Index, Unique Constraint, Seed Data (`HasData`) và Default Values được khai báo theo chuẩn Fluent API trong phương thức `OnModelCreating` của lớp `ParishDbContext`.
+- Từ phiên cập nhật `FEAT-P5-07` (`ParishDbContext.cs:321-381`), EF Core model bổ sung cấu hình cho `ClassCurriculumDocuments`, `ClassCurriculumVersions` và liên kết `CurriculumDocumentId` (`DeleteBehavior.SetNull`) trên `ClassLessonPlans`; dữ liệu mẫu có thể được khởi tạo bởi `WebApplicationExtensions.SeedSampleCurriculumData` (và script untracked `script/seed-curriculum-data.sql`).
+- **Lưu ý `NEEDS_VERIFICATION`:** Thư mục `ManagerStudentCaltholic/Migrations/` hiện rỗng (0 file migration được lưu trong Git), do đó cần kiểm tra thủ công trạng thái đồng bộ schema thực tế trên PostgreSQL cho các bảng mới (`ClassCurriculumDocuments`, `ClassCurriculumVersions`, các cột mới trên `ClassLessonPlans`, `StaffQuickLookupLogs`, `LookupViewOptions`).

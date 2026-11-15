@@ -12,7 +12,8 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 - **Đặc điểm:** Các logic đòi hỏi tính toán nhiều, đồng bộ dữ liệu hoặc giao tiếp ngoại vi được tách ra Service.
 - *Bằng chứng:* 
   - `GradeCalculationService.cs` (tính điểm trung bình).
-  - `RedisAttendanceService.cs` (xử lý logic điểm danh trên Cache và đồng bộ về DB).
+  - `RedisAttendanceService.cs` (xử lý logic điểm danh trên Cache, hỗ trợ `SessionMode`, tra cứu mã năm cũ, hoàn tác 5 giây và đồng bộ về DB).
+  - `ClassCurriculumService.cs` (đọc nạp file kế hoạch `.xlsx/.docx/.csv/.md/.pdf`, quản lý version ngày sửa, xuất Excel & đồng bộ `ClassLessonPlans` — `FEAT-P5-07`).
   - `StaffStudentLookupService.cs` (tìm kiếm đa khóa và tổng hợp hồ sơ 360 độ thiếu nhi cho GLV/BĐH tại Trang chủ).
   - `TokenService.cs` (tạo và rotate JWT/Refresh Token).
 
@@ -33,9 +34,10 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 **HTTP Request** (từ Client) -> **Routing & Rate Limiter Middleware** -> **Controller** (Kiểm tra quyền `[Authorize]`) -> **Direct Data Access** (truy vấn qua `_context`) -> **PostgreSQL Database** -> **Controller** -> Trả về **Razor View / JSON Response**.
 *(Bằng chứng: `AnnouncementsController.cs`)*
 
-### Flow 2: Luồng Điểm danh QR Code Tốc độ cao (Xác nhận từ source)
-**HTTP Request** (Quét QR) -> **AttendanceController.ScanCheckIn()** -> **RedisAttendanceService.ProcessQrCheckInViaRedisAsync()** -> **Redis Cache** (kiểm tra/lưu bộ đệm O(1)) -> Trả về **JSON Response** cho màn hình quét.
-*(Bằng chứng: `AttendanceController.cs`, `RedisAttendanceService.cs`)*
+### Flow 2: Luồng Điểm danh QR Code Tốc độ cao & Hoàn tác 5 Giây (`FEAT-P5-04`) (Xác nhận từ source)
+1. **Quét QR & Ghi Write-Through:** **HTTP Request** (`POST /Attendance/ScanCheckIn` kèm `StudentCode`, `SessionMode`) -> **AttendanceController.ScanCheckIn()** -> **RedisAttendanceService.ProcessQrCheckInViaRedisAsync()** -> Tra cứu **Redis Cache** (`ATT:QR:DATE:{date}:CODE:{code}`); nếu Cache Miss, tra cứu `Enrollments` hoặc mã năm cũ trong `StudentCodeHistories` và nạp alias key O(1) lên Redis -> **AttendanceTimeHelper.EvaluateCheckIn()** -> Cập nhật `ATT:CLASS:{classId}:DATE:{date}` (`IsDirty = true`) -> Gọi ngay `SyncDirtyAttendancesToDatabaseAsync()` ghi xuống **PostgreSQL** -> Trả về JSON `QrScanResponseDto` (kèm cờ `IsHistoricalCode`, `OldCode`, `WarningMessage`).
+2. **Hoàn tác 5 giây:** **Client** -> `POST /Attendance/UndoScanCheckIn` (`UndoScanRequestDto`) -> **AttendanceController.UndoScanCheckIn()** -> **RedisAttendanceService.UndoScanCheckInAsync()** thu hồi trạng thái trên Redis ClassSheet và reset bản ghi trong PostgreSQL (`Attendances`, `MassCampaignRecords`). Nếu đang Offline, Client gọi `ParishOfflineEngine.undoOfflineQrScan(clientRecordId)` để xóa khỏi IndexedDB.
+*(Bằng chứng: `AttendanceController.cs`, `RedisAttendanceService.cs`, `AttendanceViewModels.cs`, `ScanQr.cshtml`, `offline-attendance.js`)*
 
 ### Flow 3: Luồng Đồng bộ Dữ liệu Nền (Xác nhận từ source)
 **Hangfire Worker** (kích hoạt định kỳ) -> **RedisAttendanceService.SyncDirtyAttendancesToDatabaseAsync()** -> Lấy dữ liệu thay đổi từ **Redis** -> Sử dụng **IExecutionStrategy & Transaction** -> Lưu hàng loạt xuống **PostgreSQL Database**.
@@ -51,3 +53,9 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 - **Nhánh `isMobile == true`:** Render `_LayoutMobileHeader.cshtml` (Header thu gọn + Offcanvas Menu tối ưu cuộn cảm ứng) + `.mobile-main-wrapper` + `_LayoutMobileBottomNav.cshtml` (Thanh điều hướng đáy cố định 5 phân khu, nút trung tâm Quét QR nổi, hỗ trợ Safe Area Inset iOS/Android).
 - **Nhánh `isMobile == false`:** Giữ nguyên toàn bộ cấu trúc Header, Master Workspace 5 phân khu, Sub-navigation và Footer của màn hình Desktop.
 *(Bằng chứng: `HttpRequestExtensions.cs`, `_Layout.cshtml`, `_LayoutMobileHeader.cshtml`, `_LayoutMobileBottomNav.cshtml`, `mobile-layout.css`)*
+
+### Flow 6: Luồng Quản lý Kế hoạch Lớp & Phiên bản Giáo án Theo Ngày Sửa (`FEAT-P5-07`)
+1. **Nạp & Phân tích file đa định dạng:** **Client (`Views/LessonPlans/Index.cshtml`)** -> `POST /LessonPlans/ParseCurriculumFile` -> **LessonPlansController.ParseCurriculumFile()** -> **ClassCurriculumService.ParseUploadedCurriculumFileAsync()** (hỗ trợ `.xlsx`, `.docx`, `.csv`, `.md`, `.pdf`) -> Trả về JSON `CurriculumParseResultDto`.
+2. **Lưu phiên bản, Sinh `.xlsx` & Đồng bộ DB:** **Client** -> `POST /LessonPlans/SaveCurriculum` (`SaveCurriculumRequestDto`) -> **LessonPlansController.SaveCurriculum()** (kiểm tra quyền `CanManageClassLessonAsync`) -> **ClassCurriculumService.SaveCurriculumAsync()** -> Sử dụng `IExecutionStrategy` + transaction cập nhật `ClassCurriculumDocuments`, tạo bản ghi lịch sử `ClassCurriculumVersions`, sinh file Excel đính kèm trong `PrivateUploads/curriculums` (`KeHoach_{Class}_{Version}_{YYYYMMDD}.xlsx`) và đồng bộ xuống `ClassLessonPlans`.
+3. **Xem lịch sử, Tải file & Khôi phục (Rollback):** **Client** -> `GET /LessonPlans/GetVersionDetail/{versionId}`, `GET /LessonPlans/DownloadCurriculumVersion/{versionId}`, `GET /LessonPlans/ExportCurrentCurriculumExcel`, hoặc `POST /LessonPlans/RollbackCurriculum` -> **LessonPlansController** -> **ClassCurriculumService** (`GetVersionDetailAsync`, `GetVersionFileAsync`, `ExportCurriculumToExcelAsync`, `RollbackCurriculumAsync`).
+*(Bằng chứng: `LessonPlansController.cs`, `ClassCurriculumService.cs`, `IClassCurriculumService.cs`, `CurriculumDtos.cs`, `Views/LessonPlans/Index.cshtml`)*

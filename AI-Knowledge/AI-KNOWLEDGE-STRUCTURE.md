@@ -25,47 +25,53 @@ AI-Knowledge/
 ├── AI-KNOWLEDGE-STRUCTURE.md
 │
 ├── 00-OVERVIEW/
-│   ├── PROJECT.md
+│   ├── Architecture Diagram.md
 │   ├── ARCHITECTURE.md
-│   ├── TECH-STACK.md
 │   ├── CODING-RULES.md
-│   ├── SOURCE-INVENTORY.md
-│   ├── PROJECT-INVENTORY.json
 │   ├── MODULE-INVENTORY.json
-│   └── PROJECT-DEPENDENCY-DIAGRAM.md
+│   ├── PROJECT-DEPENDENCY-DIAGRAM.md
+│   ├── PROJECT-INVENTORY.json
+│   ├── PROJECT.md
+│   ├── Request Flow Diagram.md
+│   ├── SOURCE-INVENTORY.md
+│   └── TECH-STACK.md
 │
 ├── 01-MODULES/
-│   ├── HOTEL.md
-│   ├── BUS.md
-│   ├── FERRY.md
-│   ├── BOOKING.md
-│   └── PAYMENT.md
+│   └── ATTENDANCE.md
 │
 ├── 02-DATABASE/
 │   ├── DATABASE-OVERVIEW.md
-│   ├── TABLE-RELATIONSHIPS.md
-│   └── TABLE-INDEX.json
+│   ├── TABLE-INDEX.json
+│   └── TABLE-RELATIONSHIPS.md
 │
 ├── 03-CODE-INDEX/
-│   ├── FILE-INDEX.jsonl
-│   ├── SYMBOL-INDEX.jsonl
 │   ├── DEPENDENCY-INDEX.jsonl
-│   └── ROUTE-INDEX.jsonl
+│   ├── FILE-INDEX.jsonl
+│   ├── ROUTE-INDEX.jsonl
+│   └── SYMBOL-INDEX.jsonl
 │
 ├── 04-INTEGRATIONS/
-│   ├── INTEGRATION-OVERVIEW.md
-│   └── EXTERNAL-APIS.md
+│   ├── EXTERNAL-APIS.md
+│   └── INTEGRATION-OVERVIEW.md
 │
 ├── 05-FEATURES/
-│   ├── HOTEL-SEARCH.md
-│   ├── HOTEL-BOOKING.md
-│   ├── BUS-BOOKING.md
-│   └── PAYMENT-CHECKOUT.md
+│   ├── FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md
+│   ├── FEAT-P5-01-STAFF-QUICK-LOOKUP.md
+│   ├── FEAT-P5-02-MOBILE-FIRST-UI.md
+│   ├── FEAT-P5-04-QR-SCANNER-UPGRADE.md
+│   └── FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md
 │
 └── 06-UPDATE-LOG/
+    ├── AFFECTED-FILES.json
+    ├── CHANGE-ANALYSIS.md
+    ├── IMPACT-ANALYSIS.md
     ├── KNOWLEDGE-BASELINE.json
+    ├── KNOWLEDGE-UPDATE-PLAN.md
+    ├── KNOWLEDGE-VALIDATION-REPORT.md
+    ├── MISSING-SOURCE-REPORT.md
+    ├── PENDING-UPDATES.md
     ├── UPDATE-LOG.md
-    └── PENDING-UPDATES.md
+    └── UPDATE-REPORT.md
 ```
 
 **Important:** The module and feature names above are illustrative examples. Actual files must be created based on modules and features verified from the source code. Do not create documentation for modules that do not exist.

@@ -1,521 +1,114 @@
-# KNOWLEDGE VALIDATION AND AUDIT REPORT
+# BÁO CÁO KIỂM ĐỊNH ĐỘC LẬP KHO TRI THỨC (KNOWLEDGE VALIDATION REPORT)
 
-## Metadata
-
-* **Project:** `ManagerStudentCaltholic`
-
-
-* **Ngày kiểm định:** 2026-11-04
-* **Phạm vi đối chiếu:** Toàn bộ artifacts từ Task 01 đến Task 06 đối chiếu trực tiếp với 5 phần source code thực tế (`full_source_part_1.txt` đến `full_source_part_5.txt`).
-
-
-* **Trạng thái tổng thể:** **CẦN HIỆU CHỈNH (REQUIRES CORRECTION)** — Phát hiện **18 vấn đề** (gồm **5 CRITICAL**, **6 HIGH**, **5 MEDIUM**, **2 LOW**).
+> **Vai trò kiểm định:** Independent Codebase Knowledge Auditor  
+> **Dự án:** `ManagerStudentCaltholic` (Hệ thống Quản lý Thiếu Nhi Thánh Thể - Giáo xứ Phú Trung)  
+> **Thời điểm kiểm định:** `2026-11-15T14:32:00+07:00`  
+> **Phạm vi đối chiếu:** Source code hiện tại tại commit `2a3263d` (+ working tree ngày `2026-11-15`) và toàn bộ kho tài liệu `AI-Knowledge/` trước/sau đợt cập nhật ghi nhận trong `AI-Knowledge/06-UPDATE-LOG/UPDATE-REPORT.md`  
+> **Nguyên tắc kiểm định:** Không sửa mã nguồn; không tự sửa tài liệu tri thức trong bước kiểm định; không gắn nhãn `PASS` khi thiếu bằng chứng mã nguồn (`NEEDS_VERIFICATION`).
 
 ---
 
-## 1. Completeness Audit (Kiểm toán Độ đầy đủ)
+## 1. Kết Luận Tổng Thể (Overall Audit Verdict)
 
-### 1.1. Kiểm kê File (File Inventory & `FILE-INDEX.jsonl`)
-
-* **Thực tế trong 5 file TXT nguồn:** Có tổng cộng **207 file** được xuất kèm header `FILE:` (21 file ở Part 1, 100 file ở Part 2, 22 file ở Part 3, 22 file ở Part 4, và 21 file ở Part 5).
-
-
-* **Sai lệch trong Task 01 (`SOURCE-INVENTORY.md` & `PROJECT-INVENTORY.json`):**
-* `SOURCE-INVENTORY.md` chỉ liệt kê **41 dòng** (gom gộp toàn bộ DTOs, Entities, Services vào 3 dòng chung số 32, 33, 34).
-* `PROJECT-INVENTORY.json` chỉ xuất **12 file records**, bỏ sót **195 file** đã có trong source thực tế.
-
-
-
-
-* **Sai lệch trong Task 05 (`FILE-INDEX.jsonl`):**
-* Chỉ xuất **45 records**, bỏ sót **162 file** thực tế có trong nguồn (gồm 19 file `Interface/Services/*.cs`, 15 file `Models/DTOs/*.cs`, 36 file `Models/Entities/*.cs`, 2 file `Models/Enum/*.cs`, 24 file `Models/ViewModels/*.cs`, 4 file `Extensions/*.cs`, 2 file `Security/*.cs`, 35 file `Views/**/*.cshtml`, và các file cấu hình Docker/Nginx).
-
-
-
-
-
-### 1.2. Phát hiện Source Code bị cắt (Truncated) và Rơi rớt giữa các Part
-
-Trái ngược hoàn toàn với nhận định trong `MISSING-SOURCE-REPORT.md` của Task 01 (*"không phát hiện dấu hiệu bị cắt cụt ranh giới class/method nghiêm trọng"*), việc đối chiếu ranh giới cuối mỗi file TXT phát hiện **4 file bị cắt ngang (truncated)** và **hơn 18 file bị mất hoàn toàn** ở điểm nối giữa các Part:
-
-* **Điểm cắt 1 (Cuối Part 1 → Đầu Part 2):**
-* File `Controllers\PromotionController.cs` bị cắt cụt ngay giữa dòng `_logger.LogInformation("AUDIT: User {User} updated PromotionRuleConfig for YearId={YearId},...` ở cuối `full_source_part_1.txt`. Toàn bộ các action phía sau như `ExecuteRollover` và `CloneClassesToNewYear` (được gọi từ `Views\Promotion\Index.cshtml`) đều bị mất.
-
-
-* Toàn bộ các Controller theo thứ tự bảng chữ cái từ `P` đến `U` nằm giữa `PromotionController.cs` và `UsersController.cs` bị mất hoàn toàn, bao gồm: `PublicRegistrationController.cs`, `PwaController.cs`, `SacramentsController.cs`, `StudentRegistrationsController.cs`, `StudentsController.cs`.
-
-
-
-
-* **Điểm cắt 2 (Cuối Part 2 → Đầu Part 3):**
-* File `Services\DeviceStudentRecognitionService.cs` bị cắt cụt tại dòng `if (!classIds.Any() &&...` ở cuối `full_source_part_2.txt`.
-
-
-* Toàn bộ 9 class Service theo thứ tự bảng chữ cái từ `D` đến `R` nằm giữa `DeviceStudentRecognitionService.cs` và `RedisAttendanceService.cs` bị mất hoàn toàn (đối chiếu với đăng ký DI trong `ServiceCollectionExtensions.cs`), bao gồm: `FeatureNavigationService.cs`, `GradeCalculationService.cs`, `GradePermissionService.cs`, `LessonPlanImportService.cs`, `LogRetentionBackgroundService.cs`, `MassCampaignService.cs`, `PasswordHasherService.cs`, `PromotionEvaluationService.cs`, `QrCodeService.cs`.
-
-
-
-
-* **Điểm cắt 3 (Cuối Part 3 → Đầu Part 4):**
-* File `Views\Dashboard\Index.cshtml` bị cắt cụt tại dòng `<td class="te...` ở cuối `full_source_part_3.txt` (mất phần script khởi tạo biểu đồ Chart.js và bảng xếp hạng lớp).
-
-
-* Toàn bộ các Razor Views theo thứ tự bảng chữ cái từ `D` đến `G` bị mất, bao gồm: `Views\Enrollments\Manage.cshtml`, `Views\Facilities\Index.cshtml`, `Views\FeaturePermissions\Index.cshtml`, `Views\Governance\Index.cshtml`.
-
-
-
-
-* **Điểm cắt 4 (Cuối Part 4 → Đầu Part 5):**
-* File `Views\Sacraments\Index.cshtml` bị cắt cụt tại dòng `dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>'...` ở cuối `full_source_part_4.txt`.
-
-
-* Toàn bộ các Razor Views nằm giữa `Views\Sacraments\Index.cshtml` và `Views\Students\Index.cshtml` bị mất, bao gồm: `Views\Sacraments\PrintApprovalSheet.cshtml`, `Views\Shared\_Layout.cshtml`, `Views\Shared\_ValidationScriptsPartial.cshtml`, `Views\StudentRegistrations\Index.cshtml`.
-
-
-
-
-
-### 1.3. Kiểm toán `SYMBOL-INDEX.jsonl` và `ROUTE-INDEX.jsonl`
-
-* **Thiếu Symbol quan trọng:** `SYMBOL-INDEX.jsonl` (62 records) bỏ sót toàn bộ 14 class Service thực thi (`RedisAttendanceService`, `AttendanceDisputeService`, `BackgroundExportJobService`, `ClassEvaluationService`, `DeviceStudentRecognitionService`, `RedisCacheService`, `SacramentEvaluationService`, `SacramentRegistryService`, `StudentCodeGenerator`, `StudentCodeRolloverService`, `StudentExcelService`, `StudentPlacementService`, `SystemMetricsCollector`, `TokenService`) dù các file này có mặt đầy đủ trong Part 2 và Part 3.
-
-
-* **Thiếu Overload:** Trong `AccountController.cs`, có 2 method `Login`: `[HttpGet] public IActionResult Login(string? returnUrl = null)` và `[HttpPost] public async Task<IActionResult> Login(LoginRequestDto model)`. `SYMBOL-INDEX.jsonl` chỉ lưu bản `POST` mà bỏ sót bản `GET`.
-
-
-* **Thiếu Route:** `ROUTE-INDEX.jsonl` chỉ liệt kê **30 routes**, bỏ sót **64 action endpoints** của 16 Controllers đã có trong source code (ví dụ: `/Admin/Logs`, `/Admin/Logs/HealthStats`, `/Admin/Logs/Download` trong `LogsController.cs`; `/Grades/SaveSingleCell`, `/Grades/ToggleLock`, `/Grades/AddCustomColumn`, `/Grades/DeleteCustomColumn`, `/Grades/GetClassEvaluationSheet`, `/Grades/SubmitClassEvaluation` trong `GradesController.cs`; toàn bộ routes của `AnnouncementsController`, `BackgroundJobsController`, `DashboardController`, `EnrollmentsController`, `FacilitiesController`, `FeaturePermissionsController`, `GovernanceController`, `HomeController`, `MassCampaignsController`, `ParentMessagesController`, `PrintReportsController`, `PromotionController`, `UsersController`).
-
-
-
-### 1.4. Kiểm toán các Module chưa được phân tích sâu
-
-* Task 03 chỉ mới phân tích sâu 1 module (`ATTENDANCE`), còn các module lớn đã có source như `GRADES & EVALUATION`, `SACRAMENTS`, `MASS CAMPAIGNS`, `FACILITIES`, `GOVERNANCE & USERS`, `PUBLIC LOOKUP & DISPUTES` chưa có tài liệu Module Reverse Engineering riêng.
-
-
+- **Trạng thái chung:** **`PASS WITH WARNINGS (REQUIRES TARGETED CORRECTIONS)`**
+  - **Đợt cập nhật gia tăng `c0e828a ➔ 2a3263d` (`18` tệp trong `UPDATE-REPORT.md`):** Các biểu tượng, route và cạnh phụ thuộc mới cho `FEAT-P5-07` (`LessonPlansController`, `ClassCurriculumService`), `FEAT-P5-04` (`UndoScanCheckIn`, `StudentCodeHistories`), `PublicRegistrationController` (`Resubmit`, `SubmitResubmit`, `ViewOwnCertificate`), `PwaController`, `AccountController` (14-day cookie & `Profile`/`UpdateProfile`) và `RedisCacheService` Circuit Breaker 30s khớp chính xác với mã nguồn; toàn bộ `5` tệp `.json` và `4` tệp `.jsonl` hợp lệ cú pháp 100% (`0` lỗi JSON/JSONL, `0` trùng khóa).
+  - **Tồn đọng chưa thể `PASS` tuyệt đối:** Còn `9` vấn đề cần khắc phục (`2 HIGH`, `5 MEDIUM`, `2 LOW`) tập trung tại:
+    1. Trạng thái EF Core Migration (`ManagerStudentCaltholic/Migrations/` hiện có **`0` file**, dẫn đến cấu trúc bảng PostgreSQL vẫn ở trạng thái **`NEEDS_VERIFICATION`** và mâu thuẫn với nhật ký cũ tại `UPDATE-LOG.md:95`).
+    2. Tàn dư tên miền/module giả lập không tồn tại (`Booking`, `Payment`, `Hotel`) và phạm vi kiểm kê cũ từ `2026-03-31` trong `00-OVERVIEW/MODULE-INVENTORY.json`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json`.
+    3. Sai lệch số dòng (`startLine`/`endLine`/`sourceLine`) do mã nguồn chỉnh sửa trước đó tại `HomeController.cs`, `IStaffStudentLookupService.cs`, `StaffStudentLookupService.cs`, `HttpRequestExtensions.cs` trong `03-CODE-INDEX/*.jsonl`, cùng một số sai lệch tên định danh/luồng chi tiết trong `01-MODULES/ATTENDANCE.md`, `02-DATABASE/` và `05-FEATURES/FEAT-P5-01`, `FEAT-P5-02`, `FEAT-P5-07`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`.
 
 ---
 
-## 2. Consistency Audit (Kiểm toán Tính nhất quán)
+## 2. Bảng Tổng Hợp 10 Tiêu Chí Kiểm Định (Validation Scorecard)
 
-### 2.1. Mâu thuẫn về cơ chế Write-Through Redis trong `SaveBatch` và `ScanCheckIn`
-
-* **Bằng chứng từ Source (`Controllers\AttendanceController.cs`):**
-* Trong action `SaveBatch`, sau khi gọi `_redisAttendance.SaveBatchToRedisAsync(request)`, code gọi ngay `await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate);` với comment `// 2. P2-LOG-16 FIX: Đồng bộ tức thì (Write-Through) từ Redis xuống PostgreSQL ngay trong cùng Request`.
-
-
-* Trong action `ScanCheckIn`, sau khi gọi `_redisAttendance.ProcessQrCheckInViaRedisAsync(request)`, code cũng gọi ngay `await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(targetDate);`.
-
-
-
-
-* **Mâu thuẫn giữa các tài liệu đã tạo:**
-* Trong `PROJECT-DEPENDENCY-DIAGRAM.md` (Task 02 - Sơ đồ 3), luồng `ScanCheckIn` không vẽ bước Write-Through xuống DB mà mô tả chỉ cập nhật Redis rồi đợi Hangfire 10 phút sau mới đồng bộ.
-* Trong `ATTENDANCE.md` (Task 03 - Mục 9 Risk Areas), tài liệu nhận định sai sự thật: *"Mặc dù luồng `ScanCheckIn` đã fix lỗi bằng cách áp dụng Write-Through trực tiếp xuống DB (không chờ 10 phút), nhưng luồng `SaveBatchToRedisAsync` vẫn để cờ `IsDirty=true` chờ Hangfire quét"* — trái ngược trực tiếp với code thực tế tại `AttendanceController.SaveBatch`.
-
-
-
-
-
-### 2.2. Mâu thuẫn về xử lý Mã QR năm học cũ (`_2526`) khi Quét QR Điểm danh
-
-* Trong `Views\Home\Guides\_GuideAttendance.cshtml`, giao diện hướng dẫn ghi: *"Hệ thống tự động nhận diện cả thẻ QR mới lẫn thẻ năm học cũ (có đuôi `_2526`)"*.
-
-
-* Tuy nhiên, trong `Services\RedisAttendanceService.cs` (`ProcessQrCheckInViaRedisAsync`), hệ thống chỉ truy vấn khớp chính xác `e.Student.StudentCode.ToUpper() == cleanCode` trên bảng `Enrollments` mà **không** gọi `IStudentCodeRolloverService.ResolveStudentByAnyCodeAsync` (khác với `LookupController.cs` và `AttendanceDisputeService.cs` có tiêm và gọi `IStudentCodeRolloverService`). Tài liệu `ATTENDANCE.md` (Mục 6 Dependencies) lại ghi module Attendance gọi `IStudentCodeRolloverService` cho mã QR cũ mà không phân biệt rằng chỉ `AttendanceDisputeService` gọi service này, còn `RedisAttendanceService` thì không.
-
-
-
-### 2.3. Đứt gãy tham chiếu (Broken References) giữa `DEPENDENCY-INDEX.jsonl` và `SYMBOL-INDEX.jsonl`
-
-* Trong `DEPENDENCY-INDEX.jsonl`, các trường `sourceSymbol` và `targetSymbol` trỏ tới:
-* `ManagerStudentCaltholic.Services.RedisAttendanceService`
-* `ManagerStudentCaltholic.Services.AttendanceDisputeService`
-* `ManagerStudentCaltholic.Services.RedisCacheService`
-* `ManagerStudentCaltholic.Services.TokenService`
-* `ManagerStudentCaltholic.Services.RedisAttendanceService.ProcessQrCheckInViaRedisAsync`
-* `ManagerStudentCaltholic.Interface.Services.IRedisAttendanceService.ProcessQrCheckInViaRedisAsync`
-* `ManagerStudentCaltholic.Services.AttendanceTimeHelper.EvaluateCheckIn`
-
-
-* **Không có bất kỳ symbolKey nào trong số trên tồn tại trong `SYMBOL-INDEX.jsonl`!**
-
-### 2.4. Mâu thuẫn số lượng bảng giữa `DATABASE-OVERVIEW.md`, Task 05 `TABLE-INDEX.json` và Task 06 `TABLE-INDEX.json`
-
-* Trong `Data\ParishDbContext.cs`, có **38 thuộc tính `DbSet<T>**` cộng thêm bảng `ClassLessonPlans` (cấu hình qua `modelBuilder.Entity<ClassLessonPlan>(entity => { entity.ToTable("ClassLessonPlans"); ... })` trong `OnModelCreating` dù không khai báo thuộc tính `DbSet`) = **39 bảng** thuộc schema `public`, cùng với schema `hangfire` được khai báo trong `Program.cs` (`SchemaName = "hangfire"`).
-
-
-* `DATABASE-OVERVIEW.md` (Task 06) liệt kê **38 bảng** (thiếu bảng `ClassLessonPlans` và schema `hangfire`).
-
-
-* `TABLE-INDEX.json` ở Task 05 chỉ có **18 bảng**.
-* `TABLE-INDEX.json` ở Task 06 chỉ có **15 bảng** (bỏ mất 5 bảng `Announcements`, `BuildingZones`, `ClassRoomLocations`, `ClassSchedules`, `RoomIncidentReports` đã có ở Task 05 nhưng lại thêm 2 bảng `MassCampaigns`, `MassCampaignRecords`).
+| # | Tiêu chí kiểm định | Trạng thái | Tóm tắt phát hiện | Mã vấn đề liên quan |
+|---|---|---|---|---|
+| 1 | Class, method, namespace & file path | `PASS WITH WARNINGS` | 100% file trong `FILE-INDEX.jsonl` (`72/72`) tồn tại thật; các symbol `FEAT-P5-07`, `PublicRegistration`, `Pwa`, `UndoScan`, `Account` khớp code; nhưng nhóm symbol `FEAT-P5-01`/`02` (`HomeController`, `IStaffStudentLookupService`, `StaffStudentLookupService`, `HttpRequestExtensions`) bị lệch `startLine`/`endLine` & có `22` key chưa có bản ghi Class/Interface/Method gốc trong `SYMBOL-INDEX.jsonl`. | `ISS-AUD-004`, `ISS-AUD-009` |
+| 2 | Route & Controller Action | `PASS WITH WARNINGS` | Tất cả `52` route trong `ROUTE-INDEX.jsonl` tồn tại trong Controller tương ứng; các route `FEAT-P5-07`, `PublicRegistration`, `Pwa`, `Attendance` mới khớp chính xác, nhưng `Home` (`HomeController.cs`) lệch `startLine` (`32/83/102/147/164` vs thực tế `29/52/67/109/124`) và `FEAT-P5-07` mục 5 viết `{id}` thay vì `{versionId:long}`. | `ISS-AUD-004`, `ISS-AUD-008`, `ISS-AUD-009` |
+| 3 | Dependency có bằng chứng | `PASS WITH WARNINGS` | Tất cả `65` cạnh trong `DEPENDENCY-INDEX.jsonl` có bằng chứng DI/gọi hàm trong code; `LessonPlans`, `UndoScan`, `PublicRegistration`, `Pwa` khớp 100%, nhưng `HomeController` lệch `sourceLine`, thiếu cạnh `StaffStudentLookupService -> IGradeCalculationService`, và `01-MODULES/ATTENDANCE.md:240` mô tả sai dependency QR mã cũ. | `ISS-AUD-004`, `ISS-AUD-005` |
+| 4 | Feature document mô tả đúng luồng | `PASS WITH WARNINGS` | Luồng chính `FEAT-P5-07`, `FEAT-P5-04`, `FEAT-P5-01`, `FEAT-P5-02` đúng tổng thể, nhưng `ATTENDANCE.md:280` mô tả sai `SaveBatch` (thực tế Write-Through tức thì), `FEAT-P5-01` sai DOM ID/debounce/cột DB/tên cờ DTO, `FEAT-P5-02` sai Offcanvas ID/z-index/height, `FAST-QR-CHECKIN:164` lệch cooldown `2.5s` vs `3000ms`. | `ISS-AUD-005`, `ISS-AUD-006`, `ISS-AUD-007`, `ISS-AUD-008` |
+| 5 | Database table, column & relationship | `NEEDS_VERIFICATION` | `DATABASE-OVERVIEW.md` khớp `43/43` `DbSet<T>` trong `ParishDbContext.cs`, nhưng `Migrations/` có **`0` file**, gây `NEEDS_VERIFICATION` DDL PostgreSQL; đồng thời `TABLE-INDEX.json` (`23` bảng) và `TABLE-RELATIONSHIPS.md` JSON (`20` bảng) không đồng nhất danh sách bảng. | `ISS-AUD-002`, `ISS-AUD-003` |
+| 6 | API & Integration | `PASS` | `appsettings.json` (`RefreshTokenExpirationDays = 14`), `AccountController.cs` (Cookie 14 ngày), `LoggingExtensions.cs` (Serilog overrides), `ServiceCollectionExtensions.cs` (DataProtection + Policies) và `RedisCacheService.cs` (Circuit Breaker 30s + `IMemoryCache` fallback) khớp 100% với `TECH-STACK.md`, `PROJECT.md`, `INTEGRATION-OVERVIEW.md`. | — |
+| 7 | Tham chiếu đến class/method đã xóa hoặc không tồn tại | `FAIL (LEGACY)` | Không có tham chiếu sai trong `18` tệp vừa cập nhật, nhưng các tệp tồn dư từ baseline `2026-03-31` (`MODULE-INVENTORY.json`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json`) vẫn tham chiếu module không tồn tại (`Booking`, `Payment`, `Hotel`). | `ISS-AUD-001` |
+| 8 | Hợp lệ JSON & JSONL | `PASS` | Toàn bộ `5` tệp `.json` và `4` tệp `.jsonl` (tổng `309` dòng JSONL) + khối JSON nhúng trong `TABLE-RELATIONSHIPS.md` đều parse sạch qua `ConvertFrom-Json` với `0` lỗi cú pháp và `0` trùng lặp khóa định danh. | — |
+| 9 | Tài liệu bị ảnh hưởng nhưng chưa cập nhật | `PASS WITH WARNINGS` | `MODULE-INVENTORY.json`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json` chưa cập nhật theo cấu trúc hiện tại (`28` Controllers, `315` source/web files); `PROJECT-DEPENDENCY-DIAGRAM.md:17` thiếu dấu đóng code fence ```` ``` ````; các tài liệu `FEAT-P5-01/02/07` còn điểm chưa đồng bộ chi tiết mới. | `ISS-AUD-001`, `ISS-AUD-006`, `ISS-AUD-007`, `ISS-AUD-008`, `ISS-AUD-009` |
+| 10 | Thông tin suy luận/chưa xác minh được đánh dấu rõ | `PASS WITH WARNINGS` | `UPDATE-REPORT.md`, `PENDING-UPDATES.md`, `DATABASE-OVERVIEW.md:61`, `UPDATE-LOG.md:11` đánh dấu `NEEDS_VERIFICATION` rõ ràng; tuy nhiên mục lịch sử `05/11/2026 - FEAT-P5-07` tại `UPDATE-LOG.md:95` vẫn khẳng định đã tạo EF Migration `AddClassCurriculumDocumentsAndVersions` (không có trong repo). | `ISS-AUD-002` |
 
 ---
 
-## 3. Evidence Audit (Kiểm toán Bằng chứng Nguồn)
+## 3. Chi Tiết Kết Quả Kiểm Chứng Từng Tiêu Chí
 
-Bảng phân loại mức độ xác thực của các thành phần trọng yếu trong bộ tài liệu:
+### 3.1. Tiêu chí 1 & 2: Class, Method, Namespace, File Path & Routes
+- **Các phần đã đối chiếu khớp 100% với source code (`PASS`):**
+  - `Controllers/LessonPlansController.cs` (`class` dòng `14..485`): Constructor (`20`), `ParseCurriculumFile` (`150..165`), `SaveCurriculum` (`173..200`), `GetVersionDetail` (`[HttpGet("LessonPlans/GetVersionDetail/{versionId:long}")]`, `205..223`), `DownloadCurriculumVersion` (`[HttpGet("LessonPlans/DownloadCurriculumVersion/{versionId:long}")]`, `228..248`), `ExportCurrentCurriculumExcel` (`253..270`), `RollbackCurriculum` (`278..303`), `DownloadDocument` (`409..446`). Khớp chính xác `SYMBOL-INDEX.jsonl:102-108` và `ROUTE-INDEX.jsonl:30,36-41`.
+  - `Services/ClassCurriculumService.cs` (`class` `17..1051`), `Interface/Services/IClassCurriculumService.cs` (`6..47`), `Models/Entities/ClassLessonPlan.cs` (`8..48`), `ClassCurriculumDocument.cs` (`9..70`), `ClassCurriculumVersion.cs` (`9..54`), `Models/DTOs/CurriculumDtos.cs` (`3..74`), `Models/ViewModels/LessonPlansViewModel.cs` (`6..21`). Khớp chính xác `SYMBOL-INDEX.jsonl:83-101`.
+  - `Controllers/PublicRegistrationController.cs` (`14..470`): `Index` (`32`), `Submit` (`48`), `Success` (`166`), `CheckStatus` (`176`), `Resubmit` (`209..269`), `SubmitResubmit` (`277..406`), `ViewOwnCertificate` (`413..450`), `PublicRegistrationResubmitDto` (`PublicRegistrationSubmitDto.cs:66..83`). Khớp chính xác `SYMBOL-INDEX.jsonl:113-117` và `ROUTE-INDEX.jsonl:44-50`.
+  - `Controllers/PwaController.cs` (`7..56`): `Offline` (`[HttpGet("/Offline")]`, dòng `19..24` trả `View("Index")`), `GetAppIcon` (`[HttpGet("/icons/{fileName}")]`, dòng `29..55`). Khớp `SYMBOL-INDEX.jsonl:118-120` và `ROUTE-INDEX.jsonl:51-52`.
+  - `Controllers/AttendanceController.cs`: `UndoScanCheckIn` (`234..251`), `GetOfflineStudentsCache` (`1394`); `Services/RedisAttendanceService.cs`: `UndoScanCheckInAsync` (`692..785`); `Interface/Services/IRedisAttendanceService.cs`: `UndoScanCheckInAsync` (`36`); `Models/ViewModels/AttendanceViewModels.cs`: `UndoScanRequestDto` (`108..117`). Khớp `SYMBOL-INDEX.jsonl:109-112` và `ROUTE-INDEX.jsonl:42-43`.
+  - `Controllers/AccountController.cs`: `Profile(long? id = null)` (`295..391`) và `UpdateProfile` (`401..492`). Khớp `SYMBOL-INDEX.jsonl:81-82`.
+  - Kiểm tra sự tồn tại vật lý của toàn bộ `72/72` tệp trong `FILE-INDEX.jsonl`: `0` tệp thiếu.
+- **Các sai lệch được phát hiện:**
+  - `ISS-AUD-004` (`MEDIUM`): Số dòng và chữ ký bị trôi trong `SYMBOL-INDEX.jsonl:63-80` và `ROUTE-INDEX.jsonl:31-35` đối với `HomeController.cs` (thực tế `154` dòng), `IStaffStudentLookupService.cs` (thực tế `16` dòng, tham số `string keyword`), `StaffStudentLookupService.cs` (thực tế `714` dòng, `GetViewOptionsAsync` ở đầu file dòng `30`), `HttpRequestExtensions.cs` (thực tế `75` dòng, `IsMobileDevice` dòng `30..73`).
+  - `ISS-AUD-008` (`LOW`): `FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md:144-145` ghi `{id}` thay vì `{versionId:long}`.
+  - `ISS-AUD-009` (`LOW`): `62` symbol baseline (`SYMBOL-INDEX.jsonl:1-62`) và `29` route baseline (`ROUTE-INDEX.jsonl:1-29`) vẫn giữ `null` cho `startLine`/`endLine`.
 
-| Nhận định / Quan hệ trong Tài liệu | Trạng thái Thực tế | Căn cứ (Source Evidence) | Đánh giá Audit |
-| --- | --- | --- | --- |
-| `StudentsController.cs`, `SacramentsController.cs` có trong source | **INFERRED** (Không có file trong TXT) | Chỉ xuất hiện gián tiếp qua Razor Views (`Views\Students\Index.cshtml`, `Views\Sacraments\Index.cshtml`) và chuỗi text trong `LogsController.cs`.
+### 3.2. Tiêu chí 3: Kiểm Chứng Dependency Bằng Chứng
+- **Khớp hoàn toàn:** Toàn bộ `25` cạnh mới (`DEPENDENCY-INDEX.jsonl:41-42, 50-65`) phản ánh đúng constructor injection và lời gọi phương thức trong `ClassCurriculumService`, `LessonPlansController`, `AttendanceController.UndoScanCheckIn`, `RedisAttendanceService`, `PublicRegistrationController`, `PwaController`.
+- **Sai lệch phát hiện:**
+  - `DEPENDENCY-INDEX.jsonl:43-49` có `sourceLine` bị trôi cho `HomeController.cs` (`23-26, 91, 115, 127` thay vì `22-25, 60, 81, 96`), và thiếu cạnh `StaffStudentLookupService -> IGradeCalculationService` (`Services/StaffStudentLookupService.cs:17,22`) (`ISS-AUD-004`).
+  - `01-MODULES/ATTENDANCE.md:240` khẳng định luồng điểm danh QR gọi `IStudentCodeRolloverService`, trong khi `Services/RedisAttendanceService.cs:415-420` truy vấn trực tiếp `_context.StudentCodeHistories` (`ISS-AUD-005`).
+  - `22` symbol nội bộ tham chiếu trong `DEPENDENCY-INDEX.jsonl` chưa có bản ghi khai báo tương ứng trong `SYMBOL-INDEX.jsonl` (`ISS-AUD-004`).
 
- | Task 02 ghi như file đã xác nhận là **SAI**. Phải hạ xuống `INFERRED` / `NOT_PROVIDED`. |
-| `GradeCalculationService.cs`, `MassCampaignService.cs`, `FeatureNavigationService.cs` có trong source | **INFERRED** (Không có file trong TXT) | Chỉ xuất hiện trong lệnh đăng ký DI `services.AddScoped<...>()` tại `ServiceCollectionExtensions.cs`.
+### 3.3. Tiêu chí 4: Feature Documents vs Luồng Xử Lý Thực Tế
+- `FEAT-P5-04-QR-SCANNER-UPGRADE.md`: Mô tả đúng luồng HUD, `SessionMode`, `StudentCodeHistories`, `UndoScanCheckIn`, `UndoScanRequestDto`, `HistoricalCodes`, chống quét trùng `3000ms` (`ScanQr.cshtml:865-868`).
+- `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`: Khớp tốt phần `Flow 1`, `Flow 2`, `Flow 3` (Undo 5s) và `ParishOfflineEngine` (`wwwroot/js/offline-attendance.js:81-118, 610-650`), nhưng dòng `164` vẫn ghi `"UI Client khóa 2.5s"` mâu thuẫn với `3000ms` thực tế tại `ScanQr.cshtml:868` (`ISS-AUD-007`).
+- `01-MODULES/ATTENDANCE.md:280`: Khẳng định `SaveBatchToRedisAsync` để chờ 10 phút dễ mất dữ liệu, trái ngược với `AttendanceController.SaveBatch` (`Controllers/AttendanceController.cs:147-151`, comment `P2-LOG-16 FIX`) đã gọi đồng bộ tức thì `SyncDirtyAttendancesToDatabaseAsync` (`ISS-AUD-005`).
+- `05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md`: Ghi sai ID `#staffLookupSearchInput`, debounce `250ms`, tối thiểu `2` ký tự, tên cột `OldCode`, tên cờ `MatchedByOldCode`/`MatchedOldCodeDisplay` (`ISS-AUD-006`).
+- `05-FEATURES/FEAT-P5-02-MOBILE-FIRST-UI.md`: Ghi header `54px`, `#mobileUserOffcanvas`, `z-index: 1085` thay vì giá trị thực tế trong code là `56px`, `#mobileMenuOffcanvas`, `z-index: 1070` (`ISS-AUD-007`).
+- `05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`: Phản ánh chính xác luồng `ClassCurriculumService` (`PrivateUploads/curriculums` ở dòng `27`, sinh `.xlsx`, lưu version `v{N}` và đồng bộ `ClassLessonPlans` bằng `IExecutionStrategy`), chỉ có lỗi nhỏ `{id}` vs `{versionId:long}` ở dòng `144-145` (`ISS-AUD-008`).
 
- | Task 02 ghi `GradeCalculationService.cs` làm bằng chứng trực tiếp là **SAI**. |
-| `RequestLoggingMiddleware.cs` xử lý request logging | **CONFIRMED UNUSED** | File `Middlewares\RequestLoggingMiddleware.cs` tồn tại, nhưng `Program.cs` gọi `app.UseCustomRequestLogging()` từ `LoggingExtensions.cs`.
+### 3.4. Tiêu chí 5 & 10: Database Schema, Relationships & `NEEDS_VERIFICATION`
+- `ParishDbContext.cs` khai báo chính xác **`43` `DbSet<T>`**, khớp `43/43` hàng trong bảng mapping của `02-DATABASE/DATABASE-OVERVIEW.md:14-56`.
+- Tuy nhiên:
+  1. Thư mục `ManagerStudentCaltholic/Migrations/` hiện chứa **`0` file** (`Migrations files count: 0`), nên chưa có bằng chứng DDL đã thực thi trên PostgreSQL cho `ClassCurriculumDocuments`, `ClassCurriculumVersions`, các cột mới trên `ClassLessonPlans`, cũng như `StaffQuickLookupLogs` và `LookupViewOptions`. Theo nguyên tắc kiểm định, tiêu chí DB **không thể gắn nhãn `PASS`** mà phải giữ **`NEEDS_VERIFICATION`** (`ISS-AUD-002`).
+  2. Dòng lịch sử `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md:95` vẫn khẳng định *"tạo EF Migration `AddClassCurriculumDocumentsAndVersions`"* trái với thực tế repository (`ISS-AUD-002`).
+  3. `TABLE-INDEX.json` có **`23` bảng** còn JSON nhúng trong `TABLE-RELATIONSHIPS.md:69-276` chỉ có **`20` bảng** (thiếu `Announcements`, `BuildingZones`, `ClassRoomLocations`, `ClassSchedules`, `RoomIncidentReports`; trong khi `TABLE-RELATIONSHIPS.md` có `MassCampaigns`, `MassCampaignRecords` còn `TABLE-INDEX.json` lại không có) (`ISS-AUD-003`).
 
- | Cần ghi rõ `RequestLoggingMiddleware` không được đăng ký vào pipeline. |
-| Quan hệ kế thừa & thực thi `ISoftDelete` trên 8 Entities | **CONFIRMED** | Xác nhận trực tiếp từ khai báo class và `ParishDbContext.SaveChangesAsync`.
+### 3.5. Tiêu chí 6: API, Integration & Configuration
+- **Xác minh khớp 100% (`PASS`):**
+  - `appsettings.json:24-25`: `AccessTokenExpirationMinutes = 30`, `RefreshTokenExpirationDays = 14`.
+  - `Services/TokenService.cs:79`: fallback mặc định `14` ngày.
+  - `Extensions/ServiceCollectionExtensions.cs:154`: `ExpireTimeSpan = TimeSpan.FromDays(14)`, `SlidingExpiration = true`; dòng `250-258`: `PersistKeysToFileSystem` tại `dataprotection-keys`.
+  - `Extensions/LoggingExtensions.cs:22-26`: Serilog `Information`, override `Microsoft`, `Microsoft.AspNetCore`, `Microsoft.EntityFrameworkCore.Database.Command = Warning`, `Microsoft.AspNetCore.Antiforgery = Fatal`.
+  - `Services/RedisCacheService.cs:15-98`: Circuit Breaker `30` giây (`TimeSpan.FromSeconds(30)`) kết hợp `IMemoryCache` fallback.
 
- | Chính xác. |
-| Hai hệ thống bảng điểm song song trong `ParishDbContext` | **CONFIRMED** | `GradeConfiguration`/`GradeRecord` (dùng trong `GradesController.cs`) song song với `GradeColumn`/`StudentGrade`/`GradingFormula`/`StudentGradeSummary` (khai báo trong `ParishDbContext.cs`).
-
- | Chưa được phân tích trong `DATABASE-OVERVIEW.md`. |
-
----
-
-## 4. Hallucination Audit (Kiểm toán Suy diễn / Ảo giác AI)
-
-1. **Áp đặt tên Domain giả định từ Prompt vào Inventory (Task 01):**
-* Trong `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json` và `MODULE-INVENTORY.json` (Task 01), AI đã gán các module giả định từ ví dụ của đề bài vào hệ thống Giáo lý: `Hotel / Class Management`, `Hotel / Facilities`, `Booking / Enrollment`, `Booking / MassCampaigns`, và tự tạo một record `PaymentPaymentModule` (`module: "Payment"`). Hệ thống thực tế hoàn toàn không có nghiệp vụ Hotel, Booking hay Payment.
-
-
-
-
-2. **Tự tạo Index `"StudentCode"` trên bảng `Students` trong `TABLE-INDEX.json` (Task 05 & Task 06):**
-* Cả hai file `TABLE-INDEX.json` ở Task 05 và Task 06 đều ghi bảng `Students` có `"indexes": ["IsDeleted", "StudentCode"]`.
-* Kiểm tra `Data\ParishDbContext.cs` và `Models\Entities\Student.cs`: Hệ thống **chỉ** đánh index cho `IsDeleted` (`modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);`), hoàn toàn **không có** khai báo `HasIndex(e => e.StudentCode)` trên bảng `Students` (chỉ bảng `StudentCodeHistories` mới có `HasIndex(h => h.OriginalCode)` và `HasIndex(h => h.ArchivedYearCode)`).
-
-
-
-
-3. **Bỏ qua nhánh xử lý mặc định ngoài khung giờ trong `ProcessQrCheckInViaRedisAsync` (Task 03 & Task 04):**
-* Trong `Services\RedisAttendanceService.cs`, khi `AttendanceTimeHelper.EvaluateCheckIn` trả về `(!isMass && !isClass)` (do quét QR ngoài khung giờ quy định), `ProcessQrCheckInViaRedisAsync` tự động gán `isClass = true; status = AttendanceStatus.Present;`. Tài liệu Task 03 và Task 04 chưa ghi nhận nhánh logic thực tế này.
-
-
-
-
-4. **Bỏ qua việc `IsEligibleForSacrament` bị gán cứng `false` trong `AttendanceController.Statistics` (Task 03):**
-* Trong `Controllers\AttendanceController.cs` (action `Statistics`), thuộc tính `IsEligibleForSacrament` đang bị comment công thức và gán cứng `IsEligibleForSacrament = false // IsEligibleForSacrament = (massRate >= 80.0 && classRate >= 80.0)`, trong khi action `ExportStatisticsExcel` ngay bên dưới lại tính `var isEligible = (sunRate >= 80.0 && classRate >= 80.0);`.
-
-
-
-
+### 3.6. Tiêu chí 7, 8 & 9: Tệp Chưa Cập Nhật, Tham Chiếu Sai & Cú Pháp JSON/JSONL
+- **JSON & JSONL (`PASS`):** Tất cả `5` file `.json` (`MODULE-INVENTORY.json`, `PROJECT-INVENTORY.json`, `TABLE-INDEX.json`, `AFFECTED-FILES.json`, `KNOWLEDGE-BASELINE.json`) và `4` file `.jsonl` (`FILE-INDEX.jsonl` [72 dòng], `SYMBOL-INDEX.jsonl` [120 dòng], `ROUTE-INDEX.jsonl` [52 dòng], `DEPENDENCY-INDEX.jsonl` [65 dòng]) + JSON trong `TABLE-RELATIONSHIPS.md` đều hợp lệ 100%, không lẫn Markdown fence hay trùng khóa.
+- **Tồn dư module giả lập & tệp cũ chưa cập nhật (`FAIL / HIGH`):** `00-OVERVIEW/MODULE-INVENTORY.json`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json` vẫn giữ tên miền `Booking`, `Payment`, `Hotel` và chưa phản ánh `28` Controllers / `315` tệp hiện có (`ISS-AUD-001`). Ngoài ra `00-OVERVIEW/PROJECT-DEPENDENCY-DIAGRAM.md:17` thiếu dấu đóng ```` ``` ```` của block Mermaid (`ISS-AUD-009`).
 
 ---
 
-## 5. Technical Quality & Security Audit
+## 4. Danh Sách Tổng Hợp Các Vấn Đề Phát Hiện (`9` Issues)
 
-1. **Vi phạm quy tắc định dạng JSON/JSONL (Markdown Fence):**
-* Toàn bộ các file JSON và JSONL trong Task 01, Task 05 và Task 06 đều bị bọc trong cặp thẻ ````json` hoặc ````jsonl`, vi phạm quy tắc số 5 của System Instructions (*"Không thêm Markdown fence vào nội dung file JSON/JSONL"*).
+> Chi tiết máy đọc xem tại [`KNOWLEDGE-ISSUES.jsonl`](file:///d:/github/ManagerStudentCaltholic/AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-ISSUES.jsonl); hướng dẫn khắc phục chi tiết xem tại [`REQUIRED-CORRECTIONS.md`](file:///d:/github/ManagerStudentCaltholic/AI-Knowledge/06-UPDATE-LOG/REQUIRED-CORRECTIONS.md).
 
-
-2. **Không đồng nhất định dạng đường dẫn (`filePath`):**
-* Task 01 sử dụng đường dẫn tuyệt đối trên máy local (`D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic\Controllers\AbsenceController.cs`) hoặc đường dẫn rút gọn có dấu `...` (`D:\github\...\Controllers\AbsenceController.cs`), trong khi Task 05 sử dụng đường dẫn tương đối (`Controllers/AbsenceController.cs`).
-
-
-
-
-3. **Thiếu số dòng (`startLine`, `endLine`, `sourceLine`):**
-* Tất cả các trường `startLine`, `endLine` trong `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl` và `sourceLine` trong `DEPENDENCY-INDEX.jsonl` đều đang để `null` dù có thể xác định vị trí tương đối trong từng file nguồn.
-
-
-4. **Cảnh báo Rò rỉ Thông tin Nhạy cảm (Secret Leakage trong Source Configuration):**
-* File `appsettings.Development.json` chứa chuỗi kết nối Azure PostgreSQL (trong comment) kèm mật khẩu thật, mật khẩu PostgreSQL local, và `JwtSettings:SecretKey` thật.
-
-
-* File `Models\ViewModels\BatchTeacherViewModels.cs` và `Views\Users\Index.cshtml` chứa mật khẩu khởi tạo mặc định cứng `"GLV@2026!"`.
-
-
-* Mặc dù tài liệu đã tạo không làm lộ các chuỗi này, báo cáo kiểm định bắt buộc phải ghi nhận `[REDACTED]` để đội ngũ phát triển xử lý.
-
-
+| ID | Mức độ | Tiêu chí | File Knowledge bị ảnh hưởng | Tóm tắt vấn đề |
+|---|---|---|---|---|
+| `ISS-AUD-001` | `HIGH` | #7, #9 | `00-OVERVIEW/MODULE-INVENTORY.json`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json` | Còn tên miền/module giả lập `Booking`, `Payment`, `Hotel` không có thật & phạm vi kiểm kê dừng ở `2026-03-31` (`28` Controllers / `315` files hiện tại). |
+| `ISS-AUD-002` | `HIGH` | #5, #10 | `06-UPDATE-LOG/UPDATE-LOG.md:95`, `02-DATABASE/DATABASE-OVERVIEW.md:5` | `Migrations/` có `0` file nhưng mục lịch sử `UPDATE-LOG.md:95` vẫn khẳng định đã tạo EF Migration `AddClassCurriculumDocumentsAndVersions`; trạng thái DDL PostgreSQL vẫn là `NEEDS_VERIFICATION`. |
+| `ISS-AUD-003` | `MEDIUM` | #5 | `02-DATABASE/TABLE-INDEX.json`, `02-DATABASE/TABLE-RELATIONSHIPS.md` | Lệch số lượng và tập bảng giữa `DATABASE-OVERVIEW.md` (`43`), `TABLE-INDEX.json` (`23`), và JSON nhúng trong `TABLE-RELATIONSHIPS.md` (`20`). |
+| `ISS-AUD-004` | `MEDIUM` | #1, #2, #3 | `03-CODE-INDEX/SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl` | Trôi số dòng & chữ ký của `HomeController`, `IStaffStudentLookupService`, `StaffStudentLookupService`, `HttpRequestExtensions`; thiếu cạnh `StaffStudentLookupService -> IGradeCalculationService`; `22` symbolKey trong `DEPENDENCY-INDEX` thiếu định nghĩa trong `SYMBOL-INDEX`. |
+| `ISS-AUD-005` | `MEDIUM` | #3, #4 | `01-MODULES/ATTENDANCE.md:240,280` | Mục 6 ghi sai rằng QR check-in gọi `IStudentCodeRolloverService` (thực tế query thẳng `StudentCodeHistories`); mục 9 vẫn mô tả `SaveBatchToRedisAsync` chờ Hangfire 10 phút trong khi `SaveBatch` đã Write-Through tức thì. |
+| `ISS-AUD-006` | `MEDIUM` | #1, #4 | `05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md` | Sai ID ô tìm kiếm (`#staffLookupSearchInput` vs `#staffStudentQuickSearchInput`), debounce (`250ms` vs `280ms`), điều kiện độ dài tối thiểu, tên cột `OldCode` vs `OriginalCode/ArchivedYearCode/NewCode`, tên cờ DTO (`MatchedByOldCode` vs `IsHistoricalMatch/MatchedHistoricalCode`). |
+| `ISS-AUD-007` | `MEDIUM` | #4 | `05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md:164`, `FEAT-P5-02-MOBILE-FIRST-UI.md` | Lệch thời gian khóa quét trùng QR (`2.5s` vs `3000ms` tại `ScanQr.cshtml:868`); lệch thông số UI Mobile (`54px` vs `56px`, `#mobileUserOffcanvas` vs `#mobileMenuOffcanvas`, `z-index: 1085` vs `1070`). |
+| `ISS-AUD-008` | `LOW` | #2, #4 | `05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md:144-145` | Bảng endpoints viết tham số route `{id}` thay vì `{versionId:long}` như trong `LessonPlansController.cs:205,228`. |
+| `ISS-AUD-009` | `LOW` | #1, #2, #9 | `03-CODE-INDEX/*.jsonl`, `00-OVERVIEW/PROJECT-DEPENDENCY-DIAGRAM.md:17` | Dòng baseline `null` cho `startLine`/`sourceLine` trong code indexes; độ phủ `FILE-INDEX` hiện dừng ở `72/315` file; `PROJECT-DEPENDENCY-DIAGRAM.md:17` thiếu dấu đóng ```` ``` ```` của Mermaid block. |
 
 ---
 
-### 2. KNOWLEDGE-ISSUES.jsonl
-
-{"issueId": "ISS-001", "severity": "CRITICAL", "artifact": "MISSING-SOURCE-REPORT.md", "location": "Section 1 & Section 3", "category": "Completeness", "description": "Báo cáo sai rằng các file TXT không bị cắt cụt. Thực tế có 4 file bị cắt ngang ở cuối các Part 1, 2, 3, 4 và ít nhất 18 file (5 Controllers, 9 Services, 4+ Views) bị mất hoàn toàn ở ranh giới chuyển tiếp giữa các Part.", "evidence": "PromotionController.cs bị cắt ở cuối full_source_part_1.txt; DeviceStudentRecognitionService.cs bị cắt ở cuối full_source_part_2.txt; Views/Dashboard/Index.cshtml bị cắt ở cuối full_source_part_3.txt; Views/Sacraments/Index.cshtml bị cắt ở cuối full_source_part_4.txt."}
-{"issueId": "ISS-002", "severity": "CRITICAL", "artifact": "ATTENDANCE.md", "location": "Section 9 (Risk Areas)", "category": "Hallucination / Business Rule", "description": "Nhận định sai rằng luồng SaveBatchToRedisAsync chỉ lưu trên Redis với cờ IsDirty=true và phải chờ Hangfire 10 phút mới đồng bộ xuống DB. Thực tế AttendanceController.SaveBatch đã gọi ngay SyncDirtyAttendancesToDatabaseAsync (Write-Through) trong cùng HTTP Request.", "evidence": "Controllers/AttendanceController.cs trong hàm SaveBatch gọi await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate) ngay sau SaveBatchToRedisAsync (P2-LOG-16 FIX)."}
-{"issueId": "ISS-003", "severity": "CRITICAL", "artifact": "DEPENDENCY-INDEX.jsonl & SYMBOL-INDEX.jsonl", "location": "Cross-index references", "category": "Consistency / Broken Reference", "description": "DEPENDENCY-INDEX.jsonl tham chiếu tới 14 class Service (như RedisAttendanceService, AttendanceDisputeService, RedisCacheService, TokenService) và các method thực thi nhưng không có symbol nào trong số này được khai báo trong SYMBOL-INDEX.jsonl.", "evidence": "Services/RedisAttendanceService.cs, Services/AttendanceDisputeService.cs, Services/RedisCacheService.cs, Services/TokenService.cs có trong source nhưng bị bỏ sót khỏi SYMBOL-INDEX.jsonl."}
-{"issueId": "ISS-004", "severity": "CRITICAL", "artifact": "PROJECT.md & ARCHITECTURE.md", "location": "Section 3 (PROJECT.md) & Section 1.2 (ARCHITECTURE.md)", "category": "Evidence Audit", "description": "Trích dẫn các file StudentsController.cs, SacramentsController.cs và GradeCalculationService.cs như bằng chứng trực tiếp đã xác nhận, trong khi nội dung các file này đã bị mất giữa các Part TXT và chỉ có thể suy luận (INFERRED) từ DI container và Views.", "evidence": "ServiceCollectionExtensions.cs đăng ký AddScoped(), nhưng file GradeCalculationService.cs, StudentsController.cs, SacramentsController.cs không tồn tại trong 5 file TXT."}
-{"issueId": "ISS-005", "severity": "CRITICAL", "artifact": "TABLE-INDEX.json (Task 05 & Task 06)", "location": "schemas[0].tables[0] (Students)", "category": "Hallucination", "description": "Tự ý thêm index StudentCode vào bảng Students trong TABLE-INDEX.json, trong khi ParishDbContext.cs chỉ đánh index cho trường IsDeleted trên bảng Students.", "evidence": "Data/ParishDbContext.cs chỉ khai báo modelBuilder.Entity().HasIndex(e => e.IsDeleted); Models/Entities/Student.cs không có thuộc tính [Index] trên StudentCode."}
-{"issueId": "ISS-006", "severity": "HIGH", "artifact": "SOURCE-INVENTORY.md, PROJECT-INVENTORY.json, FILE-INDEX.jsonl", "location": "All records", "category": "Completeness", "description": "Kiểm kê thiếu nghiêm trọng số lượng file thực tế. Nguồn có 207 file nhưng SOURCE-INVENTORY.md chỉ ghi 41 dòng, PROJECT-INVENTORY.json chỉ có 12 records, và FILE-INDEX.jsonl chỉ có 45 records (bỏ sót 162 file).", "evidence": "Đếm toàn bộ tiêu đề FILE: từ full_source_part_1.txt đến full_source_part_5.txt có đúng 207 file."}
-{"issueId": "ISS-007", "severity": "HIGH", "artifact": "TABLE-INDEX.json (Task 05 vs Task 06) & DATABASE-OVERVIEW.md", "location": "schemas[0].tables", "category": "Consistency & Completeness", "description": "Mâu thuẫn số lượng bảng giữa các tài liệu: ParishDbContext.cs định nghĩa 39 bảng (38 DbSet + 1 bảng ClassLessonPlans trong OnModelCreating), DATABASE-OVERVIEW.md liệt kê 38 bảng, TABLE-INDEX.json (Task 05) liệt kê 18 bảng, còn TABLE-INDEX.json (Task 06) chỉ liệt kê 15 bảng.", "evidence": "Data/ParishDbContext.cs khai báo 38 DbSet và modelBuilder.Entity(entity => entity.ToTable("ClassLessonPlans"))."}
-{"issueId": "ISS-008", "severity": "HIGH", "artifact": "ROUTE-INDEX.jsonl", "location": "All records", "category": "Completeness", "description": "Chỉ lập chỉ mục 30 routes trên tổng số 94 action endpoints có trong 22 Controllers. Bỏ sót hoàn toàn routes của 16 Controllers và các Attribute Routes quan trọng như /Admin/Logs, /Admin/Logs/HealthStats, /Admin/Logs/Download.", "evidence": "Controllers/LogsController.cs khai báo [Route("Admin/Logs")], [Route("Logs")], [Route("Admin/Logs/HealthStats")], [Route("Admin/Logs/Download")]."}
-{"issueId": "ISS-009", "severity": "HIGH", "artifact": "ATTENDANCE.md & FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md", "location": "Business Rules & Execution Flow", "category": "Completeness / Business Rule", "description": "Bỏ sót nhánh logic xử lý quét QR ngoài khung giờ quy định (khi !isMass && !isClass thì hệ thống tự động ép kiểu thành điểm danh Giờ học Giáo lý có mặt: isClass = true; status = AttendanceStatus.Present) và sự bất đồng bộ giữa _GuideAttendance.cshtml với RedisAttendanceService về việc quét mã QR năm cũ (_2526).", "evidence": "Services/RedisAttendanceService.cs trong hàm ProcessQrCheckInViaRedisAsync gán if (!isMass && !isClass) { isClass = true; status = AttendanceStatus.Present; } và không gọi IStudentCodeRolloverService."}
-{"issueId": "ISS-010", "severity": "HIGH", "artifact": "SOURCE-INVENTORY.md & MODULE-INVENTORY.json", "location": "Module column / field", "category": "Hallucination", "description": "Sử dụng tên module giả định từ ví dụ đề bài (Hotel, Booking, PaymentPaymentModule) để phân loại các file của hệ thống Quản lý Giáo lý.", "evidence": "SOURCE-INVENTORY.md và MODULE-INVENTORY.json ở Task 01 gán Hotel / Class Management, Booking / Enrollment, PaymentPaymentModule dù codebase là ManagerStudentCaltholic."}
-{"issueId": "ISS-011", "severity": "HIGH", "artifact": "DATABASE-OVERVIEW.md & ARCHITECTURE.md", "location": "Database Tables & Grade Module", "category": "Architecture Analysis", "description": "Chưa phân biệt 2 cụm bảng điểm tồn tại song song trong ParishDbContext: cụm đang dùng thực tế trong GradesController (GradeConfigurations, GradeRecords, ClassTeachers) và cụm bảng snake_case cũ/ít dùng (grade_columns, student_grades, grading_formulas, student_grade_summaries, attendance_score_rules, teacher_classes).", "evidence": "Controllers/GradesController.cs truy vấn _context.GradeConfigurations và _context.GradeRecords, trong khi Data/ParishDbContext.cs vẫn giữ các DbSet GradeColumns, StudentGrades, GradingFormulas, TeacherClasses."}
-{"issueId": "ISS-012", "severity": "MEDIUM", "artifact": "SYMBOL-INDEX.jsonl", "location": "AccountController.Login", "category": "Completeness / Overload", "description": "Vi phạm quy tắc giữ nguyên overload trong SYMBOL-INDEX.jsonl: AccountController có 2 hàm Login (GET và POST) nhưng chỉ có hàm POST được đưa vào index.", "evidence": "Controllers/AccountController.cs chứa cả [HttpGet] public IActionResult Login(string? returnUrl = null) và [HttpPost] public async Task Login(LoginRequestDto model)."}
-{"issueId": "ISS-013", "severity": "MEDIUM", "artifact": "ARCHITECTURE.md & FILE-INDEX.jsonl", "location": "Middleware layer", "category": "Architecture Analysis", "description": "Không ghi chú rằng RequestLoggingMiddleware.cs là class không được kích hoạt trong HTTP pipeline, vì Program.cs sử dụng inline middleware UseCustomRequestLogging() trong LoggingExtensions.cs.", "evidence": "Program.cs gọi app.UseCustomRequestLogging() được định nghĩa tại Extensions/LoggingExtensions.cs, không gọi UseMiddleware()."}
-{"issueId": "ISS-014", "severity": "MEDIUM", "artifact": "ATTENDANCE.md", "location": "Section 5 (Business Rules)", "category": "Business Rule", "description": "Chưa ghi nhận việc action AttendanceController.Statistics đang gán cứng IsEligibleForSacrament = false (comment công thức), khác với action ExportStatisticsExcel vẫn tính (sunRate >= 80.0 && classRate >= 80.0).", "evidence": "Controllers/AttendanceController.cs trong hàm Statistics gán IsEligibleForSacrament = false, còn trong ExportStatisticsExcel gán var isEligible = (sunRate >= 80.0 && classRate >= 80.0)."}
-{"issueId": "ISS-015", "severity": "MEDIUM", "artifact": "PROJECT-DEPENDENCY-DIAGRAM.md", "location": "Section 3 (Sequence Diagram)", "category": "Consistency", "description": "Sơ đồ Sequence Diagram của luồng điểm danh QR không thể hiện bước Write-Through gọi SyncDirtyAttendancesToDatabaseAsync() ngay trong ScanCheckIn mà chỉ vẽ ở luồng Hangfire 10 phút/lần.", "evidence": "Controllers/AttendanceController.cs gọi await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(targetDate) ngay bên trong ScanCheckIn."}
-{"issueId": "ISS-016", "severity": "MEDIUM", "artifact": "TECH-STACK.md & INTEGRATION-OVERVIEW.md", "location": "Security / Configuration", "category": "Security Audit", "description": "Chưa cảnh báo các thông tin nhạy cảm (Secret/Password) đang bị lưu cứng trong appsettings.Development.json và BatchTeacherViewModels.cs cần được gắn nhãn [REDACTED].", "evidence": "appsettings.Development.json chứa mật khẩu DB và JwtSettings:SecretKey; Models/ViewModels/BatchTeacherViewModels.cs chứa DefaultPassword hardcoded."}
-{"issueId": "ISS-017", "severity": "LOW", "artifact": "PROJECT-INVENTORY.json, MODULE-INVENTORY.json, FILE-INDEX.jsonl, SYMBOL-INDEX.jsonl, DEPENDENCY-INDEX.jsonl, ROUTE-INDEX.jsonl, TABLE-INDEX.json", "location": "Formatting", "category": "Technical Quality", "description": "Sử dụng Markdown code fence (`json và `jsonl) bao quanh nội dung các file JSON/JSONL, vi phạm quy tắc Output Requirements số 5.", "evidence": "Các khối xuất JSON/JSONL ở Task 01, Task 05, Task 06 đều có thẻ đóng mở ```."}
-{"issueId": "ISS-018", "severity": "LOW", "artifact": "SOURCE-INVENTORY.md vs FILE-INDEX.jsonl", "location": "filePath field", "category": "Technical Quality", "description": "Không thống nhất chuẩn đường dẫn filePath giữa các artifact: SOURCE-INVENTORY.md dùng đường dẫn rút gọn chứa dấu '...' (D:\github\...\Controllers\AbsenceController.cs), PROJECT-INVENTORY.json dùng đường dẫn tuyệt đối ổ D:, còn FILE-INDEX.jsonl dùng đường dẫn tương đối.", "evidence": "Đối chiếu cột Original File Path trong SOURCE-INVENTORY.md và trường filePath trong FILE-INDEX.jsonl."}
-
----
-
-### 3. MISSING-DATA-REPORT.md
-
-# MISSING DATA AND TRUNCATED SOURCE REPORT
-
-Báo cáo này liệt kê chính xác toàn bộ các file bị cắt ngang (truncated) và các file bị thiếu hoàn toàn trong bộ 5 file TXT đã cung cấp, kèm theo bằng chứng xác thực từ mã nguồn.
-
-## 1. Danh sách các File bị cắt ngang (Truncated Files)
-
-| Stt | Original File Path | Vị trí bị cắt | Dòng code cuối cùng trước khi bị cắt | Phần nội dung bị mất |
-| --- | --- | --- | --- | --- |
-| 1 | `D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic\Controllers\PromotionController.cs`
-
- | Cuối `full_source_part_1.txt`
-
- | `_logger.LogInformation("AUDIT: User {User} updated PromotionRuleConfig for YearId={YearId},...`
-
- | Phần cuối của action `SavePromotionRule`, toàn bộ action `ExecuteRollover` và `CloneClassesToNewYear` (được gọi qua AJAX từ `Views\Promotion\Index.cshtml`).
-
- |
-| 2 | `D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic\Services\DeviceStudentRecognitionService.cs`
-
- | Cuối `full_source_part_2.txt`
-
- | `if (!classIds.Any() &&...`
-
- | Phần truy vấn `Announcements` trong `DetectStudentsAndLoadAnnouncementsAsync`, hàm `DetachStudentFromDevice`, và các hàm đọc/ghi Cookie mã hóa `ReadProtectedCookieList`/`WriteProtectedCookieList`.
-
- |
-| 3 | `D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic\Views\Dashboard\Index.cshtml`
-
- | Cuối `full_source_part_3.txt`
-
- | `<td class="te...`
-
- | Phần cột Liên hệ của bảng `HighAbsenceStudents`, bảng xếp hạng `TopPerformingClasses`, và toàn bộ khối `@section Scripts` vẽ biểu đồ Chart.js (`gradeComparisonBarChart`, `statusDoughnutChart`, `monthlyTrendLineChart`).
-
- |
-| 4 | `D:\github\ManagerStudentCaltholic\ManagerStudentCaltholic\Views\Sacraments\Index.cshtml`
-
- | Cuối `full_source_part_4.txt`
-
- | `dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>'...`
-
- | Phần script JavaScript render timeline 4 chặng Bí tích, hàm `submitSaveSacramentRecord` và `submitDeleteSacramentRecord`.
-
- |
-
----
-
-## 2. Danh sách các File Code C# bị mất hoàn toàn giữa các Part TXT
-
-### 2.1. Nhóm Controllers bị mất (Giữa Part 1 và Part 2 — thứ tự chữ cái `P` đến `U`)
-
-1. `Controllers\PublicRegistrationController.cs` — **Bằng chứng tồn tại:** Được gọi từ `Views\PublicRegistration\Index.cshtml` (`/PublicRegistration/Submit`), `Views\PublicRegistration\CheckStatus.cshtml`, `Views\PublicRegistration\Success.cshtml`, `LogsController.cs` và `nginx\default.conf`.
-
-
-2. `Controllers\PwaController.cs` — **Bằng chứng tồn tại:** Có thư mục view tương ứng `Views\Pwa\Index.cshtml`.
-
-
-3. `Controllers\SacramentsController.cs` — **Bằng chứng tồn tại:** Được gọi từ `Views\Sacraments\Index.cshtml`, `Views\Sacraments\Evaluation.cshtml` (`/Sacraments/GetRecords/{id}`, `/Sacraments/SaveRecord`, `/Sacraments/DeleteRecord`, `/Sacraments/SaveApprovalBatch`, `/Sacraments/ApproveBatch`, `/Sacraments/ExportApprovalExcel`, `/Sacraments/PrintApprovalSheet`).
-
-
-4. `Controllers\StudentRegistrationsController.cs` — **Bằng chứng tồn tại:** Được tham chiếu tại `Views\Dashboard\Index.cshtml` (`/StudentRegistrations`), `Views\Home\Guides\_GuideSacrament.cshtml` (`/StudentRegistrations/Index`) và `Models\ViewModels\AdminRegistrationDashboardViewModel.cs`.
-
-
-5. `Controllers\StudentsController.cs` — **Bằng chứng tồn tại:** Được gọi từ `Views\Students\Index.cshtml` (`/Students/GetStudentAjax/{id}`, `/Students/PreviewNextCode`, `/Students/CheckCodeUnique`, `Create`, `Edit`, `ImportExcel`, `ToggleActive`, `DownloadQr`) và `Views\Students\PrintBadges.cshtml`.
-
-
-6. *(Lưu ý)* `Controllers\GradesController_copy.cs` — Đã bị loại khỏi bản build theo cấu hình `<Compile Remove="Controllers\GradesController_copy.cs" />` trong `ManagerStudentCaltholic.csproj` nên không cần bổ sung.
-
-
-
-### 2.2. Nhóm Services bị mất (Giữa Part 2 và Part 3 — thứ tự chữ cái `D` đến `R`)
-
-Toàn bộ 9 class dưới đây được xác nhận đăng ký Dependency Injection trong `Extensions\ServiceCollectionExtensions.cs` nhưng bị rơi mất giữa cuối Part 2 và đầu Part 3:
-
-1. `Services\FeatureNavigationService.cs` (Thực thi `IFeatureNavigationService`).
-
-
-2. `Services\GradeCalculationService.cs` (Thực thi `IGradeCalculationService`).
-
-
-3. `Services\GradePermissionService.cs` (Thực thi `IGradePermissionService`).
-
-
-4. `Services\LessonPlanImportService.cs` (Thực thi `ILessonPlanImportService`).
-
-
-5. `Services\LogRetentionBackgroundService.cs` (Thực thi `IHostedService` và `ILogMaintenanceJobService`).
-
-
-6. `Services\MassCampaignService.cs` (Thực thi `IMassCampaignService`).
-
-
-7. `Services\PasswordHasherService.cs` (Thực thi `IPasswordHasherService`).
-
-
-8. `Services\PromotionEvaluationService.cs` (Thực thi `IPromotionEvaluationService`).
-
-
-9. `Services\QrCodeService.cs` (Thực thi `IQrCodeService`).
-
-
-
----
-
-## 3. Danh sách các File Giao diện (Views), Client Assets và Migrations chưa được cung cấp
-
-1. **Razor Views bị rơi giữa Part 3 & Part 4 (`D` → `G`) và giữa Part 4 & Part 5 (`S` → `S`):**
-* `Views\Enrollments\Manage.cshtml` (Được trả về từ `EnrollmentsController.Manage`).
-
-
-* `Views\Facilities\Index.cshtml` (Được trả về từ `FacilitiesController.Index`).
-
-
-* `Views\FeaturePermissions\Index.cshtml` (Được trả về từ `FeaturePermissionsController.Index`).
-
-
-* `Views\Governance\Index.cshtml` (Được trả về từ `GovernanceController.Index`).
-
-
-* `Views\Sacraments\PrintApprovalSheet.cshtml` (Được liên kết từ `Views\Sacraments\Evaluation.cshtml`).
-
-
-* `Views\Shared\_Layout.cshtml` và `Views\Shared\_ValidationScriptsPartial.cshtml` (Được tham chiếu trong `Views\_ViewStart.cshtml` và `Views\Account\Login.cshtml`).
-
-
-* `Views\StudentRegistrations\Index.cshtml` (Màn hình duyệt hồ sơ tuyển sinh của BĐH).
-
-
-
-
-2. **Client-side JavaScript & Service Worker (`wwwroot/`):**
-* File chứa đối tượng `ParishOfflineEngine` (được gọi trong `Views\Attendance\Index.cshtml` và `Views\Attendance\ScanQr.cshtml` để lưu IndexedDB).
-
-
-* File Service Worker `wwwroot\sw.js` (được cấu hình header `no-cache` trong `Program.cs`).
-
-
-
-
-3. **EF Core Migrations (`Migrations/`):**
-* Thư mục `Migrations\` được khai báo trong `ManagerStudentCaltholic.csproj` và thực thi tự động qua `dbContext.Database.Migrate()` trong `WebApplicationExtensions.cs`, nhưng chưa có các file migration `.cs` và `ParishDbContextModelSnapshot.cs`.
-
-
-
-
-
----
-
-### 4. CORRECTION-PLAN.md
-
-# CORRECTION PLAN (KẾ HOẠCH HIỆU CHỈNH BỘ KNOWLEDGE BASE)
-
-Để bộ tài liệu và chỉ mục AI Codebase Analyzer đạt độ chính xác 100% và sẵn sàng phục vụ việc sửa bug, phát triển tính năng và phân tích impact, quy trình hiệu chỉnh được chia thành 4 giai đoạn theo mức độ ưu tiên:
-
----
-
-## Giai đoạn 1: Bổ sung các phần Source Code bị thiếu / bị cắt (Yêu cầu Dữ liệu Đầu vào)
-
-Đề xuất cung cấp bổ sung các đoạn source bị khuyết ở điểm nối giữa các Part TXT:
-
-1. **Bổ sung phần cuối của 4 file bị cắt:**
-* `Controllers\PromotionController.cs` (từ dòng `_logger.LogInformation("AUDIT: User {User} updated PromotionRuleConfig...` đến hết file).
-
-
-* `Services\DeviceStudentRecognitionService.cs` (từ dòng `if (!classIds.Any() &&...` đến hết file).
-
-
-* `Views\Dashboard\Index.cshtml` (từ bảng `HighAbsenceStudents` đến hết file).
-
-
-* `Views\Sacraments\Index.cshtml` (từ vòng lặp `currentSacramentTimeline.forEach` đến hết file).
-
-
-
-
-2. **Bổ sung 5 Controllers và 9 Services bị mất ở ranh giới các Part:**
-* Controllers: `PublicRegistrationController.cs`, `PwaController.cs`, `SacramentsController.cs`, `StudentRegistrationsController.cs`, `StudentsController.cs`.
-
-
-* Services: `FeatureNavigationService.cs`, `GradeCalculationService.cs`, `GradePermissionService.cs`, `LessonPlanImportService.cs`, `LogRetentionBackgroundService.cs`, `MassCampaignService.cs`, `PasswordHasherService.cs`, `PromotionEvaluationService.cs`, `QrCodeService.cs`.
-
-
-
-
-3. **Bổ sung JS Offline Engine & Shared Layout:**
-* File JS định nghĩa `ParishOfflineEngine`, `wwwroot\sw.js`, và `Views\Shared\_Layout.cshtml`.
-
-
-
-
-
----
-
-## Giai đoạn 2: Sửa lỗi CRITICAL trong Tài liệu Kiến trúc & Nghiệp vụ (Có thể thực hiện ngay trên Source hiện có)
-
-1. **Hiệu chỉnh `ATTENDANCE.md` và `PROJECT-DEPENDENCY-DIAGRAM.md` (Khắc phục `ISS-002`, `ISS-009`, `ISS-014`, `ISS-015`):**
-* Cập nhật lại mô tả và Sequence Diagram của cả `SaveBatch` và `ScanCheckIn` trong `AttendanceController.cs`: Cả hai luồng đều thực hiện **Write-Through tức thì** xuống PostgreSQL thông qua `SyncDirtyAttendancesToDatabaseAsync` ngay trong cùng HTTP Request (P2-LOG-16 FIX).
-
-
-* Bổ sung quy tắc xử lý quét QR ngoài khung giờ trong `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` (`!isMass && !isClass` mặc định tính vào buổi học Giáo lý `isClass = true`, `status = PRESENT`).
-
-
-* Ghi nhận rõ `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` hiện chưa tích hợp `IStudentCodeRolloverService.ResolveStudentByAnyCodeAsync` cho mã QR năm cũ (`_2526`), và `AttendanceController.Statistics` đang gán cứng `IsEligibleForSacrament = false`.
-
-
-
-
-2. **Hiệu chỉnh `PROJECT.md` và `ARCHITECTURE.md` (Khắc phục `ISS-004`, `ISS-011`, `ISS-013`):**
-* Đánh dấu `[INFERRED - File Missing in Export]` đối với các class `StudentsController`, `SacramentsController`, `GradeCalculationService`, `MassCampaignService`, `FeatureNavigationService` cho đến khi nhận được source bổ sung.
-
-
-* Ghi chú rõ `RequestLoggingMiddleware.cs` không được đăng ký trong `Program.cs` (hệ thống đang dùng `UseCustomRequestLogging()` trong `LoggingExtensions.cs`).
-
-
-* Phân tách rõ cụm bảng điểm đang hoạt động (`GradeConfigurations`, `GradeRecords`) và cụm bảng điểm snake_case (`grade_columns`, `student_grades`, `grading_formulas`, `student_grade_summaries`, `attendance_score_rules`, `teacher_classes`).
-
-
-
-
-3. **Hiệu chỉnh `SOURCE-INVENTORY.md` và `MODULE-INVENTORY.json` (Khắc phục `ISS-001`, `ISS-010`, `ISS-018`):**
-* Loại bỏ hoàn toàn các nhãn domain giả định từ ví dụ prompt (`Hotel`, `Booking`, `PaymentPaymentModule`). Chuẩn hóa lại tên module theo đúng nghiệp vụ Giáo xứ: `Attendance`, `AcademicYear`, `AuthAndUsers`, `Announcements`, `BackgroundJobs`, `ClassAndEnrollment`, `DashboardAndAnalytics`, `Facilities`, `GovernanceAndPermissions`, `GradesAndEvaluation`, `LessonPlans`, `SystemLogs`, `PublicLookup`, `MassCampaigns`, `ParentMessages`, `PrintReports`, `PromotionAndRollover`, `PublicRegistration`, `Sacraments`, `StudentManagement`.
-
-
-
-
-
----
-
-## Giai đoạn 3: Tái tạo Toàn diện Bộ Index JSON/JSONL (Khắc phục `ISS-003`, `ISS-005`, `ISS-006`, `ISS-007`, `ISS-008`, `ISS-012`, `ISS-017`)
-
-1. **`FILE-INDEX.jsonl`:** Xuất đầy đủ toàn bộ **207 file** thực tế có trong 5 file TXT theo chuẩn đường dẫn tương đối nhất quán từ thư mục gốc Solution, đánh dấu `"isComplete": false` cho 4 file bị cắt ngang.
-
-
-2. **`SYMBOL-INDEX.jsonl`:**
-* Bổ sung đầy đủ 14 class Service và toàn bộ các public methods của chúng trong Part 2 & Part 3.
-
-
-* Bổ sung toàn bộ 94 action methods của 22 Controllers (giữ đầy đủ các overload như `AccountController.Login(string?)` và `AccountController.Login(LoginRequestDto)` bằng `symbolKey` kèm tham số).
-
-
-* Bổ sung toàn bộ 39 Entities, 20 Interfaces, 2 Enums và các DTOs/ViewModels.
-
-
-
-
-3. **`DEPENDENCY-INDEX.jsonl`:** Đồng bộ 100% `sourceSymbol` và `targetSymbol` khớp với `symbolKey` trong `SYMBOL-INDEX.jsonl`.
-4. **`ROUTE-INDEX.jsonl`:** Xuất đầy đủ **94 routes** từ 22 Controllers, bao gồm cả các Attribute Routes của `LookupController`, `LogsController`, `LessonPlansController` và Conventional Routes của 19 Controllers còn lại.
-
-
-5. **`TABLE-INDEX.json`:** Hợp nhất và xuất đầy đủ **39 bảng** của `ParishDbContext` (bao gồm cả `ClassLessonPlans`) + ghi nhận schema `hangfire`, xóa bỏ index ảo `"StudentCode"` trên bảng `Students`.
-
-
-6. **Chuẩn hóa Định dạng:** Xuất nội dung JSON/JSONL thuần túy không kèm Markdown fence và ẩn (`[REDACTED]`) mọi mật khẩu/khóa bí mật cấu hình.
-
-
-
----
-
-**Trạng thái chờ lệnh:** Tôi đã hoàn tất việc kiểm định và lập kế hoạch hiệu chỉnh mà không tự ý sửa đổi source code hay tài liệu gốc. Vui lòng cho biết bạn muốn cung cấp bổ sung phần source bị cắt trước, hay yêu cầu tôi thực thi ngay **Giai đoạn 2 & Giai đoạn 3** để xuất lại bộ tài liệu và các file Index chuẩn hóa trên tập 207 file hiện có.
+## 5. Điểm Chưa Đủ Căn Cứ Xác Minh Từ Source Code (`NEEDS_VERIFICATION`)
+
+Kiểm toán viên độc lập **không đánh dấu `PASS`** cho các hạng mục dưới đây cho đến khi Developer kiểm chứng trực tiếp trên môi trường DB / Runtime:
+1. **Lược đồ bảng PostgreSQL thực tế (`ClassCurriculumDocuments`, `ClassCurriculumVersions`, `ClassLessonPlans`, `StaffQuickLookupLogs`, `LookupViewOptions`):** Do `ManagerStudentCaltholic/Migrations/` hiện có `0` file migration, không thể xác minh từ Git repository rằng DB PostgreSQL đích đã có đủ bảng/cột tương ứng với `ParishDbContext.cs`.
+2. **Tình trạng chuẩn hóa & đưa vào Git các tệp untracked:** `nginx/default.conf` (được mount trong `docker-compose.yml`) và `script/seed-curriculum-data.sql` hiện chưa được commit vào `2a3263d`.
+3. **Phạm vi thực tế của `UserHomepageWidgetConfigs` và `TASK-P5-02.2..4`:** Chưa có bằng chứng Entity `UserHomepageWidgetConfigs` trong `Models/Entities/` hay `ParishDbContext.cs`.

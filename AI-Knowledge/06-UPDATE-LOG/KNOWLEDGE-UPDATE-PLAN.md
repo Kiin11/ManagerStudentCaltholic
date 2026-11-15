@@ -1,75 +1,51 @@
 # KẾ HOẠCH CẬP NHẬT KHO TRI THỨC AI (KNOWLEDGE UPDATE PLAN)
 
 - **Dự án:** `ManagerStudentCaltholic`
-- **Phiên bản baseline hiện tại:** `7c61591`
-- **Phiên bản mục tiêu:** `c0e828a` (Commit mới nhất trên nhánh `main`)
-- **Quy tắc bắt buộc:** **KHÔNG THỰC HIỆN CẬP NHẬT Ở BƯỚC NÀY**; chỉ lập kế hoạch chi tiết và phân công lộ trình theo từng tài liệu.
+- **Phiên bản baseline hiện tại (`KNOWLEDGE-BASELINE.json`):** `c0e828a`
+- **Phiên bản mục tiêu phân tích:** `2a3263d` (+ cập nhật cấu hình cục bộ 2026-11-15)
+- **Quy tắc bước phân tích:** **KHÔNG cập nhật các tài liệu Knowledge chính ở bước này**; tài liệu này lập lộ trình cập nhật chính xác cho đợt đồng bộ kế tiếp.
 
 ---
 
-## 1. Danh sách tài liệu cần cập nhật trong `AI-Knowledge/`
+## 1. Danh sách Tài liệu `AI-Knowledge/` Cần Cập nhật
 
-| STT | Đường dẫn tài liệu | Phân loại | Mục đích & Nội dung cần cập nhật |
-|---|---|---|---|
-| 1 | `AI-Knowledge/00-OVERVIEW/PROJECT.md` | Modified | Bổ sung 2 tính năng Phase 5: `FEAT-P5-01` (Tra cứu nội bộ tại HomePage) và `FEAT-P5-02` (Mobile-First Web UI). |
-| 2 | `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md` | Modified | Bổ sung sơ đồ kiến trúc rẽ nhánh giao diện `@if (isMobile)`, chiến lược Cache 2 tầng (Redis 5 phút cho Student 360). |
-| 3 | `AI-Knowledge/00-OVERVIEW/TECH-STACK.md` | Modified | Cập nhật các thư viện/cơ chế client: Safe Area Insets, PWA reload guard, Touch Targets 44px. |
-| 4 | `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` | Modified | Khai báo 2 bảng mới `LookupViewOptions` và `StaffQuickLookupLogs`, danh sách 5 Indexes mới. |
-| 5 | `AI-Knowledge/02-DATABASE/TABLE-INDEX.json` | Modified | Thêm cấu trúc JSON chi tiết của 2 bảng `LookupViewOptions` và `StaffQuickLookupLogs`. |
-| 6 | `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md` | Modified | Cập nhật quan hệ khóa ngoại giữa `StaffQuickLookupLogs` với `Users` và `Students`. |
-| 7 | `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl` | Modified | Bổ sung chỉ mục của 11 file mã nguồn mới tạo. |
-| 8 | `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl` | Modified | Bổ sung chỉ mục symbols cho Interface, Service, DTOs, Entities và Extension mới. |
-| 9 | `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl` | Modified | Bổ sung 4 endpoint mới của `HomeController`: `/Home/StaffSearchSuggestions`, `/Home/StaffStudentLookup`, `/Home/StaffRecentLookups`, `/Home/StaffLookupOptions`. |
-| 10 | `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl` | Modified | Bổ sung cây phụ thuộc DI của `StaffStudentLookupService` và layout mobile. |
-| 11 | `AI-Knowledge/05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md` | Added | Tạo mới tài liệu đặc tả luồng tra cứu tức thời 360 độ, 4 chế độ xem Option, cơ chế Redis caching và audit log. |
-| 12 | `AI-Knowledge/05-FEATURES/FEAT-P5-02-MOBILE-FIRST-UI.md` | Added | Tạo mới tài liệu đặc tả kiến trúc Mobile-First, Bottom Navigation 5 phân khu, Safe Area, Offcanvas footer. |
-| 13 | `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json` | Modified | Cập nhật commit baseline lên `c0e828a`. |
-| 14 | `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` | Modified | Ghi nhận chi tiết kết quả của phiên phân tích và cập nhật. |
-| 15 | `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md` | Modified | Xóa các mục chờ sau khi đã cập nhật xong. |
-
----
-
-## 2. Kế hoạch Thực thi Từng bước (Step-by-Step Implementation Roadmap)
-
-### **Giai đoạn 1: Cập nhật Lớp Dữ liệu & Schema (Database Layer)**
-- **Bước 1.1:** Cập nhật `AI-Knowledge/02-DATABASE/TABLE-INDEX.json` bổ sung định nghĩa schema đầy đủ cho `StaffQuickLookupLogs` và `LookupViewOptions`.
-- **Bước 1.2:** Cập nhật `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md` thêm sơ đồ Mermaid liên kết khóa ngoại:
-  ```mermaid
-  erDiagram
-      Users ||--o{ StaffQuickLookupLogs : "UserId (Cascade)"
-      Students ||--o{ StaffQuickLookupLogs : "StudentId (Cascade)"
-  ```
-- **Bước 1.3:** Cập nhật `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` bổ sung bảng kiểm kê và mô tả nghiệp vụ 2 bảng mới.
-
-### **Giai đoạn 2: Cập nhật Chỉ mục Codebase (Code Index Layer)**
-- **Bước 2.1:** Append các bản ghi file mới vào `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`.
-- **Bước 2.2:** Append các class, interface, method vào `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl`.
-- **Bước 2.3:** Append 4 API actions vào `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl`.
-- **Bước 2.4:** Append các cạnh quan hệ (Edges) vào `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`.
-
-### **Giai đoạn 3: Cập nhật Tài liệu Kiến trúc & Phân hệ (Architecture & Modules)**
-- **Bước 3.1:** Cập nhật `AI-Knowledge/00-OVERVIEW/PROJECT.md` và `ARCHITECTURE.md` ghi nhận sự xuất hiện của Phase 5 (`FEAT-P5-01`, `FEAT-P5-02`).
-- **Bước 3.2:** Khởi tạo `AI-Knowledge/05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md`.
-- **Bước 3.3:** Khởi tạo `AI-Knowledge/05-FEATURES/FEAT-P5-02-MOBILE-FIRST-UI.md`.
-
-### **Giai đoạn 4: Chốt Baseline & Nhật ký Cập nhật (Baseline & Audit Log)**
-- **Bước 4.1:** Cập nhật `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`:
-  ```json
-  {
-    "solution": "ManagerStudentCaltholic",
-    "lastIndexedCommit": "c0e828a",
-    "lastUpdatedAt": "2026-11-04T22:15:00+07:00",
-    "status": "completed"
-  }
-  ```
-- **Bước 4.2:** Điền nhật ký hoàn thành vào `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`.
-- **Bước 4.3:** Làm sạch `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`.
+| STT | Đường dẫn tài liệu | Phân loại | Ưu tiên | Nội dung cần cập nhật |
+|---|---|---|---|---|
+| 1 | `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md` | Modified | Medium | Cập nhật cây thư mục Mục 2 phản ánh đúng các file thực tế (`ATTENDANCE.md`, các file `FEAT-P5-*`, `06-UPDATE-LOG/*`). |
+| 2 | `AI-Knowledge/00-OVERVIEW/PROJECT.md` | Modified | High | Bổ sung `FEAT-P5-04` (QR HUD & Undo 5s), `FEAT-P5-07` (Quản lý kế hoạch lớp theo version), `PublicRegistration/Resubmit`, thời hạn phiên/Refresh Token 14 ngày, `PwaController.Offline`, Circuit Breaker Redis. |
+| 3 | `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md` | Modified | High | Bổ sung `ClassCurriculumService` vào Service Layer, cập nhật `Flow 2` (Undo 5s & mã cũ `StudentCodeHistories`), thêm `Flow 6` cho `FEAT-P5-07`. |
+| 4 | `AI-Knowledge/00-OVERVIEW/TECH-STACK.md` | Modified | High | Ghi nhận cấu hình Hybrid Auth thời hạn **14 ngày** (`ParishSessionCookie` + `RefreshTokenExpirationDays`), `DataProtection` persist keys, và `RedisCacheService` Circuit Breaker 30s + `IMemoryCache` fallback. |
+| 5 | `AI-Knowledge/01-MODULES/ATTENDANCE.md` | Modified | High | Bổ sung luồng `UndoScanCheckIn` / `UndoScanCheckInAsync` (5s), tra cứu `StudentCodeHistories`, `undoOfflineQrScan`, liên kết tới `FEAT-P5-04-QR-SCANNER-UPGRADE.md`. |
+| 6 | `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md` | Modified | High | Bổ sung Flow hoàn tác 5 giây (`UndoScanRequestDto`), `HistoricalCodes` cho cache offline, tham chiếu `FEAT-P5-04-QR-SCANNER-UPGRADE.md`. |
+| 7 | `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` | Modified | Medium | Đảm bảo ghi nhận trạng thái ánh xạ ORM của `ClassCurriculumDocuments`, `ClassCurriculumVersions`, `ClassLessonPlans` và lưu ý thiếu file EF Migration trong `Migrations/`. |
+| 8 | `AI-Knowledge/02-DATABASE/TABLE-INDEX.json` | Modified | High | Bổ sung schema chi tiết (columns, FKs, indexes) của 3 bảng `ClassLessonPlans`, `ClassCurriculumDocuments`, `ClassCurriculumVersions`. |
+| 9 | `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md` | Modified | High | Thêm mục quan hệ bảng `Lesson Plans & Class Curriculum Versioning (FEAT-P5-07)`, cập nhật sơ đồ `erDiagram` Mermaid và khối JSON index. |
+| 10 | `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl` | Modified | High | Bổ sung `PublicRegistrationController.cs`, `PwaController.cs`, `StudentsController.cs`, `PublicRegistrationSubmitDto.cs`, `Resubmit.cshtml`, `ScanQr.cshtml`, `LessonPlans/Index.cshtml`, `offline-attendance.js`. |
+| 11 | `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl` | Modified | High | Thêm symbols cho `FEAT-P5-07` (`ClassLessonPlan`, `ClassCurriculumDocument`, `ClassCurriculumVersion`, `IClassCurriculumService`, `ClassCurriculumService`, `LessonPlansController` actions), `UndoScanCheckIn*`, `UndoScanRequestDto`, `PublicRegistrationController` (`Resubmit`, `SubmitResubmit`), `PublicRegistrationResubmitDto`, `PwaController`, `AccountController.Profile(long? id = null)`. |
+| 12 | `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl` | Modified | High | Cập nhật `startLine` chính xác cho các action `LessonPlansController` và bổ sung routes `/Attendance/UndoScanCheckIn`, `/PublicRegistration/Resubmit`, `/PublicRegistration/SubmitResubmit`, `/Offline`, `/icons/{fileName}`. |
+| 13 | `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl` | Modified | High | Chỉnh `sourceLine` của `ClassCurriculumService` (`17`, `23`) và bổ sung cạnh `CALLS`/`INJECTS` cho `AttendanceController.UndoScanCheckIn`, `LessonPlansController` actions và `PublicRegistrationController`. |
+| 14 | `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json` | Modified | Final | Sau khi hoàn tất cập nhật và kiểm tra cú pháp JSON/JSONL, nâng `lastIndexedCommit` từ `c0e828a` lên `2a3263d`. |
+| 15 | `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` | Modified | Final | Ghi biên bản hoàn thành cho phiên đồng bộ `c0e828a` ➔ `2a3263d` (+ cấu hình Token/Cookie 14 ngày). |
+| 16 | `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md` | Modified | Final | Cập nhật trạng thái đồng bộ và ghi rõ mục `NEEDS_VERIFICATION` về Migration/DDL của `ClassCurriculum*`. |
 
 ---
 
-## 3. Danh sách kiểm tra Bằng chứng & Dữ liệu thiếu (Audit & Verification Checklist)
+## 2. Lộ trình Thực thi Đề xuất (Step-by-Step Roadmap)
 
-- [x] **Mã nguồn đầy đủ:** Đã có toàn bộ mã nguồn của 19 tệp thay đổi từ commit `7c61591` đến `c0e828a`.
-- [x] **Không có giả định suy diễn:** Mọi dependency được liệt kê trong `IMPACT-ANALYSIS.md` đều có file, dòng code và phương thức đối chiếu cụ thể.
-- [x] **Nguyên tắc bảo toàn:** Giữ nguyên tên namespace, class, method, endpoint URL thực tế, không tự tiện đổi tên.
-- [x] **Trạng thái thực thi:** Bước này chỉ tạo 4 tệp báo cáo phân tích theo đúng yêu cầu; **chưa chỉnh sửa các tệp Knowledge gốc**.
+1. **Giai đoạn 1 — Lớp Cơ sở dữ liệu (`02-DATABASE/`):**
+   - Cập nhật `TABLE-INDEX.json` và `TABLE-RELATIONSHIPS.md` cho `ClassLessonPlans`, `ClassCurriculumDocuments`, `ClassCurriculumVersions`.
+2. **Giai đoạn 2 — Chỉ mục Mã nguồn (`03-CODE-INDEX/*.jsonl`):**
+   - Cập nhật `FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl` theo đúng line numbers đã kiểm chứng.
+3. **Giai đoạn 3 — Tài liệu Tổng quan, Module & Feature (`00-OVERVIEW/`, `01-MODULES/`, `05-FEATURES/`):**
+   - Cập nhật `AI-KNOWLEDGE-STRUCTURE.md`, `PROJECT.md`, `ARCHITECTURE.md`, `TECH-STACK.md`, `ATTENDANCE.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`.
+4. **Giai đoạn 4 — Kiểm tra & Chốt Baseline (`06-UPDATE-LOG/`):**
+   - Kiểm tra hợp lệ cú pháp toàn bộ `.json` và `.jsonl`.
+   - Sau khi xác nhận đạt 100%, cập nhật `KNOWLEDGE-BASELINE.json`, `UPDATE-LOG.md`, `PENDING-UPDATES.md`.
+
+---
+
+## 3. Kiểm tra Bằng chứng & Dữ liệu Thiếu
+
+- [x] Đã đối chiếu trực tiếp toàn bộ git diff `c0e828a..HEAD` và working tree hiện hành.
+- [x] Mọi symbol, endpoint và quan hệ trong `IMPACT-ANALYSIS.md` đều gắn rõ bằng chứng `[Xác nhận được]` hoặc `[Suy luận kiến trúc]`.
+- [ ] **Cần xác minh bổ sung (`NEEDS_VERIFICATION`):** Xác nhận trạng thái DDL/bảng thực tế trên PostgreSQL cho `ClassCurriculumDocuments` và `ClassCurriculumVersions` do `Migrations/` hiện chưa có migration tương ứng.

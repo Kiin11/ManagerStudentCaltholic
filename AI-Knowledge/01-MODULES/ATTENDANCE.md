@@ -46,10 +46,10 @@
 
 ## 2. Features
 
-* **Fast QR Check-in:** Quét QR trực tiếp qua Redis với độ trễ thấp.
+* **Fast QR Check-in (`FEAT-P5-04`):** Quét QR trực tiếp qua Redis với độ trễ thấp, khung ngắm Viewfinder HUD (`ScanQr.cshtml`), thanh chọn nhanh buổi quét (`SessionMode`), cảnh báo & cache alias thẻ mã năm cũ (`StudentCodeHistories`), và hoàn tác trong 5 giây (`/Attendance/UndoScanCheckIn`). Xem chi tiết luồng tại [FEAT-P5-04-QR-SCANNER-UPGRADE.md](../05-FEATURES/FEAT-P5-04-QR-SCANNER-UPGRADE.md) và [FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md](../05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md).
 
 
-* **Offline-First Resilience:** Ghi nhận điểm danh tại Client (IndexedDB) khi rớt mạng và đồng bộ hàng loạt lên máy chủ.
+* **Offline-First Resilience:** Ghi nhận điểm danh tại Client (IndexedDB qua `wwwroot/js/offline-attendance.js`) khi rớt mạng (hỗ trợ tra cứu `HistoricalCodes` tải từ `/Attendance/GetOfflineStudentsCache` và hoàn tác `undoOfflineQrScan`), đồng bộ hàng loạt lên máy chủ khi có kết nối.
 
 
 * **Automated Absence Marking:** Tự động ghi vắng không phép cho học sinh chưa điểm danh cuối ngày.
@@ -98,7 +98,7 @@
 
 
 * **DTOs / ViewModels:**
-* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `QrScanRequestDto`, `ClassAttendanceSheetViewModel`, v.v.).
+* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `QrScanRequestDto`, `QrScanResponseDto`, `UndoScanRequestDto`, `OfflineStudentCacheItemDto`, `ClassAttendanceSheetViewModel`, v.v.).
 
 
 * `D:\github\...\Models\DTOs\HighThroughputAttendanceModels.cs` (`RedisClassAttendancePayload`, `RedisQrStudentLookupItem`).
@@ -106,17 +106,20 @@
 
 
 
-* **Views:**
+* **Views & Client Assets:**
 * `D:\github\...\Views\Attendance\Index.cshtml` (Sổ điểm danh lưới).
 
 
-* `D:\github\...\Views\Attendance\ScanQr.cshtml` (Giao diện quét QR).
+* `D:\github\...\Views\Attendance\ScanQr.cshtml` (Giao diện quét QR HUD, Torch/Flip/Zoom, chọn buổi quét, hoàn tác 5 giây).
 
 
 * `D:\github\...\Views\Attendance\Statistics.cshtml` (Thống kê).
 
 
 * `D:\github\...\Views\Absence\Manage.cshtml` (Duyệt phép).
+
+
+* `D:\github\...\wwwroot\js\offline-attendance.js` (`ParishOfflineEngine`: cache IndexedDB kèm `HistoricalCodes`, hàng đợi offline và `undoOfflineQrScan`).
 
 
 
@@ -129,31 +132,31 @@
 * **Entry point:** `AttendanceController.ScanCheckIn` (POST).
 
 
-* **Input:** `QrScanRequestDto` (StudentCode).
+* **Input:** `QrScanRequestDto` (`StudentCode`, `ScanTimestamp`, `SessionMode`, `CampaignId`).
 
 
 * **Validation:** Kiểm tra null/trống mã QR.
 
 
-* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` -> Lookup Redis -> Đánh giá thời gian bằng `AttendanceTimeHelper` -> Cập nhật trạng thái `IsDirty = true` trên Redis.
+* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` -> Lookup Redis (hoặc fallback `Enrollments` / `StudentCodeHistories` kèm cache alias mã năm cũ) -> Đánh giá thời gian bằng `AttendanceTimeHelper` -> Cập nhật trạng thái `IsDirty = true` trên Redis.
 
 
-* **Database access:** Ghi Write-Through tức thì xuống PostgreSQL thông qua `SyncDirtyAttendancesToDatabaseAsync` (trong cùng Request).
+* **Database access:** Ghi Write-Through tức thì xuống PostgreSQL thông qua `SyncDirtyAttendancesToDatabaseAsync` (trong cùng Request khi quét mới).
 
 
-* **Output:** Trả về `QrScanResponseDto` dạng JSON cho UI để phát âm thanh.
+* **Output:** Trả về `QrScanResponseDto` (kèm cờ mã cũ `IsHistoricalCode`, `OldCode`, `WarningMessage`, `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`) dạng JSON cho UI để phát âm thanh và kích hoạt đếm lùi hoàn tác 5 giây.
 
 
 
 ### Flow 2: Offline Synchronization
 
-* **Entry point:** `AttendanceController.SyncOfflineQueue` (POST).
+* **Entry point:** `AttendanceController.GetOfflineStudentsCache` (GET) & `AttendanceController.SyncOfflineQueue` (POST).
 
 
 * **Input:** `OfflineSyncQueueRequestDto` (Mảng dữ liệu điểm danh offline từ IndexedDB).
 
 
-* **Validation:** Kiểm tra quyền `CanAccessClassAsync`, rà soát khớp EnrollmentId hoặc StudentCode.
+* **Validation:** Kiểm tra quyền `CanAccessClassAsync`, rà soát khớp EnrollmentId hoặc StudentCode (kèm tra cứu `HistoricalCodes` tải từ `StudentCodeHistories`).
 
 
 * **Business processing (Conflict Resolution):**
@@ -187,6 +190,22 @@
 
 
 * **Business processing:** GLV chọn "APPROVED" -> Hệ thống tự động thay đổi trạng thái trong DB thành `RequestedStatus` -> Ghi Log vào `AttendanceAuditLogs` -> Xóa Cache Redis ngày hôm đó để UI nạp lại.
+
+
+
+### Flow 4: QR Check-in 5-Second Undo (`FEAT-P5-04`)
+
+* **Entry point (Online):** `AttendanceController.UndoScanCheckIn` (POST `/Attendance/UndoScanCheckIn`).
+* **Entry point (Offline):** `ParishOfflineEngine.undoOfflineQrScan(clientRecordId)` (`wwwroot/js/offline-attendance.js`).
+
+
+* **Input:** `UndoScanRequestDto` (`EnrollmentId`, `ClassId`, `StudentCode`, `AttendanceDate`, `ActivityType`, `SessionMode`).
+
+
+* **Business processing & Database access:** Gọi `RedisAttendanceService.UndoScanCheckInAsync` thu hồi trạng thái trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), đánh dấu `IsDirty = true`, đồng thời cập nhật reset bản ghi trong PostgreSQL (`Attendances`, và `MassCampaignRecords` nếu `ActivityType` chứa `"CHIẾN DỊCH"`).
+
+
+* **Output:** JSON `{ success, message }`.
 
 
 
@@ -289,7 +308,8 @@
 
 | Feature | Controller | Service | Repository | Model/Entity | View / Razor | Database Table |
 | --- | --- | --- | --- | --- | --- | --- |
-| **QR Check-in** | `AttendanceController` | `RedisAttendanceService` | `NOT_FOUND` (Dùng DbContext) | `Attendance` | `ScanQr.cshtml` | `Attendances` |
+| **QR Check-in** | `AttendanceController` | `RedisAttendanceService` | `NOT_FOUND` (Dùng DbContext) | `Attendance`, `StudentCodeHistory` | `ScanQr.cshtml` | `Attendances`, `StudentCodeHistories` |
+| **QR Undo Check-in (5s)** | `AttendanceController` (`UndoScanCheckIn`) | `RedisAttendanceService` (`UndoScanCheckInAsync`) | `NOT_FOUND` (Dùng DbContext) | `Attendance`, `MassCampaignRecord` | `ScanQr.cshtml` | `Attendances`, `MassCampaignRecords` |
 | **Class Grid Save** | `AttendanceController` | `RedisAttendanceService` | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
 | **Offline Sync** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
 | **Absence Mgt** | `AbsenceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `AbsenceRequest` | `Manage.cshtml` | `AbsenceRequests` |

@@ -434,6 +434,103 @@
           "primaryKeys": ["Id"],
           "foreignKeys": [],
           "indexes": ["OptionCode"]
+        },
+        {
+          "tableName": "ClassLessonPlans",
+          "columns": [
+            "Id",
+            "ClassRoomId",
+            "AcademicYearId",
+            "CurriculumDocumentId",
+            "WeekNumber",
+            "Semester",
+            "LessonDate",
+            "LiturgicalDay",
+            "LessonCode",
+            "TopicTitle",
+            "KeyPoints",
+            "AssignedTeacherUserId",
+            "AssignedTeacherName",
+            "EventNotes",
+            "IsExamDay",
+            "IsDayOff"
+          ],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" },
+            { "column": "AcademicYearId", "principalTable": "AcademicYears", "principalColumn": "Id" },
+            { "column": "AssignedTeacherUserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "CurriculumDocumentId", "principalTable": "ClassCurriculumDocuments", "principalColumn": "Id" }
+          ],
+          "indexes": [
+            "ClassRoomId, LessonDate",
+            "AcademicYearId",
+            "AssignedTeacherUserId",
+            "CurriculumDocumentId"
+          ]
+        },
+        {
+          "tableName": "ClassCurriculumDocuments",
+          "columns": [
+            "Id",
+            "ClassRoomId",
+            "AcademicYearId",
+            "Title",
+            "Description",
+            "CurrentVersion",
+            "VersionNumber",
+            "ContentJson",
+            "LastAttachmentFileName",
+            "LastAttachmentFilePath",
+            "LastAttachmentFileSize",
+            "LastAttachmentContentType",
+            "CreatedBy",
+            "CreatedByUserId",
+            "CreatedAt",
+            "UpdatedBy",
+            "UpdatedByUserId",
+            "UpdatedAt",
+            "IsActive"
+          ],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassRoomId", "principalTable": "Classes", "principalColumn": "Id" },
+            { "column": "AcademicYearId", "principalTable": "AcademicYears", "principalColumn": "Id" },
+            { "column": "CreatedByUserId", "principalTable": "Users", "principalColumn": "Id" },
+            { "column": "UpdatedByUserId", "principalTable": "Users", "principalColumn": "Id" }
+          ],
+          "indexes": [
+            "ClassRoomId, AcademicYearId",
+            "AcademicYearId"
+          ]
+        },
+        {
+          "tableName": "ClassCurriculumVersions",
+          "columns": [
+            "Id",
+            "ClassCurriculumDocumentId",
+            "VersionNumber",
+            "VersionTag",
+            "ChangeSummary",
+            "ContentJson",
+            "FileName",
+            "StoredFileName",
+            "FilePath",
+            "FileSize",
+            "ContentType",
+            "CreatedBy",
+            "CreatedByUserId",
+            "CreatedAt"
+          ],
+          "primaryKeys": ["Id"],
+          "foreignKeys": [
+            { "column": "ClassCurriculumDocumentId", "principalTable": "ClassCurriculumDocuments", "principalColumn": "Id" },
+            { "column": "CreatedByUserId", "principalTable": "Users", "principalColumn": "Id" }
+          ],
+          "indexes": [
+            "ClassCurriculumDocumentId, VersionNumber",
+            "CreatedAt"
+          ]
         }
       ]
     }

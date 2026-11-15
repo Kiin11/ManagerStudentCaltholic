@@ -2,22 +2,22 @@
 
 ## 1. Backend Stack
 - **Framework:** .NET 8 / ASP.NET Core MVC (Xác minh qua `<TargetFramework>net8.0</TargetFramework>` trong `ManagerStudentCaltholic.csproj` và cú pháp C# 12).
-- **Authentication/Authorization:** Hybrid (Cookie Authentication cho MVC Views + JWT Bearer Token cho Ajax/API requests). (Xác minh: `ServiceCollectionExtensions.cs`).
+- **Authentication/Authorization:** Hybrid (Cookie Authentication `ParishSessionCookie` cho MVC Views + JWT Bearer Token cho Ajax/API requests). Thời hạn ghi nhớ phiên Cookie (`ExpireTimeSpan = TimeSpan.FromDays(14)`, `SlidingExpiration = true`; khi `RememberMe = true` đặt `ExpiresUtc = AddDays(14)`) và Refresh Token (`RefreshTokenExpirationDays = 14` ngày; `AccessTokenExpirationMinutes = 30` phút); cấu hình Data Protection lưu khóa bền vững xuống thư mục `dataprotection-keys` (`AddDataProtection().SetApplicationName("ManagerStudentCaltholic").PersistKeysToFileSystem(...)`). (Xác minh: `ServiceCollectionExtensions.cs`, `AccountController.cs`, `TokenService.cs`, `appsettings.json`, `appsettings.Development.json`).
 - **Background Processing:** Hangfire (phiên bản `1.8.14`) với Hangfire.PostgreSql (`1.20.9`). (Xác minh: `csproj`).
-- **Logging:** Serilog (`Serilog.AspNetCore 8.0.3`) ghi log ra file và console. (Xác minh: `LoggingExtensions.cs`).
+- **Logging:** Serilog (`Serilog.AspNetCore 8.0.3`) ghi log ra file và console (kèm override `Microsoft.AspNetCore.Antiforgery` ở mức `Fatal`). (Xác minh: `LoggingExtensions.cs`).
 - **Server-side Device Detection:** `HttpRequestExtensions.IsMobileDevice()` sử dụng Compiled Regex (`RegexOptions.IgnoreCase | RegexOptions.Compiled`) kết hợp HTTP Client Hints (`Sec-CH-UA-Mobile`) để phân tách nhánh render Mobile/Desktop tại tầng Razor Layout. (Xác minh: `Extensions/HttpRequestExtensions.cs`).
 
 ## 2. Data & Storage
 - **Relational Database:** PostgreSQL.
 - **ORM:** Entity Framework Core 8 (`Microsoft.EntityFrameworkCore 8.0.11`, `Npgsql.EntityFrameworkCore.PostgreSQL`).
-- **Caching / High-throughput Storage:** Redis (`StackExchange.Redis 2.8.16`). (Xác minh: `CacheSettings` trong `appsettings.json`, `RedisAttendanceService.cs`, `RedisCacheService.cs`).
-- **Local Storage (Client-side):** IndexedDB (Dùng cho Offline-first Attendance). (Xác minh qua logic comment/JS call trong `Views/Attendance/Index.cshtml` nhắc đến `ParishOfflineEngine`).
+- **Caching / High-throughput Storage:** Redis (`StackExchange.Redis 2.8.16`) thông qua `ICacheService` / `RedisCacheService` có cơ chế **Circuit Breaker `30 giây`** (`IsRedisCircuitOpen` / `TripRedisCircuit`) kết hợp **`IMemoryCache` fallback** để tránh treo timeout khi Redis ngoại tuyến. (Xác minh: `CacheSettings` trong `appsettings.json`, `RedisAttendanceService.cs`, `RedisCacheService.cs`).
+- **Local Storage (Client-side):** IndexedDB (Dùng cho Offline-first Attendance). (Xác minh qua `wwwroot/js/offline-attendance.js` định nghĩa `ParishOfflineEngine` và gọi tại `Views/Attendance/Index.cshtml`, `ScanQr.cshtml`, `AccessDenied.cshtml`).
 
 ## 3. Thư viện tiện ích (C#)
-- **Xử lý Excel:** ClosedXML (`0.102.3`). (Xác minh: `StudentExcelService.cs`).
+- **Xử lý Excel:** ClosedXML (`0.102.3`). (Xác minh: `StudentExcelService.cs`, `ClassCurriculumService.cs`).
 - **Tạo mã QR:** QRCoder (`1.6.0`). (Xác minh: `LookupController.cs`, `QrCodeService`).
 - **Phân tích toán học/Công thức:** NCalc (`7.0.0`). (Xác minh: `csproj`).
-- **Xử lý PDF:** PdfPig (`0.1.9`). (Xác minh: `csproj`).
+- **Xử lý PDF:** PdfPig (`0.1.9`). (Xác minh: `csproj`, `ClassCurriculumService.cs`).
 
 ## 4. Frontend Stack
 - **UI Framework:** Bootstrap 5 (Xác minh qua class CSS: `rounded-4`, `shadow-sm`, `bg-primary-subtle`).

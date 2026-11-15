@@ -2,6 +2,40 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: `c0e828a` ➔ `2a3263d` (+ Working Tree `2026-11-15`)
+- **Thời gian cập nhật:** `2026-11-15T13:50:56+07:00`
+- **Commit trước đó (`Baseline`):** `c0e828a` (`perf(mobile): optimize mobile layout rendering, remove scroll listener & prevent SW reload loop`)
+- **Commit hiện tại (`HEAD`):** `2a3263d` (`add`) kèm thay đổi working tree tại `appsettings.json`, `appsettings.Development.json`, `docker-compose.yml`
+- **Phạm vi mã nguồn thay đổi:** `53` tệp mã nguồn & cấu hình (`7 Added`, `46 Modified`, `0 Deleted`, `0 Renamed`, loại trừ `3` build artifacts; ghi nhận `2` tệp untracked `nginx/default.conf`, `script/seed-curriculum-data.sql`).
+- **Các tính năng / Module được đồng bộ:**
+  1. **Module `LessonPlans` (`FEAT-P5-07`):** Đồng bộ đầy đủ `IClassCurriculumService`, `ClassCurriculumService`, `ClassCurriculumDocument`, `ClassCurriculumVersion`, `ClassLessonPlan`, `CurriculumDtos`, `LessonPlanWorkspaceViewModel`, `LessonPlansController` (6 action mới) vào `ARCHITECTURE.md`, `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`, `DATABASE-OVERVIEW.md` và `03-CODE-INDEX/*.jsonl`. Ghi nhận `NEEDS_VERIFICATION` do `ManagerStudentCaltholic/Migrations/` hiện rỗng.
+  2. **Module `Attendance` (`FEAT-P5-04`):** Đồng bộ `UndoScanCheckIn` / `UndoScanCheckInAsync` (5 giây), `UndoScanRequestDto`, tra cứu mã năm cũ `StudentCodeHistories` + alias cache O(1), `GetOfflineStudentsCache` (`HistoricalCodes`), `ParishOfflineEngine.undoOfflineQrScan` vào `ATTENDANCE.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`, `ARCHITECTURE.md`, `PROJECT.md` và `03-CODE-INDEX/*.jsonl`.
+  3. **Module `PublicRegistration`:** Bổ sung luồng `Resubmit`, `SubmitResubmit`, `ViewOwnCertificate`, `PublicRegistrationResubmitDto`, `Views/PublicRegistration/Resubmit.cshtml` vào `PROJECT.md` và `03-CODE-INDEX/*.jsonl`.
+  4. **Module `UserAccount`, `Security`, `Cache`, `PWA`:** Đồng bộ cấu hình duy trì phiên Cookie & Refresh Token **14 ngày**, `PersistKeysToFileSystem` (`dataprotection-keys`), phân quyền `AccountController.Profile(long? id)` / `UpdateProfile`, Circuit Breaker 30s + `IMemoryCache` fallback trong `RedisCacheService`, sửa `PwaController.Offline` trả `Views/Pwa/Index.cshtml` (`/Offline` và `/icons/{fileName}`).
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật trong đợt đồng bộ (`18` files):**
+  - `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md`
+  - `AI-Knowledge/00-OVERVIEW/PROJECT.md`
+  - `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md`
+  - `AI-Knowledge/00-OVERVIEW/TECH-STACK.md`
+  - `AI-Knowledge/01-MODULES/ATTENDANCE.md`
+  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md`
+  - `AI-Knowledge/02-DATABASE/TABLE-INDEX.json`
+  - `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md`
+  - `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`
+  - `AI-Knowledge/04-INTEGRATIONS/INTEGRATION-OVERVIEW.md`
+  - `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`
+  - `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-REPORT.md`
+  *(Trước đó trong bước phân tích đã tạo/cập nhật `CHANGE-ANALYSIS.md`, `IMPACT-ANALYSIS.md`, `KNOWLEDGE-UPDATE-PLAN.md`, `AFFECTED-FILES.json`.)*
+- **Điểm tồn đọng (`NEEDS_VERIFICATION`):** Xem chi tiết tại `PENDING-UPDATES.md` và `UPDATE-REPORT.md`.
+
+---
+
 ### Phiên cập nhật: `FEAT-P5-04`
 - **Thời gian cập nhật:** `2026-11-05T09:48:00+07:00`
 - **Mã tính năng:** `FEAT-P5-04` (Điểm danh & QR - Nâng cấp giao diện Quét QR Điểm danh)
