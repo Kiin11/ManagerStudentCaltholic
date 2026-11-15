@@ -151,7 +151,7 @@ namespace ManagerStudentCaltholic.Extensions
                 options.Cookie.Name = "ParishSessionCookie";
                 options.LoginPath = "/Account/Login";
                 options.AccessDeniedPath = "/Account/AccessDenied";
-                options.ExpireTimeSpan = TimeSpan.FromDays(7);
+                options.ExpireTimeSpan = TimeSpan.FromDays(14);
                 options.SlidingExpiration = true;
                 options.Cookie.HttpOnly = true;             // Chống XSS đọc trộm Cookie
                 options.Cookie.SameSite = SameSiteMode.Lax; // Cho phép chuyển hướng an toàn

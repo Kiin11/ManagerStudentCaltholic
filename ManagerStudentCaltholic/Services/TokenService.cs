@@ -76,7 +76,7 @@ namespace ManagerStudentCaltholic.Services
         public RefreshToken GenerateRefreshToken(long userId, string? ipAddress)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
-            var expireDays = int.TryParse(jwtSettings["RefreshTokenExpirationDays"], out int days) ? days : 7;
+            var expireDays = int.TryParse(jwtSettings["RefreshTokenExpirationDays"], out int days) ? days : 14;
 
             var randomBytes = new byte[64];
             using var rng = RandomNumberGenerator.Create();

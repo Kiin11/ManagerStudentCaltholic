@@ -141,7 +141,7 @@ namespace ManagerStudentCaltholic.Controllers
             var authProperties = new AuthenticationProperties
             {
                 IsPersistent = model.RememberMe,
-                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddDays(7) : DateTimeOffset.UtcNow.AddHours(8)
+                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddDays(14) : DateTimeOffset.UtcNow.AddHours(8)
             };
 
             await HttpContext.SignInAsync(
