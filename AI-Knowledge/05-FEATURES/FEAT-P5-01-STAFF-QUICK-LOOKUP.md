@@ -22,7 +22,7 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 | **Service** | `Services/StaffStudentLookupService.cs` | `StaffStudentLookupService` | Truy vấn đa bảng với `.AsNoTracking()` và tổng hợp dữ liệu 360 độ |
 | **Controller** | `Controllers/HomeController.cs` | `Index`, `StaffSearchSuggestions`, `StaffStudentLookup`, `StaffRecentLookups`, `StaffLookupOptions` | Endpoints phục vụ giao diện Trang chủ và AJAX JSON API |
 | **View** | `Views/Home/_StaffStudentLookupWidget.cshtml` | Partial View | Giao diện thanh tìm kiếm tức thời, chip lịch sử tra cứu, 4 tab kết quả |
-| **Client JS** | `wwwroot/js/staff-student-lookup.js` | IIFE Module | Debounce search (250ms), điều hướng bàn phím, render 4 tab & copy tin nhắn 1-chạm |
+| **Client JS** | `wwwroot/js/staff-student-lookup.js` | IIFE Module | Debounce search (280ms), điều hướng bàn phím, render 4 tab & copy tin nhắn 1-chạm |
 
 ---
 
@@ -34,13 +34,13 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 3. `Views/Home/Index.cshtml` render partial `_StaffStudentLookupWidget.cshtml` kèm các chip "Đã xem gần đây" và 4 nút Option (chỉ hiển thị khi đang ở phân khu Tab "Chung" `COMMON`, ẩn ở các tab còn lại như "Điểm Danh", "Học Vụ", "Bí Tích", "Quản Trị").
 
 ### 3.2. Gợi ý Tìm kiếm Đa khóa (`GET /Home/StaffSearchSuggestions?term=...`)
-1. Người dùng gõ từ khóa (tối thiểu 2 ký tự) vào ô `#staffLookupSearchInput`.
-2. `staff-student-lookup.js` debounce 250ms và gọi `GET /Home/StaffSearchSuggestions?term=...`.
+1. Người dùng gõ từ khóa (tối thiểu 1 ký tự, `term.length > 0`) vào ô `#staffStudentQuickSearchInput`.
+2. `staff-student-lookup.js` debounce 280ms và gọi `GET /Home/StaffSearchSuggestions?term=...`.
 3. `StaffStudentLookupService.SearchStudentsQuickAsync(term, limit = 8)`:
-   - Tìm trong bảng `Students` theo `StudentCode`, `FirstName`, `LastName`, `ChristianName`, hoặc chuỗi ghép `LastName + " " + FirstName`.
-   - Tìm trong bảng `StudentCodeHistories` theo `OldCode` hoặc `NewCode` để phát hiện thiếu nhi được tìm bằng **mã năm cũ**.
-   - Kết hợp thông tin lớp hiện hành từ `Enrollments` (thuộc niên khóa `IsCurrent = true`) và lịch sử mã cũ (tối đa 2 năm gần nhất).
-   - Trả về danh sách `StaffStudentQuickSearchResultDto` có cờ `MatchedByOldCode` và `MatchedOldCodeDisplay`.
+   - Tìm trong bảng `Students` theo `StudentCode`, `FirstName`, `LastName`, `ChristianName`, hoặc chuỗi ghép không dấu/có dấu.
+   - Tìm trong bảng `StudentCodeHistories` theo `OriginalCode`, `ArchivedYearCode` hoặc `NewCode` để phát hiện thiếu nhi được tìm bằng **mã năm cũ**.
+   - Kết hợp thông tin lớp hiện hành từ `Enrollments` (thuộc niên khóa `IsCurrent = true`).
+   - Trả về danh sách `StaffStudentQuickSearchResultDto` có cờ `IsHistoricalMatch` và `MatchedHistoricalCode`.
 
 ### 3.3. Tải Hồ sơ 360 Độ & Cache Redis (`GET /Home/StaffStudentLookup`)
 1. Khi chọn một thiếu nhi từ danh sách gợi ý hoặc nhấn vào chip "Đã xem gần đây", client gọi:
@@ -62,7 +62,7 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 
 | Id | OptionCode | DisplayName | IconClass | BadgeColor | SortOrder |
 |---|---|---|---|---|---|
-| 1 | `OVERVIEW` | Tổng quan hiện tại | `bi-grid-1x2-fill` | `primary` | 1 |
-| 2 | `ATTENDANCE_DETAIL` | Chuyên cần & Chiến dịch | `bi-calendar2-check-fill` | `success` | 2 |
-| 3 | `ACADEMIC_2Y_SACRAMENT` | Lịch sử 2 năm & Bí tích | `bi-mortarboard-fill` | `warning` | 3 |
-| 4 | `PARENT_CONTACT` | Liên hệ Phụ huynh | `bi-telephone-outbound-fill` | `info` | 4 |
+| 1 | `OVERVIEW` | Tổng quan | `bi-person-badge` | `primary` | 1 |
+| 2 | `ATTENDANCE_DETAIL` | Chuyên cần & Chiến dịch | `bi-calendar-check` | `success` | 2 |
+| 3 | `ACADEMIC_2Y_SACRAMENT` | Lịch sử 2 năm & Bí tích | `bi-journal-bookmark` | `warning` | 3 |
+| 4 | `PARENT_CONTACT` | Liên hệ phụ huynh | `bi-telephone` | `info` | 4 |

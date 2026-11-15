@@ -10,7 +10,17 @@
 
 ## 1. Kết Luận Tổng Thể (Overall Audit Verdict)
 
-- **Trạng thái chung:** **`PASS WITH WARNINGS (REQUIRES TARGETED CORRECTIONS)`**
+- **Trạng thái sau khắc phục (`2026-11-15T15:00:00+07:00`):** **`PASS (9/9 ISSUES RESOLVED)`**
+  - Toàn bộ **`9/9` vấn đề (`ISS-AUD-001` ➔ `ISS-AUD-009`)** đã được khắc phục triệt để và kiểm chứng lại tự động + biên dịch C# (`dotnet build`: `0` warning, `0` error):
+    - **`ISS-AUD-001` (`RESOLVED`):** Đã xóa sạch từ khóa/module giả lập (`Booking`, `Payment`, `Hotel`) khỏi `00-OVERVIEW/`; cập nhật `MODULE-INVENTORY.json` (`8` module thực tế), `PROJECT-INVENTORY.json` (`200` file), `SOURCE-INVENTORY.md` (`200` file, đủ `28` Controllers).
+    - **`ISS-AUD-002` (`RESOLVED` - User Verified):** User xác nhận đã chạy migration & kiểm chứng DDL trên PostgreSQL; đã cập nhật rõ ràng trong `DATABASE-OVERVIEW.md:5`, `UPDATE-LOG.md:95`, `PENDING-UPDATES.md` (giải thích Code-First Mapping `43 DbSet<T>`, `script/seed-curriculum-data.sql` và thư mục `Migrations/` trống sau `cfb2b5e`).
+    - **`ISS-AUD-003` (`RESOLVED`):** Đồng bộ `43/43` bảng (`Diff = 0`) giữa `DATABASE-OVERVIEW.md`, `TABLE-INDEX.json`, và JSON nhúng trong `TABLE-RELATIONSHIPS.md`.
+    - **`ISS-AUD-004` & `ISS-AUD-009` (`RESOLVED`):** Bổ sung đóng block Mermaid ở `PROJECT-DEPENDENCY-DIAGRAM.md`; mở rộng `FILE-INDEX.jsonl` lên `114` tệp (đủ `28/28` Controllers); tái đồng bộ từ AST C# lên `192` symbols (`0` null), `52` routes (`0` null), `66` dependencies (`0` null, bổ sung `StaffStudentLookupService -> IGradeCalculationService`, `Missing source/target = 0`).
+    - **`ISS-AUD-005` (`RESOLVED` - Direct Write-Through):** User xác nhận luồng cập nhật trực tiếp; đã cập nhật đồng bộ tài liệu (`ATTENDANCE.md`, `ARCHITECTURE.md`, `Request Flow Diagram.md`, `INTEGRATION-OVERVIEW.md`) và XML/code comments (`IRedisAttendanceService.cs`, `RedisAttendanceService.cs`, `Program.cs:163`) cho cả `ScanCheckIn` và `SaveBatch` (`P2-LOG-16 FIX`).
+    - **`ISS-AUD-006`, `ISS-AUD-007`, `ISS-AUD-008` (`RESOLVED`):** Đã chuẩn hóa DOM ID `#staffStudentQuickSearchInput`, debounce `280ms`, `OriginalCode/ArchivedYearCode/NewCode`, `IsHistoricalMatch/MatchedHistoricalCode`, `LookupViewOptions`, cooldown QR `3s (3000ms)`, Mobile header `56px` / `#mobileMenuOffcanvas` / `z-index 1070`, và route `{versionId:long}` trong `FEAT-P5-07`.
+
+### Lịch Sử Kết Luận Audit Độc Lập Ban Đầu (`2026-11-15T14:32:00+07:00`)
+- **Trạng thái ban đầu:** **`PASS WITH WARNINGS (REQUIRES TARGETED CORRECTIONS)`** (Trước khi vá 9 issues bên dưới):
   - **Đợt cập nhật gia tăng `c0e828a ➔ 2a3263d` (`18` tệp trong `UPDATE-REPORT.md`):** Các biểu tượng, route và cạnh phụ thuộc mới cho `FEAT-P5-07` (`LessonPlansController`, `ClassCurriculumService`), `FEAT-P5-04` (`UndoScanCheckIn`, `StudentCodeHistories`), `PublicRegistrationController` (`Resubmit`, `SubmitResubmit`, `ViewOwnCertificate`), `PwaController`, `AccountController` (14-day cookie & `Profile`/`UpdateProfile`) và `RedisCacheService` Circuit Breaker 30s khớp chính xác với mã nguồn; toàn bộ `5` tệp `.json` và `4` tệp `.jsonl` hợp lệ cú pháp 100% (`0` lỗi JSON/JSONL, `0` trùng khóa).
   - **Tồn đọng chưa thể `PASS` tuyệt đối:** Còn `9` vấn đề cần khắc phục (`2 HIGH`, `5 MEDIUM`, `2 LOW`) tập trung tại:
     1. Trạng thái EF Core Migration (`ManagerStudentCaltholic/Migrations/` hiện có **`0` file**, dẫn đến cấu trúc bảng PostgreSQL vẫn ở trạng thái **`NEEDS_VERIFICATION`** và mâu thuẫn với nhật ký cũ tại `UPDATE-LOG.md:95`).
@@ -109,6 +119,6 @@
 ## 5. Điểm Chưa Đủ Căn Cứ Xác Minh Từ Source Code (`NEEDS_VERIFICATION`)
 
 Kiểm toán viên độc lập **không đánh dấu `PASS`** cho các hạng mục dưới đây cho đến khi Developer kiểm chứng trực tiếp trên môi trường DB / Runtime:
-1. **Lược đồ bảng PostgreSQL thực tế (`ClassCurriculumDocuments`, `ClassCurriculumVersions`, `ClassLessonPlans`, `StaffQuickLookupLogs`, `LookupViewOptions`):** Do `ManagerStudentCaltholic/Migrations/` hiện có `0` file migration, không thể xác minh từ Git repository rằng DB PostgreSQL đích đã có đủ bảng/cột tương ứng với `ParishDbContext.cs`.
+1. **Lược đồ bảng PostgreSQL thực tế (`ClassCurriculumDocuments`, `ClassCurriculumVersions`, `ClassLessonPlans`, `StaffQuickLookupLogs`, `LookupViewOptions`):** **[RESOLVED - Developer Verified `2026-11-15`]** Do `ManagerStudentCaltholic/Migrations/` hiện có `0` file migration (đã xóa ở commit `cfb2b5e`), kiểm toán ban đầu gắn `NEEDS_VERIFICATION`; sau đó Developer đã xác nhận trực tiếp đã chạy migration & kiểm chứng DDL đầy đủ trên PostgreSQL (`ISS-AUD-002` ➔ `RESOLVED`).
 2. **Tình trạng chuẩn hóa & đưa vào Git các tệp untracked:** `nginx/default.conf` (được mount trong `docker-compose.yml`) và `script/seed-curriculum-data.sql` hiện chưa được commit vào `2a3263d`.
 3. **Phạm vi thực tế của `UserHomepageWidgetConfigs` và `TASK-P5-02.2..4`:** Chưa có bằng chứng Entity `UserHomepageWidgetConfigs` trong `Models/Entities/` hay `ParishDbContext.cs`.

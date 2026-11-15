@@ -39,10 +39,10 @@ Phương thức mở rộng `Context.Request.IsMobileDevice()` trong `Extensions
 ## 4. Kiến trúc Khung Giao diện Mobile (`TASK-P5-02.1`)
 
 ### 4.1. Header Thu gọn & Offcanvas Menu (`_LayoutMobileHeader.cshtml`)
-- **Chiều cao cố định:** `54px` (`--mobile-header-height: 54px`), cộng thêm `env(safe-area-inset-top)` cho màn hình tai thỏ / Dynamic Island.
+- **Chiều cao cố định:** `56px` (`--mobile-header-height: 56px`), cộng thêm `env(safe-area-inset-top)` cho màn hình tai thỏ / Dynamic Island.
 - **Thành phần Header:** Logo Giáo xứ Phú Trung + Tên phân khu đang mở, nút tắt Quét QR (dành cho nhân sự nội bộ), và nút mở Offcanvas Menu (`44x44px`).
-- **Offcanvas Menu (`#mobileUserOffcanvas`):**
-  - Đặt `z-index: 1085` (cao hơn Bottom Nav và nút nổi) để không bị che khuất.
+- **Offcanvas Menu (`#mobileMenuOffcanvas`):**
+  - Đặt `z-index: 1070` (với `.offcanvas-footer` `z-index: 1075` và `.offcanvas-backdrop` `z-index: 1065`) để không bị che khuất.
   - Danh sách lối tắt bên trong sử dụng `flex-grow-1 overflow-y-auto` (`-webkit-overflow-scrolling: touch`) giúp kéo mượt trên màn hình nhỏ.
   - Nút **Đăng xuất** (hoặc **Đăng nhập**) được ghim cố định ở đáy Offcanvas (`flex-shrink-0`), đảm bảo luôn nhìn thấy và bấm được ngay cả với tài khoản Admin có nhiều menu.
 

@@ -25,7 +25,7 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 - **Đặc điểm:** Sử dụng **Hangfire** (PostgreSql Storage) để xử lý các tác vụ nền không đồng bộ (Asynchronous processing).
 - *Bằng chứng:* `BackgroundExportJobService.cs`, `Program.cs` (đăng ký `RecurringJob.AddOrUpdate`).
   - Xuất báo cáo Excel (`GenerateClassExcelReportJobAsync`).
-  - Đồng bộ điểm danh Redis xuống Database mỗi 10 phút.
+  - Đồng bộ điểm danh Write-Through trực tiếp từ `ScanCheckIn` / `SaveBatch` xuống Database trong cùng request, kết hợp Hangfire job dự phòng mỗi 10 phút.
   - Tự động đánh vắng học sinh cuối ngày.
 
 ## 2. Request Flow (Luồng xử lý dữ liệu)
@@ -35,12 +35,12 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 *(Bằng chứng: `AnnouncementsController.cs`)*
 
 ### Flow 2: Luồng Điểm danh QR Code Tốc độ cao & Hoàn tác 5 Giây (`FEAT-P5-04`) (Xác nhận từ source)
-1. **Quét QR & Ghi Write-Through:** **HTTP Request** (`POST /Attendance/ScanCheckIn` kèm `StudentCode`, `SessionMode`) -> **AttendanceController.ScanCheckIn()** -> **RedisAttendanceService.ProcessQrCheckInViaRedisAsync()** -> Tra cứu **Redis Cache** (`ATT:QR:DATE:{date}:CODE:{code}`); nếu Cache Miss, tra cứu `Enrollments` hoặc mã năm cũ trong `StudentCodeHistories` và nạp alias key O(1) lên Redis -> **AttendanceTimeHelper.EvaluateCheckIn()** -> Cập nhật `ATT:CLASS:{classId}:DATE:{date}` (`IsDirty = true`) -> Gọi ngay `SyncDirtyAttendancesToDatabaseAsync()` ghi xuống **PostgreSQL** -> Trả về JSON `QrScanResponseDto` (kèm cờ `IsHistoricalCode`, `OldCode`, `WarningMessage`).
+1. **Quét QR & Lưu lưới điểm danh (Write-Through):** **HTTP Request** (`POST /Attendance/ScanCheckIn` hoặc `POST /Attendance/SaveBatch`) -> **AttendanceController** -> **RedisAttendanceService** (`ProcessQrCheckInViaRedisAsync()` / `SaveBatchToRedisAsync()`) -> Cập nhật **Redis Cache** (`ATT:CLASS:{classId}:DATE:{date}`, `IsDirty = true`; với QR Cache Miss sẽ tra cứu `Enrollments` hoặc mã cũ trong `StudentCodeHistories` và nạp alias key O(1)) -> Gọi ngay `SyncDirtyAttendancesToDatabaseAsync()` trong cùng Request để ghi **Write-Through trực tiếp** xuống **PostgreSQL** -> Trả về JSON (`QrScanResponseDto` hoặc `{ success, message }`).
 2. **Hoàn tác 5 giây:** **Client** -> `POST /Attendance/UndoScanCheckIn` (`UndoScanRequestDto`) -> **AttendanceController.UndoScanCheckIn()** -> **RedisAttendanceService.UndoScanCheckInAsync()** thu hồi trạng thái trên Redis ClassSheet và reset bản ghi trong PostgreSQL (`Attendances`, `MassCampaignRecords`). Nếu đang Offline, Client gọi `ParishOfflineEngine.undoOfflineQrScan(clientRecordId)` để xóa khỏi IndexedDB.
 *(Bằng chứng: `AttendanceController.cs`, `RedisAttendanceService.cs`, `AttendanceViewModels.cs`, `ScanQr.cshtml`, `offline-attendance.js`)*
 
 ### Flow 3: Luồng Đồng bộ Dữ liệu Nền (Xác nhận từ source)
-**Hangfire Worker** (kích hoạt định kỳ) -> **RedisAttendanceService.SyncDirtyAttendancesToDatabaseAsync()** -> Lấy dữ liệu thay đổi từ **Redis** -> Sử dụng **IExecutionStrategy & Transaction** -> Lưu hàng loạt xuống **PostgreSQL Database**.
+**Hangfire Worker** (cơ chế dự phòng định kỳ mỗi 10 phút nếu DB có lỗi tạm thời) -> **RedisAttendanceService.SyncDirtyAttendancesToDatabaseAsync()** -> Lấy các phân vùng còn cờ `IsDirty = true` từ **Redis** -> Sử dụng **IExecutionStrategy & Transaction** -> Lưu hàng loạt xuống **PostgreSQL Database**.
 *(Bằng chứng: `Program.cs`, `RedisAttendanceService.cs`)*
 
 ### Flow 4: Luồng Tra cứu Tức thời 360 Độ Thiếu nhi Nội bộ tại Trang chủ (`FEAT-P5-01`)

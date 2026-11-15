@@ -15,3 +15,4 @@ graph TD
     EF --> ENT
     BG[BackgroundJobs / Hangfire] --> S
     BG --> EF
+```

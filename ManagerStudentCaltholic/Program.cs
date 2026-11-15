@@ -160,7 +160,7 @@ RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     "30 16 * * 4", // 16:30 Thursday Afternoon
     new RecurringJobOptions { TimeZone = vnTimeZone });
 
-// TASK-P3-12.4 (Job 3): Automatically Sync-back (Batch Upsert) attendance results from Redis to PostgreSQL every 10 minutes
+// TASK-P3-12.4 (Job 3): Fallback safety-net job syncing any remaining dirty Redis attendance partitions to PostgreSQL every 10 minutes (primary Write-Through runs immediately in ScanCheckIn/SaveBatch)
 RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     "syncback-redis-attendance-to-db",
     service => service.SyncDirtyAttendancesToDatabaseAsync(null),

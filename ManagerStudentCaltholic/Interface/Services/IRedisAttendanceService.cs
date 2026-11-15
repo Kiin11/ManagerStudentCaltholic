@@ -21,7 +21,7 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<ClassSessionContextDto> GetOrLoadSessionContextAsync(int classId, DateTime date);
 
         /// <summary>
-        /// TASK-P3-12.3: Lưu nhanh Sổ điểm danh hàng loạt trực tiếp lên Redis (High-Throughput)
+        /// TASK-P3-12.3 / P2-LOG-16: Lưu nhanh Sổ điểm danh hàng loạt lên Redis (High-Throughput), kết hợp đồng bộ Write-Through trực tiếp xuống PostgreSQL tại Controller.
         /// </summary>
         Task<(bool Success, string Message)> SaveBatchToRedisAsync(AttendanceBatchSubmitDto request);
 
@@ -36,7 +36,7 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto);
 
         /// <summary>
-        /// TASK-P3-12.4: Đồng bộ hàng loạt (Batch Upsert) toàn bộ dữ liệu điểm danh đã thay đổi trên Redis về PostgreSQL
+        /// TASK-P3-12.4 / P2-LOG-16: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh từ Redis về PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng mỗi 10 phút qua Hangfire).
         /// </summary>
         Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null);
 

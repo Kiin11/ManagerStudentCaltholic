@@ -104,3 +104,21 @@ Chỉ những tài liệu thực sự bị ảnh hưởng bởi `53` tệp mã n
    - Kiểm tra quét QR + Hoàn tác 5 giây (Online & Offline + thẻ năm cũ) tại `/Attendance/ScanQr`.
    - Kiểm tra biên tập kế hoạch, nạp file đa định dạng và rollback version tại `/LessonPlans`.
    - Kiểm tra nộp lại hồ sơ bị từ chối tại `/PublicRegistration/Resubmit` và truy cập `/Offline`.
+
+
+---
+
+## Bổ Sung Sau Đợt Khắc Phục Audit (`2026-11-15` — `ISS-AUD-001` ➔ `ISS-AUD-009` RESOLVED)
+
+- **Các file Knowledge & Code Comment đã cập nhật bổ sung:**
+  - `00-OVERVIEW/`: `MODULE-INVENTORY.json` (`8` modules), `PROJECT-INVENTORY.json` (`200` files), `SOURCE-INVENTORY.md` (`200` rows, `28` Controllers), `ARCHITECTURE.md`, `Request Flow Diagram.md`, `PROJECT-DEPENDENCY-DIAGRAM.md`.
+  - `01-MODULES/`: `ATTENDANCE.md` (Flow 1B `SaveBatch` Write-Through, Dependencies & Risk Areas).
+  - `02-DATABASE/`: `DATABASE-OVERVIEW.md`, `TABLE-INDEX.json` (`43` tables), `TABLE-RELATIONSHIPS.md` (`43` tables, `Diff = 0`).
+  - `03-CODE-INDEX/`: `FILE-INDEX.jsonl` (`114` files), `SYMBOL-INDEX.jsonl` (`192` symbols, `0` nulls), `ROUTE-INDEX.jsonl` (`52` routes, `0` nulls), `DEPENDENCY-INDEX.jsonl` (`66` edges, `0` nulls, `Missing = 0`).
+  - `04-INTEGRATIONS/`: `INTEGRATION-OVERVIEW.md`.
+  - `05-FEATURES/`: `FEAT-P5-01-STAFF-QUICK-LOOKUP.md`, `FEAT-P5-02-MOBILE-FIRST-UI.md`, `FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`.
+  - `06-UPDATE-LOG/`: `PENDING-UPDATES.md`, `UPDATE-LOG.md`, `UPDATE-REPORT.md`, `KNOWLEDGE-ISSUES.jsonl`, `KNOWLEDGE-VALIDATION-REPORT.md`, `REQUIRED-CORRECTIONS.md`.
+  - Code Comments (không thay đổi logic): `ManagerStudentCaltholic/Interface/Services/IRedisAttendanceService.cs`, `Services/RedisAttendanceService.cs`, `Program.cs:163`.
+- **Xác minh thực thi:**
+  - `dotnet build --no-restore`: `Build succeeded (0 Warning, 0 Error)`.
+  - Kiểm định tự động (`audit_check.ps1`): `0` lỗi JSON/JSONL, `43/43` bảng khớp `Diff = 0`, `0` tham chiếu thiếu, `0` null lines, `0` vấn đề `OPEN`.

@@ -19,10 +19,14 @@ sequenceDiagram
     end
     R_Svc->>Redis: Cập nhật Trạng thái điểm danh (IsDirty = true)
     Redis-->>R_Svc: OK
-    R_Svc-->>Ctrl: QrScanResponseDto (Success)
+    R_Svc-->>Ctrl: QrScanResponseDto / SaveBatch Result
+    Ctrl->>R_Svc: Write-Through SyncDirtyAttendancesToDatabaseAsync()
+    R_Svc->>DB: Batch Upsert ngay trong Request xuống PostgreSQL
+    DB-->>R_Svc: Commit OK
+    R_Svc->>Redis: Set IsDirty = false
     Ctrl-->>User: JSON Response (Hiển thị kết quả & phát âm thanh)
 
-    Note over R_Svc, DB: Luồng chạy nền (Mỗi 10 phút)
+    Note over R_Svc, DB: Luồng chạy nền dự phòng (Hangfire mỗi 10 phút cho phân vùng còn IsDirty)
     Hangfire->>R_Svc: Trigger SyncDirtyAttendancesToDatabaseAsync()
     R_Svc->>Redis: Quét các ClassId có trạng thái IsDirty
     Redis-->>R_Svc: Dữ liệu JSON sổ điểm danh

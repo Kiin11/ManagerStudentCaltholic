@@ -100,3 +100,19 @@
   - **Sửa:** Thêm dòng đóng ```` ``` ```` sau `BG --> EF`.
 - **Vị trí cần sửa 2:** `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl`.
   - **Sửa (bảo trì định kỳ):** Điền `startLine`/`endLine`/`sourceLine` cho nhóm bản ghi baseline (`SYMBOL-INDEX:1-62`, `ROUTE-INDEX:1-29`, `DEPENDENCY-INDEX:1-40`) và từng bước mở rộng phạm vi từ `72` tệp lên đầy đủ `28` Controllers cùng các Service/Entity/View còn lại.
+
+---
+
+## Trạng Thái Khắc Phục Đợt Vá `2026-11-15` (`9/9 RESOLVED`)
+
+| Issue | Mức độ | Trạng thái | Ghi chú xử lý |
+|---|---|---|---|
+| `ISS-AUD-001` | `HIGH` | `RESOLVED` | Cập nhật `MODULE-INVENTORY.json` (`8` module thực), `PROJECT-INVENTORY.json` (`200` file), `SOURCE-INVENTORY.md` (`200` file, đủ `28` Controllers), loại bỏ sạch `Booking/Payment/Hotel`. |
+| `ISS-AUD-002` | `HIGH` | `RESOLVED` | User xác nhận PostgreSQL migrations đã chạy & kiểm chứng; cập nhật `DATABASE-OVERVIEW.md:5`, `UPDATE-LOG.md:95`, `PENDING-UPDATES.md`. |
+| `ISS-AUD-003` | `MEDIUM` | `RESOLVED` | Đồng bộ hoàn chỉnh `43/43` bảng (`Diff = 0`) giữa `DATABASE-OVERVIEW.md`, `TABLE-INDEX.json` và `TABLE-RELATIONSHIPS.md`. |
+| `ISS-AUD-004` | `MEDIUM` | `RESOLVED` | Chuẩn hóa số dòng/chữ ký `HomeController`, `IStaffStudentLookupService`, `StaffStudentLookupService`, `HttpRequestExtensions`; bổ sung `StaffStudentLookupService -> IGradeCalculationService` và `22` symbol gốc (`Missing = 0`). |
+| `ISS-AUD-005` | `MEDIUM` | `RESOLVED` | Cập nhật `ATTENDANCE.md`, `ARCHITECTURE.md`, `Request Flow Diagram.md`, `INTEGRATION-OVERVIEW.md` và XML/code comments (`IRedisAttendanceService.cs`, `RedisAttendanceService.cs`, `Program.cs`) theo luồng Write-Through trực tiếp + Hangfire fallback. |
+| `ISS-AUD-006` | `MEDIUM` | `RESOLVED` | Sửa `#staffStudentQuickSearchInput`, `280ms`, `term.length > 0`, `OriginalCode/ArchivedYearCode/NewCode`, `IsHistoricalMatch/MatchedHistoricalCode` và bảng `LookupViewOptions` trong `FEAT-P5-01`. |
+| `ISS-AUD-007` | `MEDIUM` | `RESOLVED` | Sửa `3s (3000ms)` trong `FAST-QR-CHECKIN` và `56px` / `#mobileMenuOffcanvas` / `z-index 1070` trong `FEAT-P5-02`. |
+| `ISS-AUD-008` | `LOW` | `RESOLVED` | Đổi `{id}` ➔ `{versionId:long}` trong `FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`. |
+| `ISS-AUD-009` | `LOW` | `RESOLVED` | Đóng block Mermaid `PROJECT-DEPENDENCY-DIAGRAM.md`; mở rộng `FILE-INDEX.jsonl` lên `114` file và điền đủ line numbers cho `192` symbols / `52` routes / `66` dependencies (`0` nulls). |

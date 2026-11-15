@@ -332,7 +332,7 @@ namespace ManagerStudentCaltholic.Services
         }
 
         /// <summary>
-        /// 4. TASK-P3-12.3: Lưu Sổ điểm danh hàng loạt trực tiếp lên Redis (Phản hồi tức thì < 5ms)
+        /// 4. TASK-P3-12.3 / P2-LOG-16: Lưu Sổ điểm danh hàng loạt lên bộ đệm Redis (AttendanceController.SaveBatch đồng thời gọi Write-Through SyncDirtyAttendancesToDatabaseAsync ngay sau đó).
         /// </summary>
         public async Task<(bool Success, string Message)> SaveBatchToRedisAsync(AttendanceBatchSubmitDto request)
         {
@@ -377,8 +377,7 @@ namespace ManagerStudentCaltholic.Services
         }
 
         /// <summary>
-        /// <summary>
-        /// 5. TASK-P3-12.3: Quét mã QR tốc độ cao trực tiếp trên bộ đệm Redis (Nâng cấp FEAT-P5-04)
+        /// 5. TASK-P3-12.3: Quét mã QR tốc độ cao trực tiếp trên bộ đệm Redis (Nâng cấp FEAT-P5-04, kết hợp Write-Through DB tại AttendanceController)
         /// </summary>
         public async Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request)
         {
@@ -785,7 +784,7 @@ namespace ManagerStudentCaltholic.Services
         }
 
         /// <summary>
-        /// 6. TASK-P3-12.4: Hangfire Job định kỳ 10 phút/lần quét toàn bộ lớp có thay đổi trên Redis và Batch Upsert xuống PostgreSQL
+        /// 6. TASK-P3-12.4 / P2-LOG-16: Batch Upsert dữ liệu điểm danh còn cờ IsDirty từ Redis xuống PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng định kỳ mỗi 10 phút qua Hangfire).
         /// </summary>
         public async Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null)
         {

@@ -2,7 +2,7 @@
 
 ## A. Database Architecture
 Hệ thống sử dụng cơ sở dữ liệu quan hệ **PostgreSQL** kết hợp với Object-Relational Mapper (ORM) là **Entity Framework Core 8** (`Npgsql.EntityFrameworkCore.PostgreSQL`). 
-- Phương pháp tiếp cận: Code-First Migrations.
+- Phương pháp tiếp cận: Code-First Entity Mapping (`ParishDbContext` định nghĩa 43 `DbSet<T>`). Trạng thái schema và migrations trên PostgreSQL đã được xác nhận áp dụng và kiểm chứng (`ISS-AUD-002` verified; DDL bổ sung cho 3 bảng giáo án có sẵn tại `script/seed-curriculum-data.sql`, thư mục `ManagerStudentCaltholic/Migrations/` hiện để trống sau commit `cfb2b5e`).
 - Global Query Filters: Được áp dụng để tự động loại bỏ các bản ghi đã xóa mềm (Soft Delete) có cờ `IsDeleted = true`.
 - Data Protection/Concurrency: Sử dụng Database Transactions (`BeginTransactionAsync`) và Execution Strategy để đảm bảo tính toàn vẹn dữ liệu khi thực thi các tác vụ hàng loạt (Batch Upsert, Promotion Rollover).
 

@@ -141,7 +141,7 @@ erDiagram
 | `/LessonPlans?classRoomId={id}` | `GET` | `RequireStaff` | Xem trang quản lý kế hoạch lớp, danh sách tuần và lịch sử phiên bản |
 | `/LessonPlans/ParseCurriculumFile` | `POST` | `Admin, ExecutiveBoard, BranchHead, Teacher` | Nạp file `.xlsx`, `.docx`, `.csv`, `.md`, `.pdf` và chuyển đổi thành JSON danh sách tuần |
 | `/LessonPlans/SaveCurriculum` | `POST` | `Admin, ExecutiveBoard, BranchHead, Teacher` | Lưu kế hoạch lớp trực tuyến, sinh file Excel đính kèm và đồng bộ `ClassLessonPlans` |
-| `/LessonPlans/GetVersionDetail/{id}` | `GET` | `RequireStaff` | Lấy chi tiết snapshot nội dung tuần học của một phiên bản cũ |
-| `/LessonPlans/DownloadCurriculumVersion/{id}` | `GET` | `RequireStaff` | Tải file Excel tự động sinh của một phiên bản ngày sửa |
+| `/LessonPlans/GetVersionDetail/{versionId:long}` | `GET` | `RequireStaff` | Lấy chi tiết snapshot nội dung tuần học của một phiên bản cũ |
+| `/LessonPlans/DownloadCurriculumVersion/{versionId:long}` | `GET` | `RequireStaff` | Tải file Excel tự động sinh của một phiên bản ngày sửa |
 | `/LessonPlans/ExportCurrentCurriculumExcel` | `GET` | `RequireStaff` | Xuất file Excel bảng kế hoạch lớp phiên bản hiện hành |
 | `/LessonPlans/RollbackCurriculum` | `POST` | `Admin, ExecutiveBoard, BranchHead` | Khôi phục kế hoạch lớp về phiên bản ngày sửa cũ |

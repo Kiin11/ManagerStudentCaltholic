@@ -92,7 +92,7 @@
      - Tạo Entity `ClassCurriculumDocument` (kế hoạch hiện hành, snapshot JSON `ContentJson`, thông tin file version mới nhất).
      - Tạo Entity `ClassCurriculumVersion` (lịch sử phiên bản ngày sửa, bản chụp tuần học, đường dẫn file `.xlsx` tự động sinh).
      - Cập nhật `ClassLessonPlan`: Bổ sung `CurriculumDocumentId`, `WeekNumber`, `Semester` và liên kết với `ClassCurriculumDocument`.
-     - Cấu hình Fluent API và tạo EF Migration `AddClassCurriculumDocumentsAndVersions`.
+     - Cấu hình Fluent API trong `ParishDbContext` cho `ClassCurriculumDocument`, `ClassCurriculumVersion` và `ClassLessonPlan`. Đã được xác nhận áp dụng migration & DDL xuống PostgreSQL (`script/seed-curriculum-data.sql`; thư mục `ManagerStudentCaltholic/Migrations/` hiện để trống sau commit `cfb2b5e`).
   2. **TASK-P5-07.2 (Parser đa định dạng):**
      - Xây dựng dịch vụ đọc file đa định dạng trong `ClassCurriculumService`: hỗ trợ `.xlsx` (ClosedXML), `.docx` (OpenXML), `.csv` (StreamReader với auto delimiter detection), `.md` (Markdown Table & List), và `.pdf` (PdfPig).
      - Tự động chuẩn hóa số tuần, phát hiện ngày thi/nghỉ lễ, trả về DTOs nạp trực tiếp vào giao diện web mà không cần reload trang.
@@ -103,3 +103,14 @@
   4. **TASK-P5-07.4 (Giao diện tích hợp, Xem lịch sử & Rollback):**
      - Cập nhật `LessonPlansController` và View `Views/LessonPlans/Index.cshtml` với giao diện 3 Tab trực quan.
      - Hỗ trợ xem lại snapshot từng phiên bản cũ, tải file `.xlsx` của ngày sửa bất kỳ, và chức năng Khôi phục (Rollback) an toàn.
+
+
+## [15/11/2026] - Khắc phục toàn bộ 9 Issues kiểm định độc lập (`ISS-AUD-001` ➔ `ISS-AUD-009`)
+- **Phạm vi xử lý:** Khắc phục toàn bộ sai lệch giữa mã nguồn hiện hành (`2a3263d` + working tree), comment đồng bộ Write-Through, cấu trúc bảng CSDL và kho tri thức `AI-Knowledge/`.
+- **Các nội dung đã cập nhật:**
+  1. **`ISS-AUD-001` (`00-OVERVIEW/`):** Xóa bỏ hoàn toàn module/domain giả lập (`Booking`, `Payment`, `Hotel`). Cập nhật `MODULE-INVENTORY.json` (`8` module thực tế), `PROJECT-INVENTORY.json` (`200` tệp) và `SOURCE-INVENTORY.md` (`200` tệp, đủ `28` Controllers).
+  2. **`ISS-AUD-002` (`DATABASE-OVERVIEW.md`, `UPDATE-LOG.md`, `PENDING-UPDATES.md`):** Xác nhận trạng thái migrations/DDL PostgreSQL đã được Developer chạy và kiểm chứng (`verified`); làm rõ mô hình `43 DbSet<T>`, DDL tại `script/seed-curriculum-data.sql` và trạng thái thư mục `Migrations/` sau commit `cfb2b5e`.
+  3. **`ISS-AUD-003` (`TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`):** Đồng bộ tự động từ `ParishDbContext.cs` và `Models/Entities/*.cs` đủ **`43/43` bảng** (`Diff = 0`).
+  4. **`ISS-AUD-004` & `ISS-AUD-009` (`03-CODE-INDEX/*.jsonl`, `PROJECT-DEPENDENCY-DIAGRAM.md`):** Đóng block Mermaid `PROJECT-DEPENDENCY-DIAGRAM.md`; mở rộng `FILE-INDEX.jsonl` lên `114` tệp (đủ `28/28` Controllers); tái đồng bộ `SYMBOL-INDEX.jsonl` (`192` symbols), `ROUTE-INDEX.jsonl` (`52` routes) và `DEPENDENCY-INDEX.jsonl` (`66` edges) với `0` giá trị `null` và `0` tham chiếu mồ côi.
+  5. **`ISS-AUD-005` (`01-MODULES/ATTENDANCE.md`, `ARCHITECTURE.md`, `Request Flow Diagram.md`, `INTEGRATION-OVERVIEW.md` & XML/code comments):** Cập nhật thống nhất cơ chế ghi **Write-Through trực tiếp** xuống PostgreSQL cho cả `ScanCheckIn` và `SaveBatch` (`P2-LOG-16 FIX`) kèm Hangfire job dự phòng 10 phút; chỉnh lại dependency QR mã cũ dùng trực tiếp `StudentCodeHistories`.
+  6. **`ISS-AUD-006`, `ISS-AUD-007`, `ISS-AUD-008` (`05-FEATURES/`):** Sửa `#staffStudentQuickSearchInput`, `280ms`, `term.length > 0`, `OriginalCode/ArchivedYearCode/NewCode`, `IsHistoricalMatch/MatchedHistoricalCode`, `LookupViewOptions`, cooldown QR `3s (3000ms)`, Mobile UI `56px` / `#mobileMenuOffcanvas` / `z-index 1070`, và `{versionId:long}` trong `FEAT-P5-07`.

@@ -148,6 +148,14 @@
 
 
 
+### Flow 1B: Manual Grid Batch Save (Write-Through)
+
+* **Entry point:** `AttendanceController.SaveBatch` (`POST /Attendance/SaveBatch`, comment `P2-LOG-16 FIX`).
+* **Input:** `AttendanceBatchSubmitDto` (`ClassId`, `AttendanceDate`, `Items`).
+* **Business processing & Database access:** Gọi `RedisAttendanceService.SaveBatchToRedisAsync` để cập nhật sổ lớp trên Redis (`IsDirty = true`) và nạp ngay `SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate)` trong cùng HTTP request để ghi **Write-Through trực tiếp** xuống PostgreSQL (`Attendances`), đồng bộ tức thì hai tầng dữ liệu.
+* **Output:** JSON `{ success, message }`.
+
+
 ### Flow 2: Offline Synchronization
 
 * **Entry point:** `AttendanceController.GetOfflineStudentsCache` (GET) & `AttendanceController.SyncOfflineQueue` (POST).
@@ -237,7 +245,7 @@
 
 ## 6. Dependencies
 
-* **Dependencies nội bộ:** Gọi `IStudentCodeRolloverService` (để xử lý mã QR cũ của năm ngoái).
+* **Dependencies nội bộ:** `AttendanceController` inject `ParishDbContext`, `ILogger<AttendanceController>`, `IRedisAttendanceService` và `IAttendanceDisputeService`. Đối với mã QR năm cũ, `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` và `AttendanceController.GetOfflineStudentsCache` truy vấn trực tiếp bảng `StudentCodeHistories` (`OriginalCode` / `ArchivedYearCode`) qua `ParishDbContext` mà không gọi `IStudentCodeRolloverService` (`IStudentCodeRolloverService` được dùng bởi `AttendanceDisputeService`, `LookupController` và `PromotionController`).
 
 
 * **Database dependencies:** Tables: `Attendances`, `AbsenceRequests`, `AttendanceAuditLogs`, `AttendanceDisputeRequests`, `ClassSchedules`, `Announcements`.
@@ -277,7 +285,7 @@
 * **Memory Overhead khi Xuất Excel:** Trong `AttendanceController.ExportStatisticsExcel`, hệ thống query toàn bộ Enrollments và Attendances của một lớp vào bộ nhớ qua `.ToListAsync()` trước khi xử lý logic tính toán. Nếu dữ liệu điểm danh của cả năm quá lớn, có nguy cơ gây áp lực lên RAM (Mặc dù đã dùng `.AsNoTracking()`).
 
 
-* **Data Inconsistency rủi ro Redis:** Mặc dù luồng `ScanCheckIn` đã fix lỗi bằng cách áp dụng Write-Through trực tiếp xuống DB (không chờ 10 phút), nhưng luồng `SaveBatchToRedisAsync` vẫn để cờ `IsDirty=true` chờ Hangfire quét. Nếu Redis sập giữa chu kỳ 10 phút, những dữ liệu lưới lưu thủ công chưa sync có thể bị mất.
+* **Đồng bộ Write-Through & Dự phòng Hangfire:** Cả hai luồng `ScanCheckIn` và `SaveBatch` (`AttendanceController.cs:147-151`, comment `P2-LOG-16 FIX`) đều thực hiện ghi **Write-Through trực tiếp** xuống PostgreSQL qua `SyncDirtyAttendancesToDatabaseAsync` ngay trong cùng HTTP request. Job định kỳ 10 phút của Hangfire đóng vai trò **cơ chế dự phòng (fallback/retry)** cho các phân vùng còn `IsDirty = true` nếu DB gặp sự cố tạm thời. Với kịch bản mất mạng cục bộ tại thiết bị quét, dữ liệu được lưu an toàn trong IndexedDB (`offline-attendance.js`) và đồng bộ lên qua `SyncOfflineQueue`.
 
 
 * **Dynamic Policy/Reflection:** Không có dynamic reflection, mọi policy role được set cứng.
