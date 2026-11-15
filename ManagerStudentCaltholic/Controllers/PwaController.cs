@@ -20,7 +20,7 @@ namespace ManagerStudentCaltholic.Controllers
         [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
         public IActionResult Offline()
         {
-            return View();
+            return View("Index");
         }
 
         /// <summary>

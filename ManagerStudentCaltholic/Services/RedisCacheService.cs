@@ -12,6 +12,14 @@ namespace ManagerStudentCaltholic.Services
         private readonly IMemoryCache _memoryFallback;
         private readonly ILogger<RedisCacheService> _logger;
         private readonly TimeSpan _defaultExpiration;
+        private static readonly TimeSpan CircuitBreakDuration = TimeSpan.FromSeconds(30);
+        private static long _circuitOpenUntilTicks = 0;
+
+        private static bool IsRedisCircuitOpen() =>
+            DateTime.UtcNow.Ticks < Interlocked.Read(ref _circuitOpenUntilTicks);
+
+        private static void TripRedisCircuit() =>
+            Interlocked.Exchange(ref _circuitOpenUntilTicks, DateTime.UtcNow.Add(CircuitBreakDuration).Ticks);
 
         private static readonly JsonSerializerOptions SerializerOptions = new()
         {
@@ -36,6 +44,11 @@ namespace ManagerStudentCaltholic.Services
 
         public async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default)
         {
+            if (IsRedisCircuitOpen())
+            {
+                return _memoryFallback.TryGetValue(key, out T? fallbackCached) ? fallbackCached : default;
+            }
+
             try
             {
                 var cachedJson = await _distributedCache.GetStringAsync(key, cancellationToken);
@@ -46,6 +59,7 @@ namespace ManagerStudentCaltholic.Services
             }
             catch (Exception ex)
             {
+                TripRedisCircuit();
                 _logger.LogWarning(ex, "[RedisCache] Không thể đọc khóa {Key} từ Redis, chuyển sang đọc từ MemoryCache dự phòng.", key);
                 if (_memoryFallback.TryGetValue(key, out T? fallbackVal))
                 {
@@ -63,6 +77,11 @@ namespace ManagerStudentCaltholic.Services
             // Luôn đồng bộ một bản lưu ngắn hạn trên MemoryCache dự phòng
             _memoryFallback.Set(key, value, ttl);
 
+            if (IsRedisCircuitOpen())
+            {
+                return;
+            }
+
             try
             {
                 var serialized = JsonSerializer.Serialize(value, SerializerOptions);
@@ -74,6 +93,7 @@ namespace ManagerStudentCaltholic.Services
             }
             catch (Exception ex)
             {
+                TripRedisCircuit();
                 _logger.LogWarning(ex, "[RedisCache] Không thể ghi khóa {Key} lên Redis, đã lưu tạm trên MemoryCache.", key);
             }
         }
@@ -102,12 +122,18 @@ namespace ManagerStudentCaltholic.Services
         public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
         {
             _memoryFallback.Remove(key);
+            if (IsRedisCircuitOpen())
+            {
+                return;
+            }
+
             try
             {
                 await _distributedCache.RemoveAsync(key, cancellationToken);
             }
             catch (Exception ex)
             {
+                TripRedisCircuit();
                 _logger.LogWarning(ex, "[RedisCache] Lỗi khi xóa khóa {Key} trên Redis.", key);
             }
         }
