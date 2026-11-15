@@ -362,19 +362,19 @@ else
                         <input type="password" id="newPassword" class="form-control" placeholder="Tối thiểu 6 ký tự" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Tên Thánh<span class="text-danger">*</span></label>
+                        <label class="form-label small fw-bold">Tên Thánh <span class="text-danger">*</span></label>
                         <input type="text" id="newChristianName" class="form-control" placeholder="Ví dụ: Phaolo" required />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">Họ <span class="text-danger">*</span></label>
-                        <input type="text" id="newFirstName" class="form-control" placeholder="Ví dụ: Ninh" required />
+                        <label class="form-label small fw-bold">Họ và tên đệm <span class="text-danger">*</span></label>
+                        <input type="text" id="newFirstName" class="form-control" placeholder="Ví dụ: Trần" required />
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">Tên <span class="text-danger">*</span></label>
-                        <input type="text" id="newLastName" class="form-control" placeholder="Ví dụ: Huân" required />
+                        <input type="text" id="newLastName" class="form-control" placeholder="Ví dụ: Van" required />
                     </div>
                     <div class="row g-2 mb-3">
-                        <div class="col-6">
+                        <div class="col-6" id="divUserRoleCol">
                             <label class="form-label small fw-bold">Vai trò</label>
                             <select id="newRole" class="form-select" onchange="toggleManagedGradeField()">
                                 <option value="@UserRole.Teacher">Giáo Lý Viên</option>
@@ -387,7 +387,7 @@ else
                                 }
                             </select>
                         </div>
-                        <div class="col-md-6 d-none" id="divManagedGrade">
+                        <div class="col-6" id="divManagedGrade">
                             <label class="form-label small fw-bold text-primary">Khối phụ trách <span class="text-danger">*</span></label>
                             <select id="newManagedGradeLevel" class="form-select border-primary">
                                 <option value="Khai Tâm">Khối Khai Tâm</option>
@@ -396,14 +396,16 @@ else
                                 <option value="Bao Đồng">Khối Bao Đồng</option>
                             </select>
                         </div>
-                        <div class="col-6">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-12 col-sm-6">
                             <label class="form-label small fw-bold">Số điện thoại</label>
                             <input type="tel" inputmode="tel" id="newPhone" class="form-control" placeholder="090..." />
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Email (tùy chọn)</label>
-                        <input type="email" id="newEmail" class="form-control" placeholder="email@domain.com" />
+                        <div class="col-12 col-sm-6">
+                            <label class="form-label small fw-bold">Email (tùy chọn)</label>
+                            <input type="email" id="newEmail" class="form-control" placeholder="email@domain.com" />
+                        </div>
                     </div>
                 </form>
             </div>
@@ -591,22 +593,34 @@ else
             const username = document.getElementById("newUsername").value.trim();
             const password = document.getElementById("newPassword").value;
             const christianName = document.getElementById("newChristianName").value.trim();
-            const firstName = document.getElementById("newFirstName").value.trim();
-            const lastName = document.getElementById("newLastName").value.trim();
+            let firstName = document.getElementById("newFirstName").value.trim();
+            let lastName = document.getElementById("newLastName").value.trim();
             const role = document.getElementById("newRole").value;
             const phone = document.getElementById("newPhone").value.trim();
             const email = document.getElementById("newEmail").value.trim();
 
-            // Lấy giá trị khối nếu chọn BranchHead
-            let managedGradeLevel = null;
-            if (role === "@UserRole.BranchHead" || role === "BranchHead") {
-                const gradeSelect = document.getElementById("newManagedGradeLevel");
-                managedGradeLevel = gradeSelect ? gradeSelect.value : null;
-            }
-
-            if (!username || !password || !firstName || !lastName) {
+            if (!username || !password || !christianName || !firstName || !lastName) {
                 alert("Vui lòng điền đầy đủ các thông tin bắt buộc!");
                 return;
+            }
+
+            if (password.length < 6) {
+                alert("Mật khẩu khởi tạo phải có tối thiểu 6 ký tự!");
+                return;
+            }
+
+            // Tự động tách phần tên đệm sang Họ và tên đệm nếu người dùng nhập nhiều từ vào ô Tên
+            const lastNameParts = lastName.split(/\s+/).filter(Boolean);
+            if (lastNameParts.length > 1) {
+                firstName = `${firstName} ${lastNameParts.slice(0, -1).join(" ")}`.trim();
+                lastName = lastNameParts[lastNameParts.length - 1];
+            }
+
+            // Lấy giá trị khối khi chọn Giáo Lý Viên hoặc Trưởng Khối
+            let managedGradeLevel = null;
+            if (role === "@UserRole.Teacher" || role === "Teacher" || role === "@UserRole.BranchHead" || role === "BranchHead") {
+                const gradeSelect = document.getElementById("newManagedGradeLevel");
+                managedGradeLevel = gradeSelect && gradeSelect.value ? gradeSelect.value : null;
             }
 
             const payload = {
@@ -616,8 +630,8 @@ else
                 firstName: firstName,
                 lastName: lastName,
                 role: role,
-                phoneNumber: phone,
-                email: email,
+                phoneNumber: phone || null,
+                email: email || null,
                 managedGradeLevel: managedGradeLevel
             };
             try {
@@ -707,12 +721,27 @@ else
         function toggleManagedGradeField() {
             const role = document.getElementById("newRole").value;
             const divGrade = document.getElementById("divManagedGrade");
-            if (role === "BranchHead") {
+            const divRoleCol = document.getElementById("divUserRoleCol");
+            const showGrade = role === "@UserRole.Teacher" || role === "Teacher" || role === "@UserRole.BranchHead" || role === "BranchHead";
+
+            if (showGrade) {
                 divGrade.classList.remove("d-none");
+                if (divRoleCol) {
+                    divRoleCol.classList.remove("col-12");
+                    divRoleCol.classList.add("col-6");
+                }
             } else {
                 divGrade.classList.add("d-none");
+                if (divRoleCol) {
+                    divRoleCol.classList.remove("col-6");
+                    divRoleCol.classList.add("col-12");
+                }
             }
         }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            toggleManagedGradeField();
+        });
 
         async function submitBatchCreateTeachers() {
             const isExcelTab = document.getElementById('pills-excel-tab').classList.contains('active');

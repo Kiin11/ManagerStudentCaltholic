@@ -42,36 +42,59 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
     public class CreateUserRequestDto
     {
+        private string? _christianName;
+        private string? _email;
+        private string? _phoneNumber;
+        private string? _managedGradeLevel;
+
         [Required(ErrorMessage = "Tên đăng nhập không được rỗng")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username từ 3 đến 50 ký tự")]
         public string Username { get; set; } = string.Empty;
 
-        // SEC-NEW-10 FIX: Áp dụng chuẩn độ phức tạp mật khẩu đồng nhất
         [Required(ErrorMessage = "Mật khẩu không được để trống")]
-        [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
-        [RegularExpression(PasswordPolicy.ComplexityPattern, ErrorMessage = PasswordPolicy.ComplexityErrorMessage)]
+        [MinLength(6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
         public string Password { get; set; } = string.Empty;
 
-        [StringLength(50)]
-        public string? ChristianName { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Tên Thánh không được để trống")]
+        [StringLength(50, ErrorMessage = "Tên Thánh không quá 50 ký tự")]
+        public string? ChristianName
+        {
+            get => _christianName;
+            set => _christianName = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
 
         [Required(ErrorMessage = "Họ và tên đệm không được trống")]
-        [StringLength(100)]
+        [StringLength(100, ErrorMessage = "Họ và tên đệm không quá 100 ký tự")]
         public string FirstName { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Tên không được trống")]
-        [StringLength(10)]
+        [StringLength(50, ErrorMessage = "Tên không quá 50 ký tự")]
         public string LastName { get; set; } = string.Empty;
 
         [EmailAddress(ErrorMessage = "Email không hợp lệ")]
-        public string? Email { get; set; }
+        [StringLength(100, ErrorMessage = "Email không quá 100 ký tự")]
+        public string? Email
+        {
+            get => _email;
+            set => _email = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
 
-        public string? PhoneNumber { get; set; }
+        [StringLength(15, ErrorMessage = "Số điện thoại không quá 15 ký tự")]
+        public string? PhoneNumber
+        {
+            get => _phoneNumber;
+            set => _phoneNumber = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
 
         [Required(ErrorMessage = "Vui lòng chọn vai trò")]
         public string Role { get; set; } = "Teacher";
 
-        public string? ManagedGradeLevel { get; set; }
+        [StringLength(50, ErrorMessage = "Khối phụ trách không quá 50 ký tự")]
+        public string? ManagedGradeLevel
+        {
+            get => _managedGradeLevel;
+            set => _managedGradeLevel = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
     }
 
     public class ResetPasswordRequestDto
@@ -79,10 +102,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [Required]
         public long UserId { get; set; }
 
-        // SEC-NEW-10 FIX: Nâng từ 6 ký tự lên tối thiểu 8 ký tự kèm kiểm tra độ phức tạp
         [Required(ErrorMessage = "Mật khẩu mới không được rỗng")]
-        [MinLength(8, ErrorMessage = "Mật khẩu tối thiểu 8 ký tự")]
-        [RegularExpression(PasswordPolicy.ComplexityPattern, ErrorMessage = PasswordPolicy.ComplexityErrorMessage)]
+        [MinLength(6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
         public string NewPassword { get; set; } = string.Empty;
     }
 }

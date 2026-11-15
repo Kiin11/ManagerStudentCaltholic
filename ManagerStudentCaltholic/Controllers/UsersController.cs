@@ -86,16 +86,24 @@ namespace ManagerStudentCaltholic.Controllers
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
         public async Task<IActionResult> Create([FromBody] CreateUserRequestDto model)
         {
+            if (model == null)
+            {
+                return Json(new { success = false, message = "Dữ liệu gửi lên không hợp lệ." });
+            }
+
             if (!ModelState.IsValid)
             {
                 // Thu thập toàn bộ thông báo lỗi validation nếu có
                 var errors = ModelState.Values
                     .SelectMany(v => v.Errors)
                     .Select(e => e.ErrorMessage)
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
                     .ToList();
-                var str = "Dữ liệu nhập không hợp lệ: " + string.Join("; ", errors);
+                var str = errors.Any()
+                    ? "Dữ liệu nhập không hợp lệ: " + string.Join("; ", errors)
+                    : "Dữ liệu nhập không hợp lệ.";
 
-                return Json(new { success = false, message = "Dữ liệu nhập không hợp lệ." });
+                return Json(new { success = false, message = str });
             }
 
             var usernameClean = model.Username.Trim().ToLower();
@@ -115,25 +123,55 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Chỉ Admin hoặc Cha Tuyên Úy (qua màn hình Điều hành) mới có quyền cấp tài khoản cấp cao (Admin, Cha Tuyên Úy, Ban Điều Hành)." });
             }
 
-            if(model.ChristianName is null || model.FirstName is null || model.LastName is null)
+            if (string.IsNullOrWhiteSpace(model.ChristianName) ||
+                string.IsNullOrWhiteSpace(model.FirstName) ||
+                string.IsNullOrWhiteSpace(model.LastName))
             {
                 return Json(new { success = false, message = "Tên Thánh, Họ và Tên là bắt buộc." });
             }
+
+            var normalizedFirstName = model.FirstName.Trim();
+            var normalizedLastName = model.LastName.Trim();
+            var lastNameParts = normalizedLastName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (lastNameParts.Length > 1)
+            {
+                normalizedFirstName = $"{normalizedFirstName} {string.Join(" ", lastNameParts[..^1])}".Trim();
+                normalizedLastName = lastNameParts[^1];
+            }
+
+            if (normalizedFirstName.Length > 100)
+            {
+                return Json(new { success = false, message = "Họ và tên đệm không được vượt quá 100 ký tự." });
+            }
+
+            if (normalizedLastName.Length > 10)
+            {
+                return Json(new { success = false, message = "Tên chính không được vượt quá 10 ký tự." });
+            }
+
+            if (model.Role == UserRole.BranchHead && string.IsNullOrWhiteSpace(model.ManagedGradeLevel))
+            {
+                return Json(new { success = false, message = "Vui lòng chọn Khối phụ trách cho Trưởng khối." });
+            }
+
+            var managedGradeLevel = (model.Role == UserRole.BranchHead || model.Role == UserRole.Teacher) &&
+                                    !string.IsNullOrWhiteSpace(model.ManagedGradeLevel)
+                ? model.ManagedGradeLevel.Trim()
+                : null;
 
             var newUser = new User
             {
                 Username = usernameClean,
                 PasswordHash = _passwordHasher.HashPassword(model.Password),
-                FirstName = model.FirstName.Trim(),
-                LastName = model.LastName.Trim(),
+                FirstName = normalizedFirstName,
+                LastName = normalizedLastName,
                 ChristianName = model.ChristianName.Trim(),
-                Email = model.Email?.Trim(),
-                PhoneNumber = model.PhoneNumber?.Trim(),
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
                 Role = model.Role,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-                // Gán khối phụ trách nếu là BranchHead
-                ManagedGradeLevel = model.Role == UserRole.BranchHead ? model.ManagedGradeLevel : null
+                ManagedGradeLevel = managedGradeLevel
             };
 
             _context.Users.Add(newUser);
@@ -154,9 +192,22 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto model)
         {
+            if (model == null)
+            {
+                return Json(new { success = false, message = "Dữ liệu gửi lên không hợp lệ." });
+            }
+
             if (!ModelState.IsValid)
             {
-                return Json(new { success = false, message = "Dữ liệu mật khẩu mới không hợp lệ." });
+                var errors = ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .ToList();
+                var message = errors.Any()
+                    ? "Dữ liệu mật khẩu mới không hợp lệ: " + string.Join("; ", errors)
+                    : "Dữ liệu mật khẩu mới không hợp lệ.";
+                return Json(new { success = false, message });
             }
 
             var user = await _context.Users.FindAsync(model.UserId);
