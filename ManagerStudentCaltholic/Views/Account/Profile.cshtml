@@ -132,7 +132,8 @@
                     <div class="d-flex flex-wrap gap-1">
                         <span class="badge @(Model.Role == UserRole.Admin ? "bg-danger" :
                                              Model.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
-                                             Model.Role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-2 py-1">
+                                             Model.Role == UserRole.ExecutiveBoard ? "bg-primary" :
+                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-2 py-1">
                             @(Model.Role == UserRole.Admin ? "Quản trị viên" : Model.Role == UserRole.SpiritualDirector ? "Cha" :
                               Model.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
                               Model.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
@@ -140,7 +141,7 @@
                         @if (!string.IsNullOrEmpty(Model.ManagedGradeLevel))
                         {
                             <span class="badge bg-primary-subtle text-primary border rounded-pill px-2 py-1">
-                                Trưởng khối @Model.ManagedGradeLevel
+                                Khối @Model.ManagedGradeLevel
                             </span>
                         }
                     </div>
@@ -403,7 +404,8 @@ else
                         <p class="text-muted small mb-2">@@@Model.Username</p>
                         <span class="badge @(Model.Role == UserRole.Admin ? "bg-danger" :
                                              Model.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
-                                             Model.Role == UserRole.ExecutiveBoard ? "bg-primary" : "bg-secondary") rounded-pill px-3 py-1">
+                                             Model.Role == UserRole.ExecutiveBoard ? "bg-primary" :
+                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
                             @(Model.Role == UserRole.Admin ? "Quản trị viên" : Model.Role == UserRole.SpiritualDirector ? "Cha" :
                               Model.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
                               Model.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
@@ -411,7 +413,7 @@ else
                         @if (!string.IsNullOrEmpty(Model.ManagedGradeLevel))
                         {
                             <span class="badge bg-primary-subtle text-primary border rounded-pill px-2 py-1 ms-1">
-                                Trưởng khối @Model.ManagedGradeLevel
+                                Khối @Model.ManagedGradeLevel
                             </span>
                         }
                     </div>
