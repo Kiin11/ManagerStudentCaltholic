@@ -56,6 +56,7 @@ namespace ManagerStudentCaltholic.Controllers
                 .Include(c => c.AcademicYear)
                 .Include(c => c.Enrollments)
                 .Include(c=> c.ClassTeachers)
+                .AsSplitQuery()
                 .Where(c => c.AcademicYearId == selectedYearId);
 
             // BỘ LỌC PHẠM VI (SCOPE FILTER CHO TRƯỞNG KHỐI)

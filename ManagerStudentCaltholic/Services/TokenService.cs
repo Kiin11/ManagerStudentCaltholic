@@ -57,7 +57,7 @@ namespace ManagerStudentCaltholic.Services
                 claims.Add(new Claim("ManagedGradeLevel", user.ManagedGradeLevel));
             }
 
-            var expireMinutes = int.TryParse(jwtSettings["AccessTokenExpirationMinutes"], out int exp) ? exp : 30;
+            var expireMinutes = int.TryParse(jwtSettings["AccessTokenExpirationMinutes"], out int exp) ? exp : 11520;
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {

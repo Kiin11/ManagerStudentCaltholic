@@ -158,6 +158,7 @@ namespace ManagerStudentCaltholic.Services
                 .Include(s => s.Enrollments)
                     .ThenInclude(e => e.GradeRecords)
                         .ThenInclude(g => g.GradeConfiguration)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(s => s.Id == studentId);
 
             if (student == null)
@@ -395,6 +396,7 @@ namespace ManagerStudentCaltholic.Services
                     .Include(e => e.GradeRecords)
                         .ThenInclude(g => g.GradeConfiguration)
                     .Include(e => e.Attendances)
+                    .AsSplitQuery()
                     .FirstOrDefaultAsync(e => e.StudentId == studentId && e.ClassRoom != null && e.ClassRoom.AcademicYearId == py.Id);
 
                 var historyCode = await _context.StudentCodeHistories

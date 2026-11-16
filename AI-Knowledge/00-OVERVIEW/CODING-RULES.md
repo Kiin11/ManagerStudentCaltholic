@@ -9,7 +9,8 @@ Dựa trên việc phân tích mã nguồn thực tế, các quy tắc và conve
 
 ## 2. Database Query & Entity Framework
 - **Tối ưu hóa đọc:** Luôn sử dụng `.AsNoTracking()` cho các truy vấn chỉ để đọc (Read-only) nhằm tối ưu bộ nhớ. (VD: Rất phổ biến trong `DashboardController.cs`, `AttendanceController.cs`).
-- **Soft Delete (Xóa mềm):** Áp dụng triệt để qua Interface `ISoftDelete`. Sử dụng Global Query Filter trong EF Core (`modelBuilder.Entity<T>().HasQueryFilter(e => !e.IsDeleted)`). Cấu hình ghi đè `SaveChangesAsync()` để tự động đổi lệnh Delete thành Update `IsDeleted = true`. (Xác minh: `ParishDbContext.cs`).
+- **Soft Delete (Xóa mềm) & Matching Query Filters:** Áp dụng triệt để qua Interface `ISoftDelete`. Sử dụng Global Query Filter trong EF Core (`modelBuilder.Entity<T>().HasQueryFilter(e => !e.IsDeleted)`). Cấu hình ghi đè `SaveChangesAsync()` để tự động đổi lệnh Delete thành Update `IsDeleted = true`. Mọi thực thể con có khóa ngoại bắt buộc (`Required`) trỏ tới thực thể dùng Soft Delete phải cấu hình Matching Query Filter tương ứng trong `ParishDbContext.OnModelCreating` (kể cả phụ thuộc bắc cầu) để đảm bảo tính nhất quán và tránh cảnh báo EF Core.
+- **Query Splitting (Truy vấn đa tập hợp):** Hệ thống cấu hình `UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)` mặc định trên `UseNpgsql` (`ServiceCollectionExtensions.AddDatabaseConfiguration`). Khi viết truy vấn có từ 2 collection navigation trở lên qua `.Include()` / `.ThenInclude()`, bổ sung tường minh `.AsSplitQuery()` để tránh Cartesian explosion.
 - **Bảo mật Transaction:** Khi thực thi lưu trữ nhiều thao tác/bảng cùng lúc, luôn bọc trong `IExecutionStrategy` và `BeginTransactionAsync()`. (VD: `EnrollmentsController.AssignStudents`, `PromotionController.ExecuteBatchCreate`).
 
 ## 3. Security & Validation

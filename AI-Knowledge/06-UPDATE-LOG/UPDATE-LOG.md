@@ -2,6 +2,41 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Nâng hạn AccessToken lên 8 ngày & Mặc định duy trì đăng nhập 14 ngày
+- **Thời gian cập nhật:** `2026-11-16T13:20:00+07:00`
+- **Mục tiêu:** Cập nhật `AccessTokenExpirationMinutes` lên `11520` phút (8 ngày) và mặc định chọn ô "Duy trì đăng nhập (14 ngày)" (`RememberMe = true`) trên trang đăng nhập.
+- **Danh sách file source cập nhật:**
+  - `ManagerStudentCaltholic/appsettings.json` (`AccessTokenExpirationMinutes`: `30` ➔ `11520`)
+  - `ManagerStudentCaltholic/appsettings.Development.json` (`AccessTokenExpirationMinutes`: `30` ➔ `11520`)
+  - `ManagerStudentCaltholic/Services/TokenService.cs` (fallback `11520` phút trong `GenerateAccessToken`)
+  - `ManagerStudentCaltholic/Models/ViewModels/AuthViewModels.cs` (`LoginRequestDto.RememberMe = true`)
+  - `ManagerStudentCaltholic/Controllers/AccountController.cs` (truyền `new LoginRequestDto { RememberMe = true, ReturnUrl = returnUrl }` ở `GET Login`, và dùng `AddDays(8)` khi `!RememberMe` ở `POST Login`)
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/00-OVERVIEW/TECH-STACK.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+
+---
+
+### Phiên cập nhật: Sửa cảnh báo EF Core Production (Global Query Filters & SplitQuery)
+- **Thời gian cập nhật:** `2026-11-16T13:12:00+07:00`
+- **Mục tiêu:** Xử lý triệt để 2 nhóm cảnh báo `[WRN]` trong log Production:
+  1. Cảnh báo `PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning` trên 14 thực thể con có khóa ngoại bắt buộc trỏ tới các thực thể đã có Global Query Filter (`Student`, `ClassRoom`, `Enrollment`, `MassCampaign`, `SacramentApprovalBatch`) và 2 thực thể phụ thuộc bắc cầu (`AttendanceAuditLog`, `ClassCurriculumVersion`).
+  2. Cảnh báo `MultipleCollectionIncludeWarning` khi biên dịch truy vấn nạp nhiều collection navigation mà chưa cấu hình `QuerySplittingBehavior`.
+- **Danh sách file source cập nhật:**
+  - `ManagerStudentCaltholic/Data/ParishDbContext.cs` (bổ sung Matching Global Query Filter cho 16 thực thể con/bắc cầu)
+  - `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs` (bổ sung `UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)` trong `UseNpgsql`)
+  - `ManagerStudentCaltholic/Controllers/ClassesController.cs` (`.AsSplitQuery()`)
+  - `ManagerStudentCaltholic/Controllers/LookupController.cs` (`.AsSplitQuery()`)
+  - `ManagerStudentCaltholic/Controllers/PrintReportsController.cs` (`.AsSplitQuery()`)
+  - `ManagerStudentCaltholic/Services/ClassEvaluationService.cs` (`.AsSplitQuery()`)
+  - `ManagerStudentCaltholic/Services/StaffStudentLookupService.cs` (`.AsSplitQuery()` tại 2 truy vấn đa tập hợp)
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md`
+  - `AI-Knowledge/00-OVERVIEW/CODING-RULES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+
+---
+
 ### Phiên cập nhật: `c0e828a` ➔ `2a3263d` (+ Working Tree `2026-11-15`)
 - **Thời gian cập nhật:** `2026-11-15T13:50:56+07:00`
 - **Commit trước đó (`Baseline`):** `c0e828a` (`perf(mobile): optimize mobile layout rendering, remove scroll listener & prevent SW reload loop`)

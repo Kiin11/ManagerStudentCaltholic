@@ -34,6 +34,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddDbContext<ParishDbContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
                 {
+                    // Tránh Cartesian explosion cho các truy vấn Include nhiều collection navigation
+                    npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+
                     // Tự động retry khi kết nối DB bị gián đoạn tạm thời
                     npgsqlOptions.EnableRetryOnFailure(
                         maxRetryCount: 5,

@@ -43,7 +43,7 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             ViewData["ReturnUrl"] = returnUrl;
-            return View();
+            return View(new LoginRequestDto { RememberMe = true, ReturnUrl = returnUrl });
         }
 
         /// <summary>
@@ -141,7 +141,7 @@ namespace ManagerStudentCaltholic.Controllers
             var authProperties = new AuthenticationProperties
             {
                 IsPersistent = model.RememberMe,
-                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddDays(14) : DateTimeOffset.UtcNow.AddHours(8)
+                ExpiresUtc = model.RememberMe ? DateTimeOffset.UtcNow.AddDays(14) : DateTimeOffset.UtcNow.AddDays(8)
             };
 
             await HttpContext.SignInAsync(

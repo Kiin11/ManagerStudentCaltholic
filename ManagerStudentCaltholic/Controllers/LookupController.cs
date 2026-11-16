@@ -130,6 +130,7 @@ namespace ManagerStudentCaltholic.Controllers
                     .ThenInclude(c => c.ClassTeachers)
                 .Include(e => e.GradeRecords)
                     .ThenInclude(g => g.GradeConfiguration)
+                .AsSplitQuery()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id &&
                                           (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));

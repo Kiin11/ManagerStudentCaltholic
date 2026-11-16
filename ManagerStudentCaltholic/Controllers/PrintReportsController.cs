@@ -80,6 +80,7 @@ namespace ManagerStudentCaltholic.Controllers
                     .ThenInclude(e => e.Student)
                 .Include(c => c.Enrollments)
                     .ThenInclude(e => e.GradeRecords)
+                .AsSplitQuery()
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
             if (targetClass == null) return null;

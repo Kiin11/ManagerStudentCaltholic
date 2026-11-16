@@ -249,6 +249,7 @@ namespace ManagerStudentCaltholic.Services
                 .Include(e => e.GradeRecords)
                     .ThenInclude(gr => gr.GradeConfiguration)
                 .Include(e => e.Attendances)
+                .AsSplitQuery()
                 .Where(e => e.ClassRoomId == classRoom.Id
                          && e.Student != null
                          && e.Student.IsActive

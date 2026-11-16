@@ -18,7 +18,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [DataType(DataType.Password)]
         public string Password { get; set; } = string.Empty;
 
-        public bool RememberMe { get; set; } = false;
+        public bool RememberMe { get; set; } = true;
         public string? ReturnUrl { get; set; }
     }
 

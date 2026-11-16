@@ -78,6 +78,9 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Student>().HasQueryFilter(e => !e.IsDeleted);
             modelBuilder.Entity<ClassRoom>().HasQueryFilter(e => !e.IsDeleted);
             modelBuilder.Entity<Enrollment>().HasQueryFilter(e => !e.IsDeleted);
+            modelBuilder.Entity<AbsenceRequest>().HasQueryFilter(r => !r.Enrollment.IsDeleted);
+            modelBuilder.Entity<AttendanceRuleConfig>().HasQueryFilter(r => !r.ClassRoom.IsDeleted);
+            modelBuilder.Entity<ClassLessonDocument>().HasQueryFilter(d => !d.ClassRoom.IsDeleted);
 
             // Đánh index cho trường IsDeleted để truy vấn cực nhanh
             modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);
@@ -108,6 +111,7 @@ namespace ManagerStudentCaltholic.Data
 
             modelBuilder.Entity<Attendance>(entity =>
             {
+                entity.HasQueryFilter(a => !a.Enrollment.IsDeleted);
                 entity.HasIndex(a => new { a.EnrollmentId, a.AttendanceDate }).IsUnique();
                 entity.HasIndex(a => a.AttendanceDate);
                 entity.HasIndex(a => new { a.DayOfWeek, a.AttendedMass });
@@ -126,6 +130,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("AttendanceAuditLogs");
                 entity.HasKey(a => a.Id);
+                entity.HasQueryFilter(a => !a.Attendance.Enrollment.IsDeleted);
 
                 entity.HasOne(a => a.Attendance)
                       .WithMany()
@@ -147,6 +152,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("ClassTeachers");
                 entity.HasKey(ct => ct.Id);
+                entity.HasQueryFilter(ct => !ct.ClassRoom.IsDeleted);
 
                 entity.HasOne(ct => ct.User)
                       .WithMany()
@@ -274,6 +280,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("ClassSchedules");
                 entity.HasKey(s => s.Id);
+                entity.HasQueryFilter(s => !s.ClassRoom.IsDeleted);
 
                 entity.HasOne(s => s.ClassRoom)
                       .WithMany()
@@ -322,6 +329,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("ClassLessonPlans");
                 entity.HasKey(p => p.Id);
+                entity.HasQueryFilter(p => !p.ClassRoom.IsDeleted);
 
                 entity.HasOne(p => p.ClassRoom)
                       .WithMany()
@@ -361,6 +369,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("ClassCurriculumDocuments");
                 entity.HasKey(c => c.Id);
+                entity.HasQueryFilter(c => !c.ClassRoom.IsDeleted);
                 entity.HasOne(c => c.ClassRoom).WithMany().HasForeignKey(c => c.ClassRoomId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(c => c.AcademicYear).WithMany().HasForeignKey(c => c.AcademicYearId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(c => c.CreatedByUser).WithMany().HasForeignKey(c => c.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
@@ -374,6 +383,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("ClassCurriculumVersions");
                 entity.HasKey(v => v.Id);
+                entity.HasQueryFilter(v => !v.CurriculumDocument.ClassRoom.IsDeleted);
                 entity.HasOne(v => v.CurriculumDocument).WithMany(c => c.Versions).HasForeignKey(v => v.ClassCurriculumDocumentId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(v => v.CreatedByUser).WithMany().HasForeignKey(v => v.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(v => new { v.ClassCurriculumDocumentId, v.VersionNumber });
@@ -465,6 +475,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("GradeRecords");
                 entity.HasKey(r => r.Id);
+                entity.HasQueryFilter(r => !r.Enrollment.IsDeleted);
 
                 entity.HasOne(r => r.Enrollment)
                       .WithMany(e => e.GradeRecords)
@@ -598,6 +609,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("SacramentApprovalItems");
                 entity.HasKey(i => i.Id);
+                entity.HasQueryFilter(i => !i.Batch!.IsDeleted && !i.Enrollment!.IsDeleted && !i.Student!.IsDeleted);
 
                 entity.HasIndex(i => new { i.BatchId, i.StudentId }).IsUnique();
                 entity.HasIndex(i => i.EnrollmentId);
@@ -643,6 +655,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("MassCampaignRecords");
                 entity.HasKey(r => r.Id);
+                entity.HasQueryFilter(r => !r.Campaign!.IsDeleted && !r.Enrollment!.IsDeleted && !r.Student!.IsDeleted);
 
                 entity.HasIndex(r => new { r.CampaignId, r.EnrollmentId, r.AttendanceDate }).IsUnique();
                 entity.HasIndex(r => new { r.StudentId, r.AttendanceDate });
@@ -667,6 +680,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("StudentCodeHistories");
                 entity.HasKey(h => h.Id);
+                entity.HasQueryFilter(h => !h.Student!.IsDeleted);
 
                 entity.HasIndex(h => h.OriginalCode);
                 entity.HasIndex(h => h.ArchivedYearCode);
@@ -688,6 +702,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("AttendanceDisputeRequests");
                 entity.HasKey(d => d.Id);
+                entity.HasQueryFilter(d => !d.ClassRoom!.IsDeleted && !d.Enrollment!.IsDeleted && !d.Student!.IsDeleted);
 
                 entity.HasIndex(d => new { d.ClassRoomId, d.Status, d.CreatedAt });
                 entity.HasIndex(d => new { d.EnrollmentId, d.AttendanceDate, d.SessionScope });
@@ -726,6 +741,7 @@ namespace ManagerStudentCaltholic.Data
             {
                 entity.ToTable("StaffQuickLookupLogs");
                 entity.HasKey(l => l.Id);
+                entity.HasQueryFilter(l => !l.Student!.IsDeleted);
 
                 entity.HasIndex(l => new { l.UserId, l.LookedUpAt });
                 entity.HasIndex(l => l.StudentId);
