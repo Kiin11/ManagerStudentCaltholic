@@ -425,3 +425,34 @@ body.mobile-mode .scroll-floating-controls {
     padding: 4px 24px 4px 8px;
     border-radius: 8px;
 }
+
+/* =======================================================
+   8. XỬ LÝ TỰ XUỐNG DÒNG & CĂN CHỈNH TIÊU ĐỀ / BADGE DÀI TRÊN MOBILE
+   ======================================================= */
+body.mobile-mode .card .badge,
+body.mobile-mode .guide-container .badge,
+body.mobile-mode .feature-launch-card .badge,
+body.mobile-mode .workspace-hero .badge {
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    text-align: left;
+    line-height: 1.4;
+    max-width: 100%;
+}
+
+body.mobile-mode .card h4,
+body.mobile-mode .card h5,
+body.mobile-mode .card h6,
+body.mobile-mode .guide-container h4,
+body.mobile-mode .guide-container h5,
+body.mobile-mode .guide-container h6,
+body.mobile-mode .feature-launch-card h6,
+body.mobile-mode .workspace-hero h4 {
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    line-height: 1.38;
+    text-wrap: pretty;
+    max-width: 100%;
+}

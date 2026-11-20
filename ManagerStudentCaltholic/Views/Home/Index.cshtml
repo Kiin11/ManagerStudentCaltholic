@@ -75,7 +75,58 @@
         border-radius: 20px;
         background: #ffffff;
         border: 1px solid #e2e8f0;
+        overflow: hidden;
     }
+
+        .guide-container .badge,
+        .workspace-hero .badge,
+        .feature-launch-card .badge,
+        .guide-step-card .badge {
+            white-space: normal !important;
+            text-align: left;
+            line-height: 1.4;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            max-width: 100%;
+        }
+
+    .guide-header-info {
+        min-width: 0;
+        max-width: 100%;
+        flex: 1 1 300px;
+    }
+
+    .guide-badge {
+        display: inline-block;
+        padding: 0.42em 0.85em !important;
+        border-radius: 12px !important;
+    }
+
+    .guide-title,
+    .guide-container h5,
+    .guide-step-card h6,
+    .feature-launch-card h6,
+    .workspace-hero h4 {
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: break-word;
+        line-height: 1.38;
+        text-wrap: pretty;
+    }
+
+    .guide-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+        .guide-actions .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            max-width: 100%;
+        }
 
     .guide-step-card {
         border-radius: 16px;
@@ -142,9 +193,9 @@
                         </span>
                     }
                 </div>
-                <h4 class="fw-bold mb-1 d-flex align-items-center">
-                    <i class="bi @(activeMaster?.IconClass ?? "bi-grid-fill") text-warning me-2"></i>
-                    <span>@(activeMaster?.Title ?? "Không Gian Giáo Lý Giáo Xứ Phú Trung")</span>
+                <h4 class="fw-bold mb-1 d-flex align-items-start gap-2">
+                    <i class="bi @(activeMaster?.IconClass ?? "bi-grid-fill") text-warning mt-1 flex-shrink-0"></i>
+                    <span class="min-w-0 text-break">@(activeMaster?.Title ?? "Không Gian Giáo Lý Giáo Xứ Phú Trung")</span>
                 </h4>
                 <p class="text-white-50 mb-0 small">
                     @(activeMaster?.Description ?? "Chọn chức năng bên dưới hoặc xem quy trình hướng dẫn chi tiết cho từng nghiệp vụ.")
@@ -211,14 +262,14 @@
                                      style="width: 50px; height: 50px; font-size: 1.4rem;">
                                     <i class="bi @feat.IconClass"></i>
                                 </div>
-                                <div class="flex-grow-1">
+                                <div class="flex-grow-1 min-w-0">
                                     <div class="d-flex justify-content-between align-items-start gap-2">
-                                        <h6 class="fw-bold text-dark mb-1">@feat.DisplayName</h6>
+                                        <h6 class="fw-bold text-dark mb-1 lh-sm text-break">@feat.DisplayName</h6>
                                         <span class="launch-arrow flex-shrink-0">
                                             <i class="bi bi-arrow-right-short fs-5"></i>
                                         </span>
                                     </div>
-                                    <p class="text-muted small mb-0">@feat.Description</p>
+                                    <p class="text-muted small mb-0 text-break">@feat.Description</p>
                                     @if (feat.SacramentClassesOnly)
                                     {
                                         <span class="badge bg-warning-subtle text-dark border mt-2" style="font-size: 0.68rem;">
@@ -239,11 +290,11 @@
     {
         <div class="card border-0 shadow-sm rounded-4 mb-4 border-start border-4 border-primary">
             <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
-                <div>
-                    <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1 mb-1">
+                <div class="min-w-0 flex-grow-1">
+                    <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1 mb-1 text-wrap text-start lh-sm">
                         <i class="bi bi-phone-vibrate-fill me-1"></i>Thiết Bị Đã Ghi Nhớ Hồ Sơ Thiếu Nhi
                     </span>
-                    <h5 class="fw-bold text-dark mb-0">Thông Báo & Dặn Dò Riêng Của Lớp Học</h5>
+                    <h5 class="fw-bold text-dark mb-0 lh-base text-break">Thông Báo & Dặn Dò Riêng Của Lớp Học</h5>
                 </div>
                 <form asp-controller="Home" asp-action="DetachRememberedStudent" method="post" class="m-0"
                       onsubmit="return confirm('Bạn muốn gỡ toàn bộ thiếu nhi đã ghi nhớ trên thiết bị này?');">
