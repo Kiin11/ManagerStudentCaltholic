@@ -1388,22 +1388,62 @@
                         const badge = document.createElement('span');
                         badge.className = 'timeline-badge';
 
-                        const timeDiv = document.createElement('div');
-                        timeDiv.className = 'fw-semibold text-primary small';
-                        timeDiv.textContent = item.timeDisplay;
+                        const headerDiv = document.createElement('div');
+                        headerDiv.className = 'd-flex flex-wrap align-items-center gap-2 mb-1';
+
+                        const timeSpan = document.createElement('span');
+                        timeSpan.className = 'fw-semibold text-primary small';
+                        timeSpan.textContent = item.timeDisplay;
+
+                        const actionBadge = document.createElement('span');
+                        actionBadge.className = 'badge bg-light text-dark border';
+                        actionBadge.style.fontSize = '0.7rem';
+                        actionBadge.textContent = item.actionLabel || item.actionType || 'Thao tác';
+
+                        headerDiv.appendChild(timeSpan);
+                        headerDiv.appendChild(actionBadge);
 
                         const descDiv = document.createElement('div');
-                        descDiv.className = 'text-dark small';
+                        descDiv.className = 'text-dark small fw-medium';
                         descDiv.textContent = item.description;
 
-                        const actorDiv = document.createElement('div');
-                        actorDiv.className = 'text-muted fst-italic';
-                        actorDiv.style.fontSize = '0.75rem';
-                        actorDiv.textContent = `Thực hiện bởi: ${item.performedBy}`;
-
                         li.appendChild(badge);
-                        li.appendChild(timeDiv);
+                        li.appendChild(headerDiv);
                         li.appendChild(descDiv);
+
+                        if (item.oldValues || item.newValues) {
+                            const diffBox = document.createElement('div');
+                            diffBox.className = 'bg-light border rounded-2 px-2 py-1 mt-1 text-secondary';
+                            diffBox.style.fontSize = '0.74rem';
+
+                            if (item.oldValues) {
+                                const oldLine = document.createElement('div');
+                                const oldLabel = document.createElement('strong');
+                                oldLabel.textContent = 'Trước: ';
+                                oldLine.appendChild(oldLabel);
+                                oldLine.appendChild(document.createTextNode(item.oldValues));
+                                diffBox.appendChild(oldLine);
+                            }
+
+                            if (item.newValues) {
+                                const newLine = document.createElement('div');
+                                const newLabel = document.createElement('strong');
+                                newLabel.textContent = 'Sau: ';
+                                newLine.appendChild(newLabel);
+                                newLine.appendChild(document.createTextNode(item.newValues));
+                                diffBox.appendChild(newLine);
+                            }
+
+                            li.appendChild(diffBox);
+                        }
+
+                        const actorDiv = document.createElement('div');
+                        actorDiv.className = 'text-muted fst-italic mt-1';
+                        actorDiv.style.fontSize = '0.74rem';
+                        actorDiv.textContent = item.ipAddress
+                            ? `Thực hiện bởi: ${item.performedBy} (IP: ${item.ipAddress})`
+                            : `Thực hiện bởi: ${item.performedBy}`;
+
                         li.appendChild(actorDiv);
                         list.appendChild(li);
                     });

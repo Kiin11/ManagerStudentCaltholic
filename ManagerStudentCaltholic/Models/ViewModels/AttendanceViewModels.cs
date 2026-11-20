@@ -13,6 +13,9 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public DateTime AttendanceDate { get; set; }
 
         public List<AttendanceItemSubmitDto> Items { get; set; } = new();
+
+        public string? ModifiedBy { get; set; }
+        public string? IpAddress { get; set; }
     }
 
     public class AttendanceItemSubmitDto
@@ -49,6 +52,9 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         [StringLength(500)]
         public string? Note { get; set; }
+
+        public string? ModifiedBy { get; set; }
+        public string? IpAddress { get; set; }
     }
 
     // ViewModel phục vụ hiển thị màn hình Sổ Điểm Danh Lớp
@@ -98,6 +104,9 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         // TASK-P5-04.2: Chế độ quét buổi (Lễ Chúa Nhật, Lễ Thứ Năm, Giờ học Giáo lý, Chiến dịch đi lễ 1 tháng)
         public string? SessionMode { get; set; } // "AUTO", "SUNDAY_MASS", "THURSDAY_MASS", "CATECHISM_CLASS", "CAMPAIGN_MONTH"
         public long? CampaignId { get; set; }
+
+        public string? ModifiedBy { get; set; }
+        public string? IpAddress { get; set; }
     }
 
     // Kết quả trả về cho giao diện sau khi quét
@@ -138,6 +147,9 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public DateTime? AttendanceDate { get; set; }
         public string? ActivityType { get; set; }
         public string? SessionMode { get; set; }
+
+        public string? ModifiedBy { get; set; }
+        public string? IpAddress { get; set; }
     }
 
     public class PrintStudentBadgesViewModel

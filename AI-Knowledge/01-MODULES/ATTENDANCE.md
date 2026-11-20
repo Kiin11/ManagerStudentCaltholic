@@ -165,6 +165,18 @@
 * **Output:** JSON `{ success, message, data }`.
 
 
+### Flow 1D: Audit Trail & Trace History (`AttendanceAuditLogs`)
+
+* **Mục đích:** Ghi vết toàn bộ các thay đổi trạng thái/lý do điểm danh xuống bảng `AttendanceAuditLogs` (kèm log Serilog) và hiển thị chi tiết trên popup `GetAuditHistory` (`#auditTimelineModal`).
+* **Các nguồn ghi Audit Log:**
+  * `QuickUpdateSingleAttendanceAsync` (`QUICK_UPDATE_CLASS`, `QUICK_UPDATE_MASS`, `QUICK_UPDATE_NOTE`, `QUICK_UPDATE`).
+  * `FlushSingleClassPayloadToDbAsync` (`BATCH_SAVE` từ `SaveBatch` và `QR_SCAN` từ `ScanCheckIn`).
+  * `UndoScanCheckInAsync` (`QR_UNDO`).
+  * `AttendanceController.SyncOfflineQueue` (`OFFLINE_QR_SYNC`, `OFFLINE_BATCH_SYNC`).
+  * `AttendanceController.SubmitMakeUp` (`MAKE_UP`), `AttendanceDisputeService.ReviewDisputeByTeacherAsync` (`DISPUTE_APPROVED`), `AbsenceController.Review` (`EXCUSE_APPROVED`), và `AutoMarkAbsentUncheckedStudentsAsync` (`AUTO_ABSENT`).
+* **Thông tin lưu vết:** `AttendanceId`, `ActionType`, `OldValues` (trạng thái Lễ/Học/Ghi chú trước sửa), `NewValues` (sau sửa), `ModifiedBy`, `Reason`, `IpAddress`, `CreatedAt`.
+
+
 ### Flow 2: Offline Synchronization
 
 * **Entry point:** `AttendanceController.GetOfflineStudentsCache` (GET) & `AttendanceController.SyncOfflineQueue` (POST).

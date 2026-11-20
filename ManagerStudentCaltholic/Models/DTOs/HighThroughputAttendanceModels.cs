@@ -32,6 +32,9 @@ namespace ManagerStudentCaltholic.Models.DTOs
         public DateTime AttendanceDate { get; set; }
         public DateTime CachedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime? LastModifiedAtUtc { get; set; }
+        public string? LastModifiedBy { get; set; }
+        public string? LastModifiedIp { get; set; }
+        public string? LastActionType { get; set; }
         public bool IsDirty { get; set; }
         public List<StudentAttendanceRowItem> Students { get; set; } = new();
     }

@@ -373,6 +373,9 @@ namespace ManagerStudentCaltholic.Services
                 AttendanceDate = dateUtc,
                 CachedAtUtc = DateTime.UtcNow,
                 LastModifiedAtUtc = DateTime.UtcNow,
+                LastModifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "GLV",
+                LastModifiedIp = SafeTruncate(request.IpAddress, 45),
+                LastActionType = "BATCH_SAVE",
                 IsDirty = true,
                 Students = sheetVm.Students
             };
@@ -420,7 +423,10 @@ namespace ManagerStudentCaltholic.Services
 
             targetRow.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
 
-            // Write-Through tức thì cho duy nhất bản ghi của thiếu nhi này xuống PostgreSQL
+            var modifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "GLV";
+            var clientIp = SafeTruncate(request.IpAddress, 45);
+
+            // Write-Through tức thì cho duy nhất bản ghi của thiếu nhi này xuống PostgreSQL + Ghi Audit Log
             var strategy = _context.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
             {
@@ -429,6 +435,19 @@ namespace ManagerStudentCaltholic.Services
                 var existing = await _context.Attendances
                     .FirstOrDefaultAsync(a => a.EnrollmentId == request.EnrollmentId && a.AttendanceDate == dateUtc);
 
+                bool isNew = existing == null;
+                bool oldMassAtt = existing?.AttendedMass ?? false;
+                string oldMassSt = existing?.MassStatus ?? AttendanceStatus.AbsentUnpermitted;
+                bool oldClassAtt = existing?.ClassAttended ?? false;
+                string oldClassSt = existing?.ClassStatus ?? AttendanceStatus.AbsentUnpermitted;
+                string? oldNote = existing?.Note;
+
+                bool hasChanges = isNew || HasAttendanceStateChanged(
+                    oldMassAtt, oldMassSt, targetRow.AttendedMass, targetRow.MassStatus,
+                    oldClassAtt, oldClassSt, targetRow.ClassAttended, targetRow.ClassStatus,
+                    oldNote, targetRow.Note);
+
+                Attendance trackedRecord;
                 if (existing != null)
                 {
                     existing.AttendedMass = targetRow.AttendedMass;
@@ -446,10 +465,11 @@ namespace ManagerStudentCaltholic.Services
                     }
 
                     existing.Note = targetRow.Note;
+                    trackedRecord = existing;
                 }
                 else
                 {
-                    _context.Attendances.Add(new Attendance
+                    trackedRecord = new Attendance
                     {
                         EnrollmentId = request.EnrollmentId,
                         AttendanceDate = dateUtc,
@@ -462,10 +482,59 @@ namespace ManagerStudentCaltholic.Services
                         ClassCheckInTime = targetRow.ClassCheckInTime,
                         Note = targetRow.Note,
                         CreatedAt = DateTime.UtcNow
-                    });
+                    };
+                    _context.Attendances.Add(trackedRecord);
                 }
 
                 await _context.SaveChangesAsync();
+
+                if (hasChanges)
+                {
+                    bool classChanged = isNew
+                        ? (targetRow.ClassAttended || targetRow.ClassStatus != AttendanceStatus.AbsentUnpermitted)
+                        : (oldClassAtt != targetRow.ClassAttended || !string.Equals(oldClassSt, targetRow.ClassStatus, StringComparison.OrdinalIgnoreCase));
+                    bool massChanged = isNew
+                        ? (targetRow.AttendedMass || targetRow.MassStatus != AttendanceStatus.AbsentUnpermitted)
+                        : (oldMassAtt != targetRow.AttendedMass || !string.Equals(oldMassSt, targetRow.MassStatus, StringComparison.OrdinalIgnoreCase));
+                    bool noteChanged = !string.Equals(
+                        string.IsNullOrWhiteSpace(oldNote) ? null : oldNote.Trim(),
+                        targetRow.Note,
+                        StringComparison.Ordinal);
+
+                    string actionType = (classChanged, massChanged, noteChanged) switch
+                    {
+                        (true, false, false) => "QUICK_UPDATE_CLASS",
+                        (false, true, false) => "QUICK_UPDATE_MASS",
+                        (false, false, true) => "QUICK_UPDATE_NOTE",
+                        _ => "QUICK_UPDATE"
+                    };
+
+                    var reasonSummary = BuildAuditReasonSummary(
+                        "Cập nhật trực tiếp",
+                        isNew,
+                        oldMassAtt, oldMassSt, targetRow.AttendedMass, targetRow.MassStatus,
+                        oldClassAtt, oldClassSt, targetRow.ClassAttended, targetRow.ClassStatus,
+                        oldNote, targetRow.Note);
+
+                    _context.AttendanceAuditLogs.Add(new AttendanceAuditLog
+                    {
+                        AttendanceId = trackedRecord.Id,
+                        ActionType = actionType,
+                        OldValues = FormatStateSnapshot(oldMassAtt, oldMassSt, oldClassAtt, oldClassSt, oldNote, isNewRecord: isNew),
+                        NewValues = FormatStateSnapshot(targetRow.AttendedMass, targetRow.MassStatus, targetRow.ClassAttended, targetRow.ClassStatus, targetRow.Note),
+                        ModifiedBy = modifiedBy,
+                        Reason = reasonSummary,
+                        IpAddress = clientIp,
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation(
+                        "AUDIT {ActionType}: StudentCode={StudentCode}, Date={Date:yyyy-MM-dd}, By={User}, IP={IP}, Reason={Reason}",
+                        actionType, targetRow.StudentCode, dateUtc, modifiedBy, clientIp ?? "unknown", reasonSummary);
+                }
+
                 await transaction.CommitAsync();
             });
 
@@ -478,6 +547,9 @@ namespace ManagerStudentCaltholic.Services
                 AttendanceDate = dateUtc,
                 CachedAtUtc = existingSheetPayload?.CachedAtUtc ?? DateTime.UtcNow,
                 LastModifiedAtUtc = DateTime.UtcNow,
+                LastModifiedBy = modifiedBy,
+                LastModifiedIp = clientIp,
+                LastActionType = "QUICK_UPDATE",
                 IsDirty = existingSheetPayload?.IsDirty ?? false,
                 Students = sheetVm.Students
             };
@@ -751,6 +823,9 @@ namespace ManagerStudentCaltholic.Services
                     AttendanceDate = todayUtc,
                     CachedAtUtc = DateTime.UtcNow,
                     LastModifiedAtUtc = DateTime.UtcNow,
+                    LastModifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "Camera QR HUD",
+                    LastModifiedIp = SafeTruncate(request.IpAddress, 45),
+                    LastActionType = "QR_SCAN",
                     IsDirty = true,
                     Students = sheetVm.Students
                 };
@@ -858,11 +933,17 @@ namespace ManagerStudentCaltholic.Services
                 await MarkClassDirtyAsync(dto.ClassId, todayUtc);
             }
 
-            // Đồng bộ trực tiếp xuống cơ sở dữ liệu PostgreSQL
+            // Đồng bộ trực tiếp xuống cơ sở dữ liệu PostgreSQL + Ghi Audit Log
             var att = await _context.Attendances
                 .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == todayUtc);
             if (att != null)
             {
+                bool oldMassAtt = att.AttendedMass;
+                string oldMassSt = att.MassStatus;
+                bool oldClassAtt = att.ClassAttended;
+                string oldClassSt = att.ClassStatus;
+                string? oldNote = att.Note;
+
                 if (undoMass)
                 {
                     att.AttendedMass = false;
@@ -878,6 +959,27 @@ namespace ManagerStudentCaltholic.Services
                 }
 
                 await _context.SaveChangesAsync();
+
+                var undoOperator = SafeTruncate(dto.ModifiedBy, 100) ?? "Camera QR HUD";
+                var undoIp = SafeTruncate(dto.IpAddress, 45);
+                var undoReason = SafeTruncate($"Hoàn tác lượt quét QR ({dto.ActivityType ?? "Điểm danh"}) trong 5 giây", 255);
+
+                _context.AttendanceAuditLogs.Add(new AttendanceAuditLog
+                {
+                    AttendanceId = att.Id,
+                    ActionType = "QR_UNDO",
+                    OldValues = FormatStateSnapshot(oldMassAtt, oldMassSt, oldClassAtt, oldClassSt, oldNote),
+                    NewValues = FormatStateSnapshot(att.AttendedMass, att.MassStatus, att.ClassAttended, att.ClassStatus, att.Note),
+                    ModifiedBy = undoOperator,
+                    Reason = undoReason,
+                    IpAddress = undoIp,
+                    CreatedAt = DateTime.UtcNow
+                });
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "AUDIT QR_UNDO: EnrollmentId={EnrollmentId}, Date={Date:yyyy-MM-dd}, By={User}, IP={IP}",
+                    dto.EnrollmentId, todayUtc, undoOperator, undoIp ?? "unknown");
             }
 
             // Hoàn tác bản ghi chiến dịch nếu thuộc chiến dịch
@@ -1049,6 +1151,23 @@ namespace ManagerStudentCaltholic.Services
             await _context.Attendances.AddRangeAsync(newAbsentRecords);
             await _context.SaveChangesAsync();
 
+            var autoAuditLogs = newAbsentRecords.Select(rec => new AttendanceAuditLog
+            {
+                AttendanceId = rec.Id,
+                ActionType = "AUTO_ABSENT",
+                OldValues = "Chưa điểm danh",
+                NewValues = FormatStateSnapshot(rec.AttendedMass, rec.MassStatus, rec.ClassAttended, rec.ClassStatus, rec.Note),
+                ModifiedBy = "SYSTEM (Hangfire)",
+                Reason = SafeTruncate(rec.Note, 255),
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
+
+            if (autoAuditLogs.Any())
+            {
+                await _context.AttendanceAuditLogs.AddRangeAsync(autoAuditLogs);
+                await _context.SaveChangesAsync();
+            }
+
             _logger.LogInformation(
                 "[Hangfire AutoAbsent] Đã tự động ghi nhận vắng xuống DB cho {Count} thiếu nhi chưa điểm danh ngày {Date:dd/MM/yyyy}.",
                 newAbsentRecords.Count, dateUtc);
@@ -1057,6 +1176,131 @@ namespace ManagerStudentCaltholic.Services
         }
 
         #region Helpers Nội bộ
+        internal static string? SafeTruncate(string? value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var trimmed = value.Trim();
+            return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+        }
+
+        internal static string FormatStatusVietnamese(string? status) =>
+            (status ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                "LINED_UP" => "Xếp hàng",
+                "PRESENT" => "Có mặt",
+                "LATE" => "Đi trễ",
+                "ABSENT_PERMITTED" or "EXCUSED" => "Vắng có phép",
+                "ABSENT_UNPERMITTED" or "ABSENT" => "Vắng không phép",
+                "NONE" or "" => "Chưa ghi nhận",
+                var other => other
+            };
+
+        internal static string FormatStateSnapshot(
+            bool attendedMass,
+            string? massStatus,
+            bool classAttended,
+            string? classStatus,
+            string? note,
+            bool isNewRecord = false)
+        {
+            if (isNewRecord)
+            {
+                return "Chưa có bản ghi điểm danh trước đó";
+            }
+
+            var massText = $"{FormatStatusVietnamese(massStatus)} ({(attendedMass ? "Có" : "Vắng")})";
+            var classText = $"{FormatStatusVietnamese(classStatus)} ({(classAttended ? "Có" : "Vắng")})";
+            var noteText = string.IsNullOrWhiteSpace(note) ? "(trống)" : note.Trim();
+            return $"Lễ: {massText} | Học: {classText} | Ghi chú: {noteText}";
+        }
+
+        internal static bool HasAttendanceStateChanged(
+            bool oldMassAtt,
+            string? oldMassSt,
+            bool newMassAtt,
+            string? newMassSt,
+            bool oldClassAtt,
+            string? oldClassSt,
+            bool newClassAtt,
+            string? newClassSt,
+            string? oldNote,
+            string? newNote)
+        {
+            var oldMassNorm = (oldMassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var newMassNorm = (newMassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var oldClassNorm = (oldClassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var newClassNorm = (newClassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var oldNoteNorm = string.IsNullOrWhiteSpace(oldNote) ? null : oldNote.Trim();
+            var newNoteNorm = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
+
+            return oldMassAtt != newMassAtt ||
+                   oldMassNorm != newMassNorm ||
+                   oldClassAtt != newClassAtt ||
+                   oldClassNorm != newClassNorm ||
+                   !string.Equals(oldNoteNorm, newNoteNorm, StringComparison.Ordinal);
+        }
+
+        internal static string BuildAuditReasonSummary(
+            string prefix,
+            bool isNew,
+            bool oldMassAtt,
+            string? oldMassSt,
+            bool newMassAtt,
+            string? newMassSt,
+            bool oldClassAtt,
+            string? oldClassSt,
+            bool newClassAtt,
+            string? newClassSt,
+            string? oldNote,
+            string? newNote)
+        {
+            var changes = new List<string>();
+            var oldMassNorm = (oldMassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var newMassNorm = (newMassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var oldClassNorm = (oldClassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var newClassNorm = (newClassSt ?? AttendanceStatus.AbsentUnpermitted).Trim().ToUpperInvariant();
+            var oldNoteNorm = string.IsNullOrWhiteSpace(oldNote) ? null : oldNote.Trim();
+            var newNoteNorm = string.IsNullOrWhiteSpace(newNote) ? null : newNote.Trim();
+
+            if (isNew)
+            {
+                if (newClassAtt || newClassNorm != AttendanceStatus.AbsentUnpermitted)
+                {
+                    changes.Add($"Đi học ({FormatStatusVietnamese(newClassNorm)})");
+                }
+                if (newMassAtt || newMassNorm != AttendanceStatus.AbsentUnpermitted)
+                {
+                    changes.Add($"Đi lễ ({FormatStatusVietnamese(newMassNorm)})");
+                }
+                if (newNoteNorm != null)
+                {
+                    changes.Add($"Ghi chú: \"{newNoteNorm}\"");
+                }
+                if (changes.Count == 0)
+                {
+                    changes.Add("Khởi tạo trạng thái vắng");
+                }
+            }
+            else
+            {
+                if (oldClassAtt != newClassAtt || oldClassNorm != newClassNorm)
+                {
+                    changes.Add($"Đi học ({FormatStatusVietnamese(oldClassNorm)} → {FormatStatusVietnamese(newClassNorm)})");
+                }
+                if (oldMassAtt != newMassAtt || oldMassNorm != newMassNorm)
+                {
+                    changes.Add($"Đi lễ ({FormatStatusVietnamese(oldMassNorm)} → {FormatStatusVietnamese(newMassNorm)})");
+                }
+                if (!string.Equals(oldNoteNorm, newNoteNorm, StringComparison.Ordinal))
+                {
+                    changes.Add($"Ghi chú: \"{oldNoteNorm ?? "(trống)"}\" → \"{newNoteNorm ?? "(trống)"}\"");
+                }
+            }
+
+            var summary = changes.Count > 0 ? $"{prefix}: {string.Join("; ", changes)}" : prefix;
+            return SafeTruncate(summary, 255) ?? prefix;
+        }
+
         private static string NormalizeAttendanceStatus(bool isAttended, string? status, bool allowLinedUp)
         {
             var normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
@@ -1105,11 +1349,23 @@ namespace ManagerStudentCaltholic.Services
                     .ToDictionaryAsync(a => a.EnrollmentId);
 
                 var newRecords = new List<Attendance>();
+                var pendingAudits = new List<(Attendance Record, bool IsNew, bool OldMassAtt, string OldMassSt, bool OldClassAtt, string OldClassSt, string? OldNote)>();
 
                 foreach (var item in payload.Students)
                 {
                     if (existingRecords.TryGetValue(item.EnrollmentId, out var existing))
                     {
+                        bool oldMassAtt = existing.AttendedMass;
+                        string oldMassSt = existing.MassStatus;
+                        bool oldClassAtt = existing.ClassAttended;
+                        string oldClassSt = existing.ClassStatus;
+                        string? oldNote = existing.Note;
+
+                        bool changed = HasAttendanceStateChanged(
+                            oldMassAtt, oldMassSt, item.AttendedMass, item.MassStatus,
+                            oldClassAtt, oldClassSt, item.ClassAttended, item.ClassStatus,
+                            oldNote, item.Note);
+
                         existing.AttendedMass = item.AttendedMass;
                         existing.MassStatus = item.MassStatus;
                         if (item.MassCheckInTime.HasValue)
@@ -1133,10 +1389,15 @@ namespace ManagerStudentCaltholic.Services
                         }
 
                         existing.Note = item.Note;
+
+                        if (changed)
+                        {
+                            pendingAudits.Add((existing, false, oldMassAtt, oldMassSt, oldClassAtt, oldClassSt, oldNote));
+                        }
                     }
                     else
                     {
-                        newRecords.Add(new Attendance
+                        var newRecord = new Attendance
                         {
                             EnrollmentId = item.EnrollmentId,
                             AttendanceDate = targetDateUtc,
@@ -1149,7 +1410,18 @@ namespace ManagerStudentCaltholic.Services
                             ClassCheckInTime = item.ClassCheckInTime,
                             Note = item.Note,
                             CreatedAt = DateTime.UtcNow
-                        });
+                        };
+                        newRecords.Add(newRecord);
+
+                        bool meaningfulNew = item.AttendedMass ||
+                                             item.MassStatus != AttendanceStatus.AbsentUnpermitted ||
+                                             item.ClassAttended ||
+                                             item.ClassStatus != AttendanceStatus.AbsentUnpermitted ||
+                                             !string.IsNullOrWhiteSpace(item.Note);
+                        if (meaningfulNew)
+                        {
+                            pendingAudits.Add((newRecord, true, false, AttendanceStatus.AbsentUnpermitted, false, AttendanceStatus.AbsentUnpermitted, null));
+                        }
                     }
                     affected++;
                 }
@@ -1160,6 +1432,34 @@ namespace ManagerStudentCaltholic.Services
                 }
 
                 await _context.SaveChangesAsync();
+
+                if (pendingAudits.Any())
+                {
+                    var actionType = SafeTruncate(payload.LastActionType, 50) ?? "BATCH_SAVE";
+                    var prefix = actionType == "QR_SCAN" ? "Quét mã QR" : "Lưu sổ điểm danh";
+                    var modifiedBy = SafeTruncate(payload.LastModifiedBy, 100) ?? "SYSTEM";
+                    var clientIp = SafeTruncate(payload.LastModifiedIp, 45);
+
+                    var auditLogs = pendingAudits.Select(p => new AttendanceAuditLog
+                    {
+                        AttendanceId = p.Record.Id,
+                        ActionType = actionType,
+                        OldValues = FormatStateSnapshot(p.OldMassAtt, p.OldMassSt, p.OldClassAtt, p.OldClassSt, p.OldNote, isNewRecord: p.IsNew),
+                        NewValues = FormatStateSnapshot(p.Record.AttendedMass, p.Record.MassStatus, p.Record.ClassAttended, p.Record.ClassStatus, p.Record.Note),
+                        ModifiedBy = modifiedBy,
+                        Reason = BuildAuditReasonSummary(
+                            prefix, p.IsNew,
+                            p.OldMassAtt, p.OldMassSt, p.Record.AttendedMass, p.Record.MassStatus,
+                            p.OldClassAtt, p.OldClassSt, p.Record.ClassAttended, p.Record.ClassStatus,
+                            p.OldNote, p.Record.Note),
+                        IpAddress = clientIp,
+                        CreatedAt = DateTime.UtcNow
+                    }).ToList();
+
+                    await _context.AttendanceAuditLogs.AddRangeAsync(auditLogs);
+                    await _context.SaveChangesAsync();
+                }
+
                 await transaction.CommitAsync();
             });
 

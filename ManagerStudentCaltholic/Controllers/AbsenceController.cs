@@ -2,6 +2,7 @@
 using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -151,17 +152,30 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Bạn không có thẩm quyền duyệt đơn xin phép của lớp này!" });
             }
 
+            var fullName = User.FindFirst("FullName")?.Value;
+            var username = User.Identity?.Name;
+            var operatorName = (!string.IsNullOrWhiteSpace(fullName) && !string.IsNullOrWhiteSpace(username))
+                ? $"{fullName} ({username})"
+                : (!string.IsNullOrWhiteSpace(fullName) ? fullName : (!string.IsNullOrWhiteSpace(username) ? username : "GLV"));
+
             req.Status = dto.IsApproved ? "APPROVED" : "REJECTED";
             req.ReviewNote = dto.Note;
-            req.ReviewedBy = User.Identity?.Name ?? "GLV";
+            req.ReviewedBy = operatorName;
             req.ReviewedAt = DateTime.UtcNow;
 
-            // Nếu DUYỆT: Tự động cập nhật Attendance sang vắng có phép
+            // Nếu DUYỆT: Tự động cập nhật Attendance sang vắng có phép + Ghi Audit Log
             if (dto.IsApproved)
             {
                 var attDate = req.AbsenceDate.Date;
                 var att = await _context.Attendances
                     .FirstOrDefaultAsync(a => a.EnrollmentId == req.EnrollmentId && a.AttendanceDate == attDate);
+
+                bool isNew = att == null;
+                bool oldMassAtt = att?.AttendedMass ?? false;
+                string oldMassSt = att?.MassStatus ?? AttendanceStatus.AbsentUnpermitted;
+                bool oldClassAtt = att?.ClassAttended ?? false;
+                string oldClassSt = att?.ClassStatus ?? AttendanceStatus.AbsentUnpermitted;
+                string? oldNote = att?.Note;
 
                 if (att == null)
                 {
@@ -184,6 +198,26 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     att.ClassAttended = false;
                     att.ClassStatus = "ABSENT_PERMITTED";
+                }
+
+                await _context.SaveChangesAsync();
+
+                if (isNew || RedisAttendanceService.HasAttendanceStateChanged(
+                        oldMassAtt, oldMassSt, att.AttendedMass, att.MassStatus,
+                        oldClassAtt, oldClassSt, att.ClassAttended, att.ClassStatus,
+                        oldNote, att.Note))
+                {
+                    _context.AttendanceAuditLogs.Add(new AttendanceAuditLog
+                    {
+                        AttendanceId = att.Id,
+                        ActionType = "EXCUSE_APPROVED",
+                        OldValues = RedisAttendanceService.FormatStateSnapshot(oldMassAtt, oldMassSt, oldClassAtt, oldClassSt, oldNote, isNewRecord: isNew),
+                        NewValues = RedisAttendanceService.FormatStateSnapshot(att.AttendedMass, att.MassStatus, att.ClassAttended, att.ClassStatus, att.Note),
+                        ModifiedBy = RedisAttendanceService.SafeTruncate(operatorName, 100) ?? "GLV",
+                        Reason = RedisAttendanceService.SafeTruncate($"Duyệt đơn xin phép ({req.SessionType}): {req.Reason}", 255),
+                        IpAddress = RedisAttendanceService.SafeTruncate(HttpContext.Connection.RemoteIpAddress?.ToString(), 45),
+                        CreatedAt = DateTime.UtcNow
+                    });
                 }
             }
 

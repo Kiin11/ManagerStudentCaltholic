@@ -28,6 +28,24 @@ namespace ManagerStudentCaltholic.Controllers
             User.IsInRole(UserRole.SpiritualDirector) ||
             User.IsInRole(UserRole.ExecutiveBoard);
 
+        private string CurrentOperatorName
+        {
+            get
+            {
+                var fullName = User.FindFirst("FullName")?.Value;
+                var username = User.Identity?.Name;
+                if (!string.IsNullOrWhiteSpace(fullName) && !string.IsNullOrWhiteSpace(username))
+                {
+                    return $"{fullName} ({username})";
+                }
+                return !string.IsNullOrWhiteSpace(fullName)
+                    ? fullName
+                    : (!string.IsNullOrWhiteSpace(username) ? username : "GLV");
+            }
+        }
+
+        private string? CurrentClientIp => HttpContext.Connection.RemoteIpAddress?.ToString();
+
         public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger
             , IRedisAttendanceService redisAttendance, IAttendanceDisputeService disputeService)
         {
@@ -143,6 +161,9 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
+                request.ModifiedBy = CurrentOperatorName;
+                request.IpAddress = CurrentClientIp;
+
                 // 1. Lưu cập nhật lên bộ nhớ đệm Redis
                 var (success, message) = await _redisAttendance.SaveBatchToRedisAsync(request);
                 if (success)
@@ -179,6 +200,9 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
+                request.ModifiedBy = CurrentOperatorName;
+                request.IpAddress = CurrentClientIp;
+
                 var (success, message, updatedRow) = await _redisAttendance.QuickUpdateSingleAttendanceAsync(request);
                 return Json(new
                 {
@@ -250,6 +274,9 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
+                request.ModifiedBy = CurrentOperatorName;
+                request.IpAddress = CurrentClientIp;
+
                 var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request);
                 if (response.Success && !response.IsDuplicate)
                 {
@@ -286,6 +313,9 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
+                request.ModifiedBy = CurrentOperatorName;
+                request.IpAddress = CurrentClientIp;
+
                 var (success, message) = await _redisAttendance.UndoScanCheckInAsync(request);
                 return Json(new { success, message });
             }
@@ -853,10 +883,14 @@ namespace ManagerStudentCaltholic.Controllers
                             StudentId = student.Id,
                             StudentName = studentFullName,
                             ActionType = log.ActionType,
+                            ActionLabel = GetAuditActionLabel(log.ActionType),
                             Description = !string.IsNullOrEmpty(log.Reason)
                                 ? log.Reason
-                                : $"Thao tác {log.ActionType}: {log.NewValues}",
+                                : $"Thao tác {GetAuditActionLabel(log.ActionType)}",
+                            OldValues = log.OldValues,
+                            NewValues = log.NewValues,
                             PerformedBy = string.IsNullOrEmpty(log.ModifiedBy) ? "Hệ thống" : log.ModifiedBy,
+                            IpAddress = log.IpAddress,
                             Timestamp = log.CreatedAt
                         });
                     }
@@ -869,9 +903,14 @@ namespace ManagerStudentCaltholic.Controllers
                         StudentId = student.Id,
                         StudentName = studentFullName,
                         ActionType = attendance.IsMakeUp ? "MakeupApproval" : "CheckIn",
+                        ActionLabel = GetAuditActionLabel(attendance.IsMakeUp ? "MakeupApproval" : "CheckIn"),
                         Description = attendance.IsMakeUp
                             ? "Duyệt điểm danh bù / Bổ sung chuyên cần"
                             : (attendance.AttendedMass ? "Quét mã QR điểm danh đầu giờ Lễ" : "Khởi tạo trạng thái điểm danh"),
+                        NewValues = RedisAttendanceService.FormatStateSnapshot(
+                            attendance.AttendedMass, attendance.MassStatus,
+                            attendance.ClassAttended, attendance.ClassStatus,
+                            attendance.Note),
                         PerformedBy = "Hệ thống",
                         Timestamp = attendance.CreatedAt
                     });
@@ -884,6 +923,7 @@ namespace ManagerStudentCaltholic.Controllers
                     StudentId = student.Id,
                     StudentName = studentFullName,
                     ActionType = "NoRecord",
+                    ActionLabel = GetAuditActionLabel("NoRecord"),
                     Description = "Chưa có lượt ghi nhận điểm danh nào trong ngày này.",
                     PerformedBy = "Hệ thống",
                     Timestamp = DateTime.UtcNow
@@ -892,6 +932,27 @@ namespace ManagerStudentCaltholic.Controllers
 
             return Json(new { success = true, data = timeline.OrderByDescending(t => t.Timestamp).ToList() });
         }
+
+        private static string GetAuditActionLabel(string? actionType) =>
+            (actionType ?? string.Empty).Trim().ToUpperInvariant() switch
+            {
+                "QUICK_UPDATE_CLASS" => "Cập nhật Đi học",
+                "QUICK_UPDATE_MASS" => "Cập nhật Đi lễ",
+                "QUICK_UPDATE_NOTE" => "Cập nhật Lý do/Ghi chú",
+                "QUICK_UPDATE" => "Cập nhật trực tiếp",
+                "BATCH_SAVE" => "Lưu Sổ Điểm Danh",
+                "QR_SCAN" => "Quét mã QR",
+                "QR_UNDO" => "Hoàn tác Quét QR",
+                "MAKE_UP" or "MAKEUPAPPROVAL" => "Điểm danh bù",
+                "DISPUTE_APPROVED" => "Duyệt báo sai sót PH",
+                "EXCUSE_APPROVED" => "Duyệt đơn xin phép",
+                "OFFLINE_QR_SYNC" => "Đồng bộ QR Offline",
+                "OFFLINE_BATCH_SYNC" => "Đồng bộ Sổ lớp Offline",
+                "AUTO_ABSENT" => "Tự động chốt vắng",
+                "CHECKIN" => "Ghi nhận điểm danh",
+                "NORECORD" => "Chưa có dữ liệu",
+                var other => string.IsNullOrWhiteSpace(other) ? "Thao tác điểm danh" : other
+            };
 
         [HttpGet]
         public async Task<IActionResult> MonthlySummary(int? classId, int? month, int? year)
@@ -1632,6 +1693,21 @@ namespace ManagerStudentCaltholic.Controllers
                     var attendanceMap = existingAttendances
                         .ToDictionary(a => (a.EnrollmentId, a.AttendanceDate.Date), a => a);
 
+                    var pendingOfflineAudits = new List<(
+                        Attendance Record,
+                        string RecordType,
+                        bool IsNew,
+                        bool OldMassAtt,
+                        string OldMassSt,
+                        bool NewMassAtt,
+                        string NewMassSt,
+                        bool OldClassAtt,
+                        string OldClassSt,
+                        bool NewClassAtt,
+                        string NewClassSt,
+                        string? OldNote,
+                        string? NewNote)>();
+
                     foreach (var item in orderedRecords)
                     {
                         Enrollment? targetEnrollment = null;
@@ -1667,8 +1743,16 @@ namespace ManagerStudentCaltholic.Controllers
                         TimeSpan? incomingMassTime = TimeSpan.TryParse(item.MassCheckInTimeStr, out var mTs) ? mTs : null;
                         TimeSpan? incomingClassTime = TimeSpan.TryParse(item.ClassCheckInTimeStr, out var cTs) ? cTs : null;
 
+                        bool isNewRecord = false;
+                        bool oldMassAtt = false;
+                        string oldMassSt = AttendanceStatus.AbsentUnpermitted;
+                        bool oldClassAtt = false;
+                        string oldClassSt = AttendanceStatus.AbsentUnpermitted;
+                        string? oldNote = null;
+
                         if (!attendanceMap.TryGetValue((targetEnrollment.Id, attDate), out var existing))
                         {
+                            isNewRecord = true;
                             existing = new Attendance
                             {
                                 EnrollmentId = targetEnrollment.Id,
@@ -1688,6 +1772,12 @@ namespace ManagerStudentCaltholic.Controllers
                         }
                         else
                         {
+                            oldMassAtt = existing.AttendedMass;
+                            oldMassSt = existing.MassStatus;
+                            oldClassAtt = existing.ClassAttended;
+                            oldClassSt = existing.ClassStatus;
+                            oldNote = existing.Note;
+
                             // THUẬT TOÁN XỬ LÝ XUNG ĐỘT (CONFLICT RESOLUTION - TASK-P3-06.5):
                             // Nếu nhiều thiết bị cùng đồng bộ cho 1 học sinh:
                             // 1. Ưu tiên giữ trạng thái Có mặt (Attended = true) và thời gian CheckInTime sớm nhất
@@ -1749,11 +1839,71 @@ namespace ManagerStudentCaltholic.Controllers
                             }
                         }
 
+                        bool changed = isNewRecord
+                            ? (existing.AttendedMass ||
+                               existing.MassStatus != AttendanceStatus.AbsentUnpermitted ||
+                               existing.ClassAttended ||
+                               existing.ClassStatus != AttendanceStatus.AbsentUnpermitted ||
+                               !string.IsNullOrWhiteSpace(existing.Note))
+                            : RedisAttendanceService.HasAttendanceStateChanged(
+                                oldMassAtt, oldMassSt, existing.AttendedMass, existing.MassStatus,
+                                oldClassAtt, oldClassSt, existing.ClassAttended, existing.ClassStatus,
+                                oldNote, existing.Note);
+
+                        if (changed)
+                        {
+                            pendingOfflineAudits.Add((
+                                existing,
+                                item.RecordType,
+                                isNewRecord,
+                                oldMassAtt,
+                                oldMassSt,
+                                existing.AttendedMass,
+                                existing.MassStatus,
+                                oldClassAtt,
+                                oldClassSt,
+                                existing.ClassAttended,
+                                existing.ClassStatus,
+                                oldNote,
+                                existing.Note));
+                        }
+
                         syncedClientIds.Add(item.ClientRecordId);
                         upsertedCount++;
                     }
 
                     await _context.SaveChangesAsync();
+
+                    if (pendingOfflineAudits.Any())
+                    {
+                        var operatorName = RedisAttendanceService.SafeTruncate(CurrentOperatorName, 100) ?? "GLV";
+                        var clientIp = RedisAttendanceService.SafeTruncate(CurrentClientIp, 45);
+
+                        var offlineAuditLogs = pendingOfflineAudits.Select(p =>
+                        {
+                            var actionType = p.RecordType == "QR_SCAN" ? "OFFLINE_QR_SYNC" : "OFFLINE_BATCH_SYNC";
+                            var prefix = p.RecordType == "QR_SCAN" ? "Đồng bộ QR Offline" : "Đồng bộ Sổ lớp Offline";
+                            return new AttendanceAuditLog
+                            {
+                                AttendanceId = p.Record.Id,
+                                ActionType = actionType,
+                                OldValues = RedisAttendanceService.FormatStateSnapshot(p.OldMassAtt, p.OldMassSt, p.OldClassAtt, p.OldClassSt, p.OldNote, isNewRecord: p.IsNew),
+                                NewValues = RedisAttendanceService.FormatStateSnapshot(p.NewMassAtt, p.NewMassSt, p.NewClassAtt, p.NewClassSt, p.NewNote),
+                                ModifiedBy = operatorName,
+                                Reason = RedisAttendanceService.BuildAuditReasonSummary(
+                                    prefix, p.IsNew,
+                                    p.OldMassAtt, p.OldMassSt, p.NewMassAtt, p.NewMassSt,
+                                    p.OldClassAtt, p.OldClassSt, p.NewClassAtt, p.NewClassSt,
+                                    p.OldNote, p.NewNote),
+                                IpAddress = clientIp,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                        }).ToList();
+
+                        await _context.AttendanceAuditLogs.AddRangeAsync(offlineAuditLogs);
+                        await _context.SaveChangesAsync();
+                    }
+
                     await transaction.CommitAsync();
                 });
 
