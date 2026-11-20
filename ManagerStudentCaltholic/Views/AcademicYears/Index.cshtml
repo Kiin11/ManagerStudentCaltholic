@@ -1,6 +1,8 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.AcademicYear>
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Quản lý Niên Khóa";
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 
 <div class="container-fluid py-4">
@@ -40,85 +42,163 @@
         <div class="card-header bg-white py-3 border-0">
             <h5 class="card-title fw-bold text-dark mb-0">Danh Sách Các Năm Học</h5>
         </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th class="ps-4 py-3" style="width: 25%;">Tên Niên Khóa</th>
-                        <th style="width: 20%;">Ngày Bắt Đầu</th>
-                        <th style="width: 20%;">Ngày Kết Thúc</th>
-                        <th class="text-center" style="width: 20%;">Trạng Thái Vận Hành</th>
-                        <th class="text-end pe-4" style="width: 15%;">Hành Động</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model != null && Model.Any())
+        @if (isMobile)
+        {
+            <div class="mobile-card-list">
+                @if (Model != null && Model.Any())
+                {
+                    @foreach (var year in Model)
                     {
-                        @foreach (var year in Model)
-                        {
-                            <tr class="@(year.IsCurrent ? "table-success-subtle bg-opacity-25" : "")">
-                                <td class="ps-4 fw-bold">
-                                    @year.Name
+                        <div class="mobile-data-card @(year.IsCurrent ? "border-success" : "")">
+                            <div class="mobile-data-card-header">
+                                <div class="d-flex flex-wrap align-items-center gap-2">
+                                    <span class="mobile-data-card-title fs-5 mb-0">@year.Name</span>
                                     @if (year.IsCurrent)
                                     {
-                                        <span class="badge bg-success ms-2 small">Hiện tại</span>
+                                        <span class="badge bg-success">Hiện tại</span>
                                     }
-                                </td>
-                                <td>
-                                    <i class="bi bi-calendar-event text-secondary me-1"></i>
-                                    @year.StartDate.ToString("dd/MM/yyyy")
-                                </td>
-                                <td>
-                                    <i class="bi bi-calendar-check text-secondary me-1"></i>
-                                    @year.EndDate.ToString("dd/MM/yyyy")
-                                </td>
-                                <td class="text-center">
-                                    @if (year.IsCurrent)
-                                    {
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
-                                            <i class="bi bi-record-circle-fill me-1"></i> Đang Kích Hoạt
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-light text-secondary border px-3 py-2 rounded-pill">
-                                            Chưa Kích Hoạt
-                                        </span>
-                                    }
-                                </td>
-                                <td class="text-end pe-4">
-                                    @if (!year.IsCurrent)
-                                    {
-                                        <form asp-controller="AcademicYears" asp-action="SetCurrent" asp-route-id="@year.Id" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-success btn-sm rounded-pill px-3"
-                                                    onclick="return confirm('Bạn có chắc chắn muốn đặt niên khóa @year.Name làm niên khóa chính thức đang vận hành?');">
-                                                <i class="bi bi-arrow-repeat me-1"></i> Kích Hoạt
-                                            </button>
-                                        </form>
-                                    }
-                                    else
-                                    {
-                                        <button class="btn btn-sm btn-success rounded-pill px-3" disabled>
-                                            <i class="bi bi-check-lg me-1"></i> Mặc Định
+                                </div>
+                                @if (year.IsCurrent)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill flex-shrink-0">
+                                        <i class="bi bi-record-circle-fill me-1"></i> Đang Kích Hoạt
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-secondary border px-2 py-1 rounded-pill flex-shrink-0">
+                                        Chưa Kích Hoạt
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="mobile-data-grid-2 mb-3">
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">Ngày Bắt Đầu</span>
+                                    <div class="mobile-metric-value">
+                                        <i class="bi bi-calendar-event text-secondary me-1"></i>@year.StartDate.ToString("dd/MM/yyyy")
+                                    </div>
+                                </div>
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">Ngày Kết Thúc</span>
+                                    <div class="mobile-metric-value">
+                                        <i class="bi bi-calendar-check text-secondary me-1"></i>@year.EndDate.ToString("dd/MM/yyyy")
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                @if (!year.IsCurrent)
+                                {
+                                    <form asp-controller="AcademicYears" asp-action="SetCurrent" asp-route-id="@year.Id" method="post" class="d-grid">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-success btn-sm rounded-pill py-2 fw-semibold"
+                                                onclick="return confirm('Bạn có chắc chắn muốn đặt niên khóa @year.Name làm niên khóa chính thức đang vận hành?');">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Kích Hoạt
                                         </button>
-                                    }
+                                    </form>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-sm btn-success rounded-pill py-2 fw-semibold" disabled>
+                                        <i class="bi bi-check-lg me-1"></i> Mặc Định
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted bg-white rounded-3 border">
+                        <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                        Chưa có niên khóa nào trong hệ thống. Hãy bấm <strong>"Thêm Niên Khóa Mới"</strong> để khởi tạo.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4 py-3" style="width: 25%;">Tên Niên Khóa</th>
+                            <th style="width: 20%;">Ngày Bắt Đầu</th>
+                            <th style="width: 20%;">Ngày Kết Thúc</th>
+                            <th class="text-center" style="width: 20%;">Trạng Thái Vận Hành</th>
+                            <th class="text-end pe-4" style="width: 15%;">Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model != null && Model.Any())
+                        {
+                            @foreach (var year in Model)
+                            {
+                                <tr class="@(year.IsCurrent ? "table-success-subtle bg-opacity-25" : "")">
+                                    <td class="ps-4 fw-bold">
+                                        @year.Name
+                                        @if (year.IsCurrent)
+                                        {
+                                            <span class="badge bg-success ms-2 small">Hiện tại</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <i class="bi bi-calendar-event text-secondary me-1"></i>
+                                        @year.StartDate.ToString("dd/MM/yyyy")
+                                    </td>
+                                    <td>
+                                        <i class="bi bi-calendar-check text-secondary me-1"></i>
+                                        @year.EndDate.ToString("dd/MM/yyyy")
+                                    </td>
+                                    <td class="text-center">
+                                        @if (year.IsCurrent)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill">
+                                                <i class="bi bi-record-circle-fill me-1"></i> Đang Kích Hoạt
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-secondary border px-3 py-2 rounded-pill">
+                                                Chưa Kích Hoạt
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        @if (!year.IsCurrent)
+                                        {
+                                            <form asp-controller="AcademicYears" asp-action="SetCurrent" asp-route-id="@year.Id" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-success btn-sm rounded-pill px-3"
+                                                        onclick="return confirm('Bạn có chắc chắn muốn đặt niên khóa @year.Name làm niên khóa chính thức đang vận hành?');">
+                                                    <i class="bi bi-arrow-repeat me-1"></i> Kích Hoạt
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-sm btn-success rounded-pill px-3" disabled>
+                                                <i class="bi bi-check-lg me-1"></i> Mặc Định
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                                    Chưa có niên khóa nào trong hệ thống. Hãy bấm <strong>"Thêm Niên Khóa Mới"</strong> để khởi tạo.
                                 </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
-                                Chưa có niên khóa nào trong hệ thống. Hãy bấm <strong>"Thêm Niên Khóa Mới"</strong> để khởi tạo.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </div>
 

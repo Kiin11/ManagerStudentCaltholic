@@ -22,7 +22,8 @@ Thiết kế trải nghiệm chuyên biệt cho trình duyệt di động và PW
 | **Layout** | `Views/Shared/_Layout.cshtml` | `@if (isMobile)` / `else` | Nhánh chuyển đổi giao diện Mobile-First vs Desktop |
 | **Partial View** | `Views/Shared/_LayoutMobileHeader.cshtml` | Mobile Compact Header & Offcanvas | Header thu gọn (54px) và ngăn kéo menu phải tối ưu cuộn |
 | **Partial View** | `Views/Shared/_LayoutMobileBottomNav.cshtml` | Mobile Bottom Navigation Bar | Thanh điều hướng đáy 5 phân khu & dải Sub-module Pills cuộn ngang |
-| **Stylesheet** | `wwwroot/css/mobile-layout.css` | Mobile-First CSS Rules | Safe Area Insets, 44x44px touch target, GPU scroll optimization |
+| **Stylesheet** | `wwwroot/css/mobile-layout.css` | Mobile-First CSS Rules | Safe Area Insets, 44x44px touch target, GPU scroll optimization, hệ thống thẻ/lưới dữ liệu Mobile (`.mobile-card-list`, `.mobile-data-card`, `.mobile-data-grid-*`) |
+| **Data Views** | `Views/Dashboard/Index.cshtml`, `Views/Sacraments/Index.cshtml`, `Views/AcademicYears/Index.cshtml`, `Views/Grades/Index.cshtml`, `Views/Promotion/Index.cshtml`, `Views/Governance/Index.cshtml`, `Views/Students/Index.cshtml` | Nhánh `@if (isMobile)` | Hiển thị danh sách nhiều cột dạng thẻ/lưới chuyên biệt trên Mobile thay cho bảng rộng, giữ nguyên bảng Desktop tại nhánh `else` |
 | **PWA Script** | `wwwroot/js/pwa-installer.js` | `window.__pwaUserRequestedUpdate` | Ngăn tự động reload trang ngoài ý muốn khi Service Worker kiểm tra cập nhật |
 
 ---
@@ -64,3 +65,19 @@ Phương thức mở rộng `Context.Request.IsMobileDevice()` trong `Extensions
 1. **Loại bỏ `backdrop-filter: blur(...)` trên Mobile:** Tránh hiện tượng giật khung hình (scroll jank) trên chip đồ họa di động khi cuộn qua các phần tử cố định.
 2. **Chỉ nạp script lắng nghe cuộn (`scrollToTopBtn`) trên nhánh Desktop (`!isMobile`):** Tránh gắn sự kiện `window.scroll` và ẩn nút cuộn nổi trên màn hình điện thoại để không đè lên tab thứ 5 của Bottom Navigation Bar.
 3. **Kiểm soát vòng đời PWA Service Worker (`pwa-installer.js`):** Chỉ gọi `reg.update()` trên trang chủ thay vì mọi lần chuyển trang, và chỉ tự động `window.location.reload()` khi người dùng chủ động nhấn nút cập nhật (`window.__pwaUserRequestedUpdate = true`).
+
+### 4.4. Hệ thống Thẻ Dữ liệu & Lưới Thông tin trên Mobile (`.mobile-card-list`, `.mobile-data-card`)
+- **Chống bẻ chữ dọc trong bảng và badge (`mobile-layout.css`):**
+  - Không áp dụng `word-break: break-word` lên `.card .badge`; thay vào đó bảo vệ `.table .badge`, `.table .btn`, `.mobile-data-card .badge` với `white-space: nowrap !important; word-break: normal !important; overflow-wrap: normal !important;` và giữ `white-space: nowrap` cho các ô bảng còn lại trong `.table-responsive`.
+- **Các lớp khung thẻ dữ liệu (`.mobile-card-list`, `.mobile-data-card`, `.mobile-data-grid-*`):**
+  - `.mobile-card-list`: Container flex dọc (`gap: 12px`, `padding: 12px`, nền `#f8fafc`).
+  - `.mobile-data-card`: Thẻ trắng bo góc (`border: 1.5px solid #cbd5e1; border-radius: 14px; padding: 12px 14px;`) gồm `.mobile-data-card-header` và `.mobile-data-card-title`.
+  - `.mobile-data-grid-2`, `.mobile-data-grid-3`, `.mobile-data-grid-4`: Lưới CSS Grid `repeat(2|3|4, minmax(0, 1fr))` chứa các ô chỉ số `.mobile-metric-box` (`.mobile-metric-label`, `.mobile-metric-value`).
+- **Phạm vi áp dụng nhánh `@if (isMobile)` (giữ nguyên bảng Desktop ở nhánh `else`):**
+  - `Views/Dashboard/Index.cshtml`: Danh sách thiếu nhi cần quan tâm mục vụ & Xếp hạng chuyên cần các lớp.
+  - `Views/Sacraments/Index.cshtml`: Sổ bộ Bí tích điện tử (lưới 2x2 hiển thị 4 mốc Bí tích).
+  - `Views/AcademicYears/Index.cshtml`: Danh sách các năm học & nút kích hoạt.
+  - `Views/Grades/Index.cshtml`: Thẻ nhập điểm ma trận theo cột điểm (`.mobile-grade-card`, cập nhật `.avg-cell` qua `input.closest('tr, .mobile-grade-card')`).
+  - `Views/Promotion/Index.cshtml`: Thẻ xét duyệt lên lớp & kết chuyển niên khóa (`.student-rollover-row`, `.decision-select`, `.target-class-select`).
+  - `Views/Governance/Index.cshtml`: Thẻ phân công Trưởng khối theo niên khóa.
+  - `Views/Students/Index.cshtml`: Thẻ hồ sơ thiếu nhi & cụm nút thao tác nhanh.

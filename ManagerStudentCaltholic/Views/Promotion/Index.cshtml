@@ -1,6 +1,8 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.PromotionIndexViewModel
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Xét Duyệt Lên Lớp & Kết Chuyển Niên Khóa";
+    bool isMobile = Context.Request.IsMobileDevice();
     var allTargetClasses = Model.TargetPromoteClasses
         .UnionBy(Model.TargetRetainClasses, c => c.Id)
         .OrderBy(c => c.GradeLevel)
@@ -86,29 +88,29 @@
 
     <!-- Thẻ KPI Thống kê nhanh & Quy tắc đang áp dụng -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
                 <div class="text-muted small">Tổng sĩ số lớp xét duyệt</div>
                 <div class="fs-3 fw-bold text-dark">@Model.TotalStudents <span class="fs-6 fw-normal text-muted">thiếu nhi</span></div>
                 <small class="text-secondary">Lớp: <strong>@Model.SelectedClassName</strong></small>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
                 <div class="text-muted small">Đủ điều kiện lên lớp</div>
                 <div class="fs-3 fw-bold text-success" id="statPromoteCount">@Model.TotalPromoted</div>
                 <small class="text-success"><i class="bi bi-arrow-up-right-circle me-1"></i>Khối đích gợi ý: <strong>@Model.SuggestedNextGradeLevel</strong></small>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
                 <div class="text-muted small">Chưa đạt / Ở lại lớp</div>
                 <div class="fs-3 fw-bold text-danger" id="statRetainCount">@Model.TotalRetained</div>
                 <small class="text-muted">Yêu cầu ĐTB &ge; @Model.AppliedRule.MinYearAverage.ToString("0.0") &amp; CC &ge; @Model.AppliedRule.MinAttendanceRate%</small>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 bg-white h-100">
                 <div class="text-muted small">Đã kết chuyển trước đó</div>
                 <div class="fs-3 fw-bold text-primary">@Model.TotalAlreadyProcessed</div>
                 <small class="text-muted">Sang niên khóa: <strong>@Model.TargetYearName</strong></small>
@@ -117,7 +119,7 @@
     </div>
 
     <!-- Bảng Ma trận Xét duyệt Học sinh -->
-    <div class="card border-0 shadow-sm rounded-4">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
         <div class="card-header bg-white py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
                 <h6 class="fw-bold mb-0 text-dark">
@@ -129,88 +131,47 @@
                     Khảo hạch Bí tích: <strong>@(Model.AppliedRule.RequireSacramentPassed ? $"Bắt buộc (>= {Model.AppliedRule.MinSacramentScore:0.0})" : "Không bắt buộc")</strong>
                 </small>
             </div>
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-3">
                 <div class="form-check form-switch mb-0">
                     <input class="form-check-input" type="checkbox" id="chkSmartBalancing" checked>
                     <label class="form-check-label small fw-semibold" for="chkSmartBalancing">
                         Tự động chia đều sĩ số &amp; Nam/Nữ
                     </label>
                 </div>
-                <button type="button" class="btn btn-success rounded-pill px-4 fw-bold" onclick="openConfirmRolloverModal()" @(Model.Students.Any(s => !s.IsAlreadyRolledOver) ? "" : "disabled")>
+                <button type="button" class="btn btn-success rounded-pill px-4 fw-bold text-nowrap" onclick="openConfirmRolloverModal()" @(Model.Students.Any(s => !s.IsAlreadyRolledOver) ? "" : "disabled")>
                     <i class="bi bi-check2-all me-1"></i> Thực Thi Kết Chuyển
                 </button>
             </div>
         </div>
 
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light text-secondary small text-uppercase">
-                    <tr>
-                        <th class="ps-4">#</th>
-                        <th>Mã TN</th>
-                        <th>Tên Thánh &amp; Họ Tên</th>
-                        <th class="text-center">Giới tính</th>
-                        <th class="text-center">ĐTB HK1</th>
-                        <th class="text-center">ĐTB HK2</th>
-                        <th class="text-center">ĐTB Năm</th>
-                        <th class="text-center">% Chuyên Cần</th>
-                        <th class="text-center">Thi Bí Tích</th>
-                        <th class="text-center">Đánh Giá Hệ Thống</th>
-                        <th style="min-width: 170px;">Quyết Định</th>
-                        <th style="min-width: 210px;" class="pe-4">Lớp Đích (@Model.TargetYearName)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (!Model.Students.Any())
+        @if (isMobile)
+        {
+            <div class="mobile-card-list">
+                @if (!Model.Students.Any())
+                {
+                    <div class="text-center py-5 text-muted bg-white rounded-3 border">
+                        Không có học sinh nào đang theo học trong lớp này.
+                    </div>
+                }
+                else
+                {
+                    int idx = 1;
+                    foreach (var s in Model.Students)
                     {
-                        <tr>
-                            <td colspan="12" class="text-center py-5 text-muted">
-                                Không có học sinh nào đang theo học trong lớp này.
-                            </td>
-                        </tr>
-                    }
-                    else
-                    {
-                        int idx = 1;
-                        foreach (var s in Model.Students)
-                        {
-                            <tr class="student-rollover-row @(s.IsAlreadyRolledOver ? "table-light text-muted" : "")"
-                                data-enrollment-id="@s.EnrollmentId"
-                                data-student-id="@s.StudentId"
-                                data-already-rolled="@s.IsAlreadyRolledOver.ToString().ToLower()">
-                                <td class="ps-4 fw-semibold">@(idx++)</td>
-                                <td><span class="badge bg-light text-dark border">@s.StudentCode</span></td>
-                                <td>
-                                    <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
-                                    <small class="text-muted">NS: @s.DateOfBirth.ToString("dd/MM/yyyy")</small>
-                                </td>
-                                <td class="text-center">@s.Gender</td>
-                                <td class="text-center">@(s.Semester1Average?.ToString("0.00") ?? "--")</td>
-                                <td class="text-center">@(s.Semester2Average?.ToString("0.00") ?? "--")</td>
-                                <td class="text-center fw-bold @(s.YearAverage >= Model.AppliedRule.MinYearAverage ? "text-primary" : "text-danger")">
-                                    @(s.YearAverage?.ToString("0.00") ?? "--")
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge @(s.AttendanceRate >= Model.AppliedRule.MinAttendanceRate ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">
-                                        @s.AttendanceRate.ToString("0.0")%
-                                    </span>
-                                </td>
-                                <td class="text-center">
-                                    @if (s.HasSacramentExamColumn)
-                                    {
-                                        <span class="fw-semibold @(s.SacramentExamScore >= Model.AppliedRule.MinSacramentScore ? "text-success" : "text-danger")">
-                                            @(s.SacramentExamScore?.ToString("0.00") ?? "Chưa thi")
-                                        </span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">--</span>
-                                    }
-                                </td>
-                                <td class="text-center">
+                        <div class="mobile-data-card student-rollover-row @(s.IsAlreadyRolledOver ? "bg-light text-muted" : "")"
+                             data-enrollment-id="@s.EnrollmentId"
+                             data-student-id="@s.StudentId"
+                             data-already-rolled="@s.IsAlreadyRolledOver.ToString().ToLower()">
+                            <div class="mobile-data-card-header">
+                                <div class="d-flex flex-wrap align-items-center gap-1">
+                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill">#@(idx++)</span>
+                                    <span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span>
+                                    <small class="text-muted">@s.Gender &bull; @s.DateOfBirth.ToString("dd/MM/yyyy")</small>
+                                </div>
+                                <div class="flex-shrink-0">
                                     @if (s.IsAlreadyRolledOver)
                                     {
-                                        <span class="badge bg-secondary">Đã xếp vào: @s.ExistingTargetClassName</span>
+                                        <span class="badge bg-secondary">Đã kết chuyển</span>
                                     }
                                     else if (s.IsPromoted)
                                     {
@@ -220,33 +181,79 @@
                                     }
                                     else
                                     {
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="@s.EvaluationReason">
-                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Ở lại (@s.EvaluationReason)
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Ở lại
                                         </span>
                                     }
-                                </td>
-                                <td>
-                                    @if (s.IsAlreadyRolledOver)
-                                    {
-                                        <span class="small fst-italic text-muted">Đã hoàn tất</span>
-                                    }
-                                    else
-                                    {
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <div class="mobile-data-card-title">@s.ChristianName @s.FullName</div>
+                                @if (!s.IsAlreadyRolledOver && !s.IsPromoted && !string.IsNullOrWhiteSpace(s.EvaluationReason))
+                                {
+                                    <small class="text-danger d-block">@s.EvaluationReason</small>
+                                }
+                                else if (s.IsAlreadyRolledOver)
+                                {
+                                    <small class="text-primary d-block">Đã xếp vào: <strong>@s.ExistingTargetClassName</strong></small>
+                                }
+                            </div>
+
+                            <div class="mobile-data-grid-4 mb-2">
+                                <div class="mobile-metric-box text-center">
+                                    <span class="mobile-metric-label">ĐTB HK1</span>
+                                    <div class="mobile-metric-value">@(s.Semester1Average?.ToString("0.00") ?? "--")</div>
+                                </div>
+                                <div class="mobile-metric-box text-center">
+                                    <span class="mobile-metric-label">ĐTB HK2</span>
+                                    <div class="mobile-metric-value">@(s.Semester2Average?.ToString("0.00") ?? "--")</div>
+                                </div>
+                                <div class="mobile-metric-box text-center">
+                                    <span class="mobile-metric-label">ĐTB Năm</span>
+                                    <div class="mobile-metric-value @(s.YearAverage >= Model.AppliedRule.MinYearAverage ? "text-primary" : "text-danger")">
+                                        @(s.YearAverage?.ToString("0.00") ?? "--")
+                                    </div>
+                                </div>
+                                <div class="mobile-metric-box text-center">
+                                    <span class="mobile-metric-label">Chuyên cần</span>
+                                    <div class="mobile-metric-value @(s.AttendanceRate >= Model.AppliedRule.MinAttendanceRate ? "text-success" : "text-danger")">
+                                        @s.AttendanceRate.ToString("0.0")%
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if (s.HasSacramentExamColumn)
+                            {
+                                <div class="d-flex justify-content-between align-items-center bg-light border rounded-3 px-2 py-1 mb-2 small">
+                                    <span class="text-muted fw-semibold">Điểm thi Bí tích:</span>
+                                    <span class="fw-bold @(s.SacramentExamScore >= Model.AppliedRule.MinSacramentScore ? "text-success" : "text-danger")">
+                                        @(s.SacramentExamScore?.ToString("0.00") ?? "Chưa thi")
+                                    </span>
+                                </div>
+                            }
+
+                            @if (s.IsAlreadyRolledOver)
+                            {
+                                <div class="d-flex justify-content-between align-items-center pt-2 border-top small">
+                                    <span class="fst-italic text-muted">Đã hoàn tất kết chuyển</span>
+                                    <span class="badge bg-primary-subtle text-primary">@s.ExistingTargetClassName</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mobile-data-grid-2 pt-2 border-top">
+                                    <div>
+                                        <label class="mobile-metric-label">Quyết định</label>
                                         <select class="form-select form-select-sm decision-select fw-semibold" onchange="recalculateSummaryCounts()">
                                             <option value="PROMOTE" selected="@(s.SuggestedAction == "PROMOTE")">✔ Lên lớp</option>
                                             <option value="RETAIN" selected="@(s.SuggestedAction == "RETAIN")">✘ Ở lại lớp</option>
                                             <option value="GRADUATE" selected="@(s.SuggestedAction == "GRADUATE")">🎓 Hoàn thành / Ra trường</option>
                                             <option value="SKIP">⏭ Bỏ qua (Nghỉ / Chuyển xứ)</option>
                                         </select>
-                                    }
-                                </td>
-                                <td class="pe-4">
-                                    @if (s.IsAlreadyRolledOver)
-                                    {
-                                        <span class="badge bg-primary-subtle text-primary">@s.ExistingTargetClassName</span>
-                                    }
-                                    else
-                                    {
+                                    </div>
+                                    <div>
+                                        <label class="mobile-metric-label">Lớp đích (@Model.TargetYearName)</label>
                                         <select class="form-select form-select-sm target-class-select">
                                             <option value="0">-- Tự động cân bằng sĩ số --</option>
                                             @foreach (var tc in allTargetClasses)
@@ -256,14 +263,139 @@
                                                 </option>
                                             }
                                         </select>
-                                    }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light text-secondary small text-uppercase">
+                        <tr>
+                            <th class="ps-4">#</th>
+                            <th>Mã TN</th>
+                            <th>Tên Thánh &amp; Họ Tên</th>
+                            <th class="text-center">Giới tính</th>
+                            <th class="text-center">ĐTB HK1</th>
+                            <th class="text-center">ĐTB HK2</th>
+                            <th class="text-center">ĐTB Năm</th>
+                            <th class="text-center">% Chuyên Cần</th>
+                            <th class="text-center">Thi Bí Tích</th>
+                            <th class="text-center">Đánh Giá Hệ Thống</th>
+                            <th style="min-width: 170px;">Quyết Định</th>
+                            <th style="min-width: 210px;" class="pe-4">Lớp Đích (@Model.TargetYearName)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Students.Any())
+                        {
+                            <tr>
+                                <td colspan="12" class="text-center py-5 text-muted">
+                                    Không có học sinh nào đang theo học trong lớp này.
                                 </td>
                             </tr>
                         }
-                    }
-                </tbody>
-            </table>
-        </div>
+                        else
+                        {
+                            int idx = 1;
+                            foreach (var s in Model.Students)
+                            {
+                                <tr class="student-rollover-row @(s.IsAlreadyRolledOver ? "table-light text-muted" : "")"
+                                    data-enrollment-id="@s.EnrollmentId"
+                                    data-student-id="@s.StudentId"
+                                    data-already-rolled="@s.IsAlreadyRolledOver.ToString().ToLower()">
+                                    <td class="ps-4 fw-semibold">@(idx++)</td>
+                                    <td><span class="badge bg-light text-dark border">@s.StudentCode</span></td>
+                                    <td>
+                                        <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                        <small class="text-muted">NS: @s.DateOfBirth.ToString("dd/MM/yyyy")</small>
+                                    </td>
+                                    <td class="text-center">@s.Gender</td>
+                                    <td class="text-center">@(s.Semester1Average?.ToString("0.00") ?? "--")</td>
+                                    <td class="text-center">@(s.Semester2Average?.ToString("0.00") ?? "--")</td>
+                                    <td class="text-center fw-bold @(s.YearAverage >= Model.AppliedRule.MinYearAverage ? "text-primary" : "text-danger")">
+                                        @(s.YearAverage?.ToString("0.00") ?? "--")
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge @(s.AttendanceRate >= Model.AppliedRule.MinAttendanceRate ? "bg-success-subtle text-success" : "bg-danger-subtle text-danger")">
+                                            @s.AttendanceRate.ToString("0.0")%
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (s.HasSacramentExamColumn)
+                                        {
+                                            <span class="fw-semibold @(s.SacramentExamScore >= Model.AppliedRule.MinSacramentScore ? "text-success" : "text-danger")">
+                                                @(s.SacramentExamScore?.ToString("0.00") ?? "Chưa thi")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">--</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (s.IsAlreadyRolledOver)
+                                        {
+                                            <span class="badge bg-secondary">Đã xếp vào: @s.ExistingTargetClassName</span>
+                                        }
+                                        else if (s.IsPromoted)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check-circle-fill me-1"></i>@s.AcademicRank - Lên lớp
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="@s.EvaluationReason">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Ở lại (@s.EvaluationReason)
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (s.IsAlreadyRolledOver)
+                                        {
+                                            <span class="small fst-italic text-muted">Đã hoàn tất</span>
+                                        }
+                                        else
+                                        {
+                                            <select class="form-select form-select-sm decision-select fw-semibold" onchange="recalculateSummaryCounts()">
+                                                <option value="PROMOTE" selected="@(s.SuggestedAction == "PROMOTE")">✔ Lên lớp</option>
+                                                <option value="RETAIN" selected="@(s.SuggestedAction == "RETAIN")">✘ Ở lại lớp</option>
+                                                <option value="GRADUATE" selected="@(s.SuggestedAction == "GRADUATE")">🎓 Hoàn thành / Ra trường</option>
+                                                <option value="SKIP">⏭ Bỏ qua (Nghỉ / Chuyển xứ)</option>
+                                            </select>
+                                        }
+                                    </td>
+                                    <td class="pe-4">
+                                        @if (s.IsAlreadyRolledOver)
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary">@s.ExistingTargetClassName</span>
+                                        }
+                                        else
+                                        {
+                                            <select class="form-select form-select-sm target-class-select">
+                                                <option value="0">-- Tự động cân bằng sĩ số --</option>
+                                                @foreach (var tc in allTargetClasses)
+                                                {
+                                                    <option value="@tc.Id" selected="@(s.SuggestedTargetClassId == tc.Id)">
+                                                        [@tc.GradeLevel] @tc.Name
+                                                    </option>
+                                                }
+                                            </select>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </div>
 

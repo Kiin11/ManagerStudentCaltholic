@@ -1,6 +1,8 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassGradeMatrixViewModel
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = $"Sổ Điểm - {Model.ClassName}";
+    bool isMobile = Context.Request.IsMobileDevice();
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
     var evalAction = Model.EvaluationAction;
 }
@@ -147,130 +149,69 @@ else
 
         <!-- Bảng Ma Trận Điểm Grid View -->
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover align-middle mb-0 text-center" id="gridGradeTable">
-                    <thead class="table-light small">
-                        <tr>
-                            <th rowspan="2" class="align-middle ps-3" style="width: 40px;">STT</th>
-                            <th rowspan="2" class="align-middle" style="width: 85px;">Mã QR</th>
-                            <th rowspan="2" class="align-middle text-start" style="min-width: 180px;">Tên Thánh & Họ Tên</th>
-
-                            @if (Model.Columns.Any())
-                            {
-                                <th colspan="@Model.Columns.Count" class="bg-primary-subtle text-primary border-start border-end">
-                                    @(Model.CurrentSemester == 0 ? "TẤT CẢ CỘT ĐIỂM CẢ NĂM" : $"CÁC CỘT ĐIỂM HỌC KỲ {Model.CurrentSemester}")
-                                </th>
-                            }
-
-                            @if (Model.CurrentSemester == 0)
-                            {
-                                <th rowspan="2" class="align-middle bg-info-subtle text-dark" style="width: 80px;">ĐTB HK1</th>
-                                <th rowspan="2" class="align-middle bg-info-subtle text-dark" style="width: 80px;">ĐTB HK2</th>
-                                <th rowspan="2" class="align-middle bg-warning-subtle text-dark" style="width: 85px;">ĐTB Năm</th>
-                            }
-                            else
-                            {
-                                <th rowspan="2" class="align-middle bg-warning-subtle text-dark" style="width: 80px;">ĐTB HK</th>
-                            }
-
-                            <th rowspan="2" class="align-middle" style="width: 80px;">% Chuyên Cần</th>
-                            <th rowspan="2" class="align-middle" style="width: 120px;">Xếp Loại</th>
-                            <th rowspan="2" class="align-middle" style="width: 110px;">Xét Bí Tích</th>
-                            <th rowspan="2" class="align-middle text-center" style="min-width: 125px;">@Model.EvaluationAction.ButtonLabel</th>
-                        </tr>
-                        <tr>
-                            @foreach (var col in Model.Columns)
-                            {
-                                <th class="small py-2 @(col.IsSacramentExam ? "bg-info-subtle text-dark" : "")" style="min-width: 95px;">
-                                    <div class="d-flex align-items-center justify-content-center gap-1">
-                                        <span>@col.DisplayName</span>
-                                        @if (col.ClassRoomId.HasValue && !Model.IsLocked)
-                                        {
-                                            <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1"
-                                                    title="Xóa cột điểm riêng" onclick="deleteCustomColumn(@col.Id)">
-                                                <i class="bi bi-x-circle"></i>
-                                            </button>
-                                        }
-                                    </div>
-                                    <small class="text-muted">(HS: @col.WeightFactor@(Model.CurrentSemester == 0 ? $" - HK{col.Semester}" : ""))</small>
-                                </th>
-                            }
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (Model.Rows.Any())
+            @if (isMobile)
+            {
+                <div id="gridGradeTable" class="mobile-card-list">
+                    @if (Model.Rows.Any())
+                    {
+                        var stt = 1;
+                        var rowIdx = 0;
+                        foreach (var s in Model.Rows)
                         {
-                            var stt = 1;
-                            var rowIdx = 0;
-                            foreach (var s in Model.Rows)
-                            {
-                                <tr data-enrollment-id="@s.EnrollmentId" data-row-index="@rowIdx">
-                                    <td class="ps-3 fw-bold text-muted">@(stt++)</td>
-                                    <td><span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span></td>
-                                    <td class="text-start">
-                                        <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
-                                    </td>
+                            <div class="mobile-data-card mobile-grade-card" data-enrollment-id="@s.EnrollmentId" data-row-index="@rowIdx">
+                                <div class="mobile-data-card-header">
+                                    <div class="min-w-0">
+                                        <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+                                            <span class="badge bg-secondary-subtle text-secondary rounded-pill">#@(stt++)</span>
+                                            <span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span>
+                                        </div>
+                                        <div class="mobile-data-card-title">@s.ChristianName @s.FullName</div>
+                                    </div>
+                                    <div class="text-end flex-shrink-0 bg-warning-subtle border border-warning-subtle rounded-3 px-2 py-1">
+                                        <div class="text-muted fw-semibold" style="font-size: 0.68rem;">@(Model.CurrentSemester == 0 ? "ĐTB Năm" : "ĐTB HK")</div>
+                                        <div class="fw-bold text-primary fs-6 avg-cell">@(s.SemesterAverage.HasValue ? s.SemesterAverage.Value.ToString("0.00") : "--")</div>
+                                    </div>
+                                </div>
 
-                                    @{
-                                        var colIdx = 0;
-                                    }
-                                    @foreach (var col in Model.Columns)
+                                @if (Model.CurrentSemester == 0)
+                                {
+                                    <div class="mobile-data-grid-3 mb-2">
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">ĐTB HK1</span>
+                                            <div class="mobile-metric-value text-secondary">@(s.Semester1Average.HasValue ? s.Semester1Average.Value.ToString("0.00") : "--")</div>
+                                        </div>
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">ĐTB HK2</span>
+                                            <div class="mobile-metric-value text-secondary">@(s.Semester2Average.HasValue ? s.Semester2Average.Value.ToString("0.00") : "--")</div>
+                                        </div>
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">% Chuyên Cần</span>
+                                            <div class="mobile-metric-value">@s.AttendanceRate%</div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div class="d-flex flex-wrap align-items-center gap-1 mb-2 pb-2 border-bottom">
+                                    @if (Model.CurrentSemester != 0)
                                     {
-                                        s.Scores.TryGetValue(col.Id, out var scoreVal);
-                                        var cellValue = scoreVal.HasValue ? scoreVal.Value.ToString("0.0") : "";
-
-                                        <td class="p-1">
-                                            <input type="text"
-                                                   class="form-control form-control-sm text-center fw-bold score-cell"
-                                                   data-enrollment-id="@s.EnrollmentId"
-                                                   data-config-id="@col.Id"
-                                                   data-row="@rowIdx"
-                                                   data-col="@colIdx"
-                                                   value="@cellValue"
-                                                   placeholder="--"
-                                                   maxlength="4"
-                                                   @(Model.IsLocked ? "readonly disabled" : "")
-                                                   onfocus="this.select()"
-                                                   onchange="onScoreChange(this)"
-                                                   onkeydown="handleKeyNavigation(event, this)" />
-                                        </td>
-                                        colIdx++;
+                                        <span class="badge bg-light text-dark border">Chuyên cần: @s.AttendanceRate%</span>
                                     }
-
-                                    @if (Model.CurrentSemester == 0)
+                                    <span class="badge @(s.AcademicRank == "Xuất sắc" || s.AcademicRank == "Giỏi" ? "bg-success" : (s.AcademicRank == "Khá" ? "bg-primary" : "bg-secondary")) px-2 py-1">
+                                        Xếp loại: @s.AcademicRank
+                                    </span>
+                                    @if (s.IsEligibleForSacrament)
                                     {
-                                        <td class="fw-semibold text-secondary bg-light">
-                                            @(s.Semester1Average.HasValue? s.Semester1Average.Value.ToString("0.00") : "--")
-                                        </td>
-                                        <td class="fw-semibold text-secondary bg-light">
-                                            @(s.Semester2Average.HasValue? s.Semester2Average.Value.ToString("0.00") : "--")
-                                        </td>
-                                    }
-
-                                    <td class="fw-bold text-primary bg-light avg-cell">
-                                        @(s.SemesterAverage.HasValue? s.SemesterAverage.Value.ToString("0.00") : "--")
-                                    </td>
-                                    <td><span class="badge bg-light text-dark border">@s.AttendanceRate%</span></td>
-                                    <td>
-                                        <span class="badge @(s.AcademicRank == "Xuất sắc" || s.AcademicRank == "Giỏi" ? "bg-success" : (s.AcademicRank == "Khá" ? "bg-primary" : "bg-secondary")) px-2 py-1">
-                                            @s.AcademicRank
+                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
+                                            <i class="bi bi-check-circle me-1"></i>Bí tích: Đạt
                                         </span>
-                                    </td>
-                                    <td>
-                                        @if (s.IsEligibleForSacrament)
-                                        {
-                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
-                                                <i class="bi bi-check-circle me-1"></i>Đạt
-                                            </span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
-                                                <i class="bi bi-x-circle me-1"></i>Chưa đạt
-                                            </span>
-                                        }
-                                    </td>
-                                    <td class="text-center" id="eval-badge-@s.EnrollmentId">
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
+                                            <i class="bi bi-x-circle me-1"></i>Bí tích: Chưa đạt
+                                        </span>
+                                    }
+                                    <span id="eval-badge-@s.EnrollmentId">
                                         @switch (s.TeacherProposalStatus)
                                         {
                                             case "PROPOSED_PASS":
@@ -294,22 +235,227 @@ else
                                                 <span class="badge bg-light text-secondary border rounded-pill px-2 py-1">Chưa xét</span>
                                                 break;
                                         }
+                                    </span>
+                                </div>
+
+                                @if (Model.Columns.Any())
+                                {
+                                    var colIdx = 0;
+                                    <div class="mobile-data-grid-2">
+                                        @foreach (var col in Model.Columns)
+                                        {
+                                            s.Scores.TryGetValue(col.Id, out var scoreVal);
+                                            var cellValue = scoreVal.HasValue ? scoreVal.Value.ToString("0.0") : "";
+                                            <div class="mobile-metric-box @(col.IsSacramentExam ? "border-info bg-info-subtle" : "")">
+                                                <div class="d-flex justify-content-between align-items-center gap-1 mb-1">
+                                                    <span class="mobile-metric-label mb-0" title="@col.DisplayName">
+                                                        @col.DisplayName (HS @col.WeightFactor@(Model.CurrentSemester == 0 ? $" - HK{col.Semester}" : ""))
+                                                    </span>
+                                                    @if (col.ClassRoomId.HasValue && !Model.IsLocked)
+                                                    {
+                                                        <button type="button" class="btn btn-link btn-sm text-danger p-0 flex-shrink-0"
+                                                                title="Xóa cột điểm riêng" onclick="deleteCustomColumn(@col.Id)">
+                                                            <i class="bi bi-x-circle"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                                <input type="text"
+                                                       inputmode="decimal"
+                                                       class="form-control form-control-sm text-center fw-bold score-cell"
+                                                       data-enrollment-id="@s.EnrollmentId"
+                                                       data-config-id="@col.Id"
+                                                       data-row="@rowIdx"
+                                                       data-col="@colIdx"
+                                                       value="@cellValue"
+                                                       placeholder="--"
+                                                       maxlength="4"
+                                                       @(Model.IsLocked ? "readonly disabled" : "")
+                                                       onfocus="this.select()"
+                                                       onchange="onScoreChange(this)"
+                                                       onkeydown="handleKeyNavigation(event, this)" />
+                                            </div>
+                                            colIdx++;
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            rowIdx++;
+                        }
+                    }
+                    else
+                    {
+                        <div class="py-5 text-center text-muted bg-white rounded-3 border">
+                            <i class="bi bi-inbox fs-2 d-block mb-2"></i> Lớp chưa có học sinh hoặc chưa được phân công.
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0 text-center" id="gridGradeTable">
+                        <thead class="table-light small">
+                            <tr>
+                                <th rowspan="2" class="align-middle ps-3" style="width: 40px;">STT</th>
+                                <th rowspan="2" class="align-middle" style="width: 85px;">Mã QR</th>
+                                <th rowspan="2" class="align-middle text-start" style="min-width: 180px;">Tên Thánh & Họ Tên</th>
+
+                                @if (Model.Columns.Any())
+                                {
+                                    <th colspan="@Model.Columns.Count" class="bg-primary-subtle text-primary border-start border-end">
+                                        @(Model.CurrentSemester == 0 ? "TẤT CẢ CỘT ĐIỂM CẢ NĂM" : $"CÁC CỘT ĐIỂM HỌC KỲ {Model.CurrentSemester}")
+                                    </th>
+                                }
+
+                                @if (Model.CurrentSemester == 0)
+                                {
+                                    <th rowspan="2" class="align-middle bg-info-subtle text-dark" style="width: 80px;">ĐTB HK1</th>
+                                    <th rowspan="2" class="align-middle bg-info-subtle text-dark" style="width: 80px;">ĐTB HK2</th>
+                                    <th rowspan="2" class="align-middle bg-warning-subtle text-dark" style="width: 85px;">ĐTB Năm</th>
+                                }
+                                else
+                                {
+                                    <th rowspan="2" class="align-middle bg-warning-subtle text-dark" style="width: 80px;">ĐTB HK</th>
+                                }
+
+                                <th rowspan="2" class="align-middle" style="width: 80px;">% Chuyên Cần</th>
+                                <th rowspan="2" class="align-middle" style="width: 120px;">Xếp Loại</th>
+                                <th rowspan="2" class="align-middle" style="width: 110px;">Xét Bí Tích</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 125px;">@Model.EvaluationAction.ButtonLabel</th>
+                            </tr>
+                            <tr>
+                                @foreach (var col in Model.Columns)
+                                {
+                                    <th class="small py-2 @(col.IsSacramentExam ? "bg-info-subtle text-dark" : "")" style="min-width: 95px;">
+                                        <div class="d-flex align-items-center justify-content-center gap-1">
+                                            <span>@col.DisplayName</span>
+                                            @if (col.ClassRoomId.HasValue && !Model.IsLocked)
+                                            {
+                                                <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1"
+                                                        title="Xóa cột điểm riêng" onclick="deleteCustomColumn(@col.Id)">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            }
+                                        </div>
+                                        <small class="text-muted">(HS: @col.WeightFactor@(Model.CurrentSemester == 0 ? $" - HK{col.Semester}" : ""))</small>
+                                    </th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Rows.Any())
+                            {
+                                var stt = 1;
+                                var rowIdx = 0;
+                                foreach (var s in Model.Rows)
+                                {
+                                    <tr data-enrollment-id="@s.EnrollmentId" data-row-index="@rowIdx">
+                                        <td class="ps-3 fw-bold text-muted">@(stt++)</td>
+                                        <td><span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span></td>
+                                        <td class="text-start">
+                                            <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                        </td>
+
+                                        @{
+                                            var colIdx = 0;
+                                        }
+                                        @foreach (var col in Model.Columns)
+                                        {
+                                            s.Scores.TryGetValue(col.Id, out var scoreVal);
+                                            var cellValue = scoreVal.HasValue ? scoreVal.Value.ToString("0.0") : "";
+
+                                            <td class="p-1">
+                                                <input type="text"
+                                                       class="form-control form-control-sm text-center fw-bold score-cell"
+                                                       data-enrollment-id="@s.EnrollmentId"
+                                                       data-config-id="@col.Id"
+                                                       data-row="@rowIdx"
+                                                       data-col="@colIdx"
+                                                       value="@cellValue"
+                                                       placeholder="--"
+                                                       maxlength="4"
+                                                       @(Model.IsLocked ? "readonly disabled" : "")
+                                                       onfocus="this.select()"
+                                                       onchange="onScoreChange(this)"
+                                                       onkeydown="handleKeyNavigation(event, this)" />
+                                            </td>
+                                            colIdx++;
+                                        }
+
+                                        @if (Model.CurrentSemester == 0)
+                                        {
+                                            <td class="fw-semibold text-secondary bg-light">
+                                                @(s.Semester1Average.HasValue? s.Semester1Average.Value.ToString("0.00") : "--")
+                                            </td>
+                                            <td class="fw-semibold text-secondary bg-light">
+                                                @(s.Semester2Average.HasValue? s.Semester2Average.Value.ToString("0.00") : "--")
+                                            </td>
+                                        }
+
+                                        <td class="fw-bold text-primary bg-light avg-cell">
+                                            @(s.SemesterAverage.HasValue? s.SemesterAverage.Value.ToString("0.00") : "--")
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">@s.AttendanceRate%</span></td>
+                                        <td>
+                                            <span class="badge @(s.AcademicRank == "Xuất sắc" || s.AcademicRank == "Giỏi" ? "bg-success" : (s.AcademicRank == "Khá" ? "bg-primary" : "bg-secondary")) px-2 py-1">
+                                                @s.AcademicRank
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (s.IsEligibleForSacrament)
+                                            {
+                                                <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
+                                                    <i class="bi bi-check-circle me-1"></i>Đạt
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
+                                                    <i class="bi bi-x-circle me-1"></i>Chưa đạt
+                                                </span>
+                                            }
+                                        </td>
+                                        <td class="text-center" id="eval-badge-@s.EnrollmentId">
+                                            @switch (s.TeacherProposalStatus)
+                                            {
+                                                case "PROPOSED_PASS":
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">
+                                                        <i class="bi bi-check-circle-fill me-1"></i>Đạt chuẩn
+                                                    </span>
+                                                    break;
+                                                case "PROPOSED_SPECIAL":
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-1"
+                                                          title="Lý do đặc cách: @s.TeacherProposalNote">
+                                                        <i class="bi bi-star-fill me-1"></i>Đề xuất đặc cách
+                                                    </span>
+                                                    break;
+                                                case "PROPOSED_RETAIN":
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-1"
+                                                          title="@s.TeacherProposalNote">
+                                                        <i class="bi bi-x-circle-fill me-1"></i>Chưa đạt
+                                                    </span>
+                                                    break;
+                                                default:
+                                                    <span class="badge bg-light text-secondary border rounded-pill px-2 py-1">Chưa xét</span>
+                                                    break;
+                                            }
+                                        </td>
+                                    </tr>
+                                    rowIdx++;
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="@((Model.CurrentSemester == 0 ? 10 : 8) + Model.Columns.Count)" class="py-5 text-muted">
+                                        <i class="bi bi-inbox fs-2 d-block mb-2"></i> Lớp chưa có học sinh hoặc chưa được phân công.
                                     </td>
                                 </tr>
-                                rowIdx++;
                             }
-                        }
-                        else
-                        {
-                            <tr>
-                                <td colspan="@((Model.CurrentSemester == 0 ? 10 : 8) + Model.Columns.Count)" class="py-5 text-muted">
-                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i> Lớp chưa có học sinh hoặc chưa được phân công.
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
     </div>
 
@@ -541,8 +687,8 @@ else
                     input.classList.add('bg-success-subtle');
                     setTimeout(() => input.classList.remove('bg-success-subtle'), 600);
 
-                    // Cập nhật tức thì ô ĐTB trên cùng hàng
-                    const tr = input.closest('tr');
+                    // Cập nhật tức thì ô ĐTB trên cùng hàng / thẻ
+                    const tr = input.closest('tr, .mobile-grade-card');
                     const avgCell = tr?.querySelector('.avg-cell');
                     if (avgCell && data.semesterAverage) {
                         avgCell.textContent = data.semesterAverage;

@@ -1,7 +1,9 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.ExecutiveDashboardViewModel
 @using System.Text.Json
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Executive Dashboard - Thống Kê & Phân Tích Chuyên Cần";
+    bool isMobile = Context.Request.IsMobileDevice();
     var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     var gradesJson = JsonSerializer.Serialize(Model.GradeBreakdowns, jsonOptions);
     var trendsJson = JsonSerializer.Serialize(Model.MonthlyTrends, jsonOptions);
@@ -327,8 +329,8 @@
     <div class="row g-4">
         <!-- Cột trái: Cảnh báo sớm học sinh vắng nhiều buổi -->
         <div class="col-lg-7">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden">
+                <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div>
                         <h6 class="fw-bold text-danger mb-0">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>Danh Sách Thiếu Nhi Cần Quan Tâm Mục Vụ (Vắng Nhiều)
@@ -336,126 +338,227 @@
                         <small class="text-muted">Các em vắng không phép từ 2 buổi trở lên hoặc tỷ lệ chuyên cần dưới 70%</small>
                     </div>
                     <a asp-controller="ParentMessages" asp-action="Index" asp-route-attentionOnly="true"
-                       class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                       class="btn btn-outline-primary btn-sm rounded-pill px-3 text-nowrap flex-shrink-0">
                         <i class="bi bi-chat-quote-fill me-1"></i> Nhắn Phụ Huynh (1-Click)
                     </a>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 small">
-                        <thead class="table-light text-secondary text-uppercase">
-                            <tr>
-                                <th class="ps-3">Thiếu Nhi</th>
-                                <th>Lớp</th>
-                                <th class="text-center">Vắng K.Phép</th>
-                                <th class="text-center">% Chuyên Cần</th>
-                                <th class="text-end pe-3">Liên Hệ</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (!Model.HighAbsenceStudents.Any())
+                @if (isMobile)
+                {
+                    <div class="mobile-card-list">
+                        @if (!Model.HighAbsenceStudents.Any())
+                        {
+                            <div class="text-center py-4 text-success fw-semibold bg-white rounded-3 border">
+                                <i class="bi bi-check-circle-fill me-1"></i>Tuyệt vời! Hiện không có thiếu nhi nào nằm trong diện cảnh báo vắng nhiều.
+                            </div>
+                        }
+                        else
+                        {
+                            foreach (var s in Model.HighAbsenceStudents)
                             {
-                                <tr>
-                                    <td colspan="5" class="text-center py-4 text-success fw-semibold">
-                                        <i class="bi bi-check-circle-fill me-1"></i>Tuyệt vời! Hiện không có thiếu nhi nào nằm trong diện cảnh báo vắng nhiều.
-                                    </td>
-                                </tr>
+                                <div class="mobile-data-card">
+                                    <div class="mobile-data-card-header">
+                                        <div class="min-w-0">
+                                            <div class="mobile-data-card-title">@s.ChristianName @s.FullName</div>
+                                            <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
+                                                <span class="badge bg-light text-dark border font-monospace">@s.StudentCode</span>
+                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">@s.ClassName</span>
+                                            </div>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(s.ParentPhone))
+                                        {
+                                            <a href="tel:@s.ParentPhone" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 text-nowrap flex-shrink-0">
+                                                <i class="bi bi-telephone me-1"></i>@s.ParentPhone
+                                            </a>
+                                        }
+                                    </div>
+                                    <div class="mobile-data-grid-2">
+                                        <div class="mobile-metric-box">
+                                            <span class="mobile-metric-label">Vắng không phép</span>
+                                            <div class="mobile-metric-value d-flex align-items-center justify-content-between gap-1 flex-wrap">
+                                                <span class="badge bg-danger rounded-pill px-2">@s.UnpermittedAbsentCount buổi</span>
+                                                <small class="text-muted fw-normal">Tổng: @s.TotalAbsentCount</small>
+                                            </div>
+                                        </div>
+                                        <div class="mobile-metric-box">
+                                            <span class="mobile-metric-label">% Chuyên cần</span>
+                                            <div class="mobile-metric-value text-danger fs-6">
+                                                @s.CombinedAttendanceRate.ToString("0.0")%
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             }
-                            else
-                            {
-                                foreach (var s in Model.HighAbsenceStudents)
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-secondary text-uppercase">
+                                <tr>
+                                    <th class="ps-3">Thiếu Nhi</th>
+                                    <th>Lớp</th>
+                                    <th class="text-center">Vắng K.Phép</th>
+                                    <th class="text-center">% Chuyên Cần</th>
+                                    <th class="text-end pe-3">Liên Hệ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!Model.HighAbsenceStudents.Any())
                                 {
                                     <tr>
-                                        <td class="ps-3">
-                                            <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
-                                            <small class="text-muted font-monospace">@s.StudentCode</small>
-                                        </td>
-                                        <td><span class="badge bg-light text-dark border">@s.ClassName</span></td>
-                                        <td class="text-center">
-                                            <span class="badge bg-danger rounded-pill px-2">@s.UnpermittedAbsentCount buổi</span>
-                                            <small class="d-block text-muted">Tổng vắng: @s.TotalAbsentCount</small>
-                                        </td>
-                                        <td class="text-center fw-bold text-danger">@s.CombinedAttendanceRate.ToString("0.0")%</td>
-                                        <td class="text-end pe-3">
-                                            @if (!string.IsNullOrWhiteSpace(s.ParentPhone))
-                                            {
-                                                <a href="tel:@s.ParentPhone" class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2">
-                                                    <i class="bi bi-telephone"></i> @s.ParentPhone
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted">—</span>
-                                            }
+                                        <td colspan="5" class="text-center py-4 text-success fw-semibold">
+                                            <i class="bi bi-check-circle-fill me-1"></i>Tuyệt vời! Hiện không có thiếu nhi nào nằm trong diện cảnh báo vắng nhiều.
                                         </td>
                                     </tr>
                                 }
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                                else
+                                {
+                                    foreach (var s in Model.HighAbsenceStudents)
+                                    {
+                                        <tr>
+                                            <td class="ps-3">
+                                                <div class="fw-bold text-dark">@s.ChristianName @s.FullName</div>
+                                                <small class="text-muted font-monospace">@s.StudentCode</small>
+                                            </td>
+                                            <td><span class="badge bg-light text-dark border">@s.ClassName</span></td>
+                                            <td class="text-center">
+                                                <span class="badge bg-danger rounded-pill px-2">@s.UnpermittedAbsentCount buổi</span>
+                                                <small class="d-block text-muted">Tổng vắng: @s.TotalAbsentCount</small>
+                                            </td>
+                                            <td class="text-center fw-bold text-danger">@s.CombinedAttendanceRate.ToString("0.0")%</td>
+                                            <td class="text-end pe-3">
+                                                @if (!string.IsNullOrWhiteSpace(s.ParentPhone))
+                                                {
+                                                    <a href="tel:@s.ParentPhone" class="btn btn-sm btn-outline-secondary rounded-pill py-0 px-2">
+                                                        <i class="bi bi-telephone"></i> @s.ParentPhone
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">—</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
             </div>
         </div>
 
         <!-- Cột phải: Top các lớp duy trì chuyên cần tốt nhất -->
         <div class="col-lg-5">
-            <div class="card border-0 shadow-sm rounded-4 h-100">
-                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden">
+                <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <div>
                         <h6 class="fw-bold text-dark mb-0">
                             <i class="bi bi-trophy-fill text-warning me-2"></i>Xếp Hạng Chuyên Cần Các Lớp
                         </h6>
                         <small class="text-muted">Tổng hợp theo tỷ lệ tham dự Thánh Lễ & Học Giáo lý</small>
                     </div>
-                    <a asp-controller="Attendance" asp-action="Statistics" class="btn btn-link btn-sm text-decoration-none p-0">
+                    <a asp-controller="Attendance" asp-action="Statistics" class="btn btn-link btn-sm text-decoration-none p-0 text-nowrap flex-shrink-0">
                         Xem chi tiết <i class="bi bi-arrow-right"></i>
                     </a>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 small">
-                        <thead class="table-light text-secondary text-uppercase">
-                            <tr>
-                                <th class="ps-3">#</th>
-                                <th>Lớp Học</th>
-                                <th class="text-center">Sĩ Số</th>
-                                <th class="text-center">% Lễ CN</th>
-                                <th class="text-center">% Học</th>
-                                <th class="text-end pe-3">TB Chung</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if (!Model.TopPerformingClasses.Any())
+                @if (isMobile)
+                {
+                    <div class="mobile-card-list">
+                        @if (!Model.TopPerformingClasses.Any())
+                        {
+                            <div class="text-center py-4 text-muted bg-white rounded-3 border">Chưa có dữ liệu xếp hạng lớp.</div>
+                        }
+                        else
+                        {
+                            int rankIdx = 1;
+                            foreach (var c in Model.TopPerformingClasses)
                             {
-                                <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">Chưa có dữ liệu xếp hạng lớp.</td>
-                                </tr>
+                                <div class="mobile-data-card">
+                                    <div class="mobile-data-card-header">
+                                        <div class="min-w-0">
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <span class="badge bg-secondary-subtle text-secondary rounded-pill">#@(rankIdx++)</span>
+                                                <a href="/Attendance/Statistics?classId=@c.ClassId" class="mobile-data-card-title text-decoration-none">
+                                                    @c.ClassName
+                                                </a>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">Khối: @c.GradeLevel</small>
+                                        </div>
+                                        <span class="badge @(c.CombinedRate >= 85 ? "bg-success" : c.CombinedRate >= 70 ? "bg-primary" : "bg-warning text-dark") rounded-pill px-2 py-1 flex-shrink-0">
+                                            TB: @c.CombinedRate.ToString("0.0")%
+                                        </span>
+                                    </div>
+                                    <div class="mobile-data-grid-3">
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">Sĩ số</span>
+                                            <div class="mobile-metric-value">@c.StudentCount em</div>
+                                        </div>
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">% Lễ CN</span>
+                                            <div class="mobile-metric-value text-success">@c.MassRate.ToString("0.0")%</div>
+                                        </div>
+                                        <div class="mobile-metric-box text-center">
+                                            <span class="mobile-metric-label">% Học GL</span>
+                                            <div class="mobile-metric-value text-primary">@c.ClassRate.ToString("0.0")%</div>
+                                        </div>
+                                    </div>
+                                </div>
                             }
-                            else
-                            {
-                                int rankIdx = 1;
-                                foreach (var c in Model.TopPerformingClasses)
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 small">
+                            <thead class="table-light text-secondary text-uppercase">
+                                <tr>
+                                    <th class="ps-3">#</th>
+                                    <th>Lớp Học</th>
+                                    <th class="text-center">Sĩ Số</th>
+                                    <th class="text-center">% Lễ CN</th>
+                                    <th class="text-center">% Học</th>
+                                    <th class="text-end pe-3">TB Chung</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (!Model.TopPerformingClasses.Any())
                                 {
                                     <tr>
-                                        <td class="ps-3 fw-bold text-muted">@(rankIdx++)</td>
-                                        <td>
-                                            <a href="/Attendance/Statistics?classId=@c.ClassId" class="fw-bold text-dark text-decoration-none">
-                                                @c.ClassName
-                                            </a>
-                                            <small class="d-block text-muted">@c.GradeLevel</small>
-                                        </td>
-                                        <td class="text-center">@c.StudentCount</td>
-                                        <td class="text-center text-success fw-semibold">@c.MassRate.ToString("0.0")%</td>
-                                        <td class="text-center text-primary fw-semibold">@c.ClassRate.ToString("0.0")%</td>
-                                        <td class="text-end pe-3">
-                                            <span class="badge @(c.CombinedRate >= 85 ? "bg-success" : c.CombinedRate >= 70 ? "bg-primary" : "bg-warning text-dark") rounded-pill px-2">
-                                                @c.CombinedRate.ToString("0.0")%
-                                            </span>
-                                        </td>
+                                        <td colspan="6" class="text-center py-4 text-muted">Chưa có dữ liệu xếp hạng lớp.</td>
                                     </tr>
                                 }
-                            }
-                        </tbody>
-                    </table>
-                </div>
+                                else
+                                {
+                                    int rankIdx = 1;
+                                    foreach (var c in Model.TopPerformingClasses)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-bold text-muted">@(rankIdx++)</td>
+                                            <td>
+                                                <a href="/Attendance/Statistics?classId=@c.ClassId" class="fw-bold text-dark text-decoration-none">
+                                                    @c.ClassName
+                                                </a>
+                                                <small class="d-block text-muted">@c.GradeLevel</small>
+                                            </td>
+                                            <td class="text-center">@c.StudentCount</td>
+                                            <td class="text-center text-success fw-semibold">@c.MassRate.ToString("0.0")%</td>
+                                            <td class="text-center text-primary fw-semibold">@c.ClassRate.ToString("0.0")%</td>
+                                            <td class="text-end pe-3">
+                                                <span class="badge @(c.CombinedRate >= 85 ? "bg-success" : c.CombinedRate >= 70 ? "bg-primary" : "bg-warning text-dark") rounded-pill px-2">
+                                                    @c.CombinedRate.ToString("0.0")%
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
             </div>
         </div>
     </div>

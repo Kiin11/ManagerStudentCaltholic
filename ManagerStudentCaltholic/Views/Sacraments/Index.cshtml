@@ -1,6 +1,8 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.SacramentRegistryIndexViewModel
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Sổ Bộ Bí Tích Điện Tử";
+    bool isMobile = Context.Request.IsMobileDevice();
 }
 @Html.AntiForgeryToken()
 
@@ -166,123 +168,241 @@
 
     <!-- Bảng Tổng hợp Sổ Bộ Bí Tích -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light small text-uppercase">
-                    <tr>
-                        <th class="ps-3">Mã QR</th>
-                        <th>Tên Thánh & Họ Tên</th>
-                        <th>Lớp / Tuổi</th>
-                        <th class="text-center">1. Rửa Tội</th>
-                        <th class="text-center">2. Rước Lễ LĐ</th>
-                        <th class="text-center">3. Thêm Sức</th>
-                        <th class="text-center">4. Bao Đồng</th>
-                        <th class="text-end pe-3">Sổ Bộ</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model.Rows.Any())
+        @if (isMobile)
+        {
+            <div class="mobile-card-list">
+                @if (Model.Rows.Any())
+                {
+                    foreach (var r in Model.Rows)
                     {
-                        foreach (var r in Model.Rows)
-                        {
-                            <tr>
-                                <td class="ps-3">
+                        <div class="mobile-data-card">
+                            <div class="mobile-data-card-header">
+                                <div class="d-flex flex-wrap align-items-center gap-1">
                                     <span class="badge bg-light text-dark border font-monospace">@r.StudentCode</span>
-                                </td>
-                                <td>
-                                    <div class="fw-bold text-dark">
-                                        @r.ChristianName @r.FullName
-                                        @if (r.HasAgeWarning)
+                                    <span class="badge bg-primary-subtle text-primary">@r.ClassName</span>
+                                    <small class="text-muted fw-semibold">@r.Age tuổi</small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 text-nowrap flex-shrink-0"
+                                        onclick="openSacramentModal(@r.StudentId)">
+                                    <i class="bi bi-journal-bookmark-fill me-1"></i>Chi tiết
+                                </button>
+                            </div>
+
+                            <div class="mb-2">
+                                <div class="mobile-data-card-title">
+                                    @r.ChristianName @r.FullName
+                                    @if (r.HasAgeWarning)
+                                    {
+                                        <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Có Bí tích chưa cập nhật so với độ tuổi"></i>
+                                    }
+                                </div>
+                                <small class="text-muted">NS: @r.DateOfBirth.ToString("dd/MM/yyyy")</small>
+                            </div>
+
+                            <div class="mobile-data-grid-2">
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">1. Rửa Tội</span>
+                                    <div class="mobile-metric-value">
+                                        @if (r.HasBaptism)
                                         {
-                                            <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Có Bí tích chưa cập nhật so với độ tuổi"></i>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">@r.BaptismDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.BaptismBookNo))
+                                            {
+                                                <small class="d-block text-muted fw-normal font-monospace mt-1" style="font-size: 0.7rem;">Sổ: @r.BaptismBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary">Chưa ghi</span>
                                         }
                                     </div>
-                                    <small class="text-muted">NS: @r.DateOfBirth.ToString("dd/MM/yyyy")</small>
-                                </td>
-                                <td>
-                                    <span class="badge bg-primary-subtle text-primary">@r.ClassName</span>
-                                    <small class="text-muted d-block">@r.Age tuổi</small>
-                                </td>
-                                <td class="text-center">
-                                    @if (r.HasBaptism)
-                                    {
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle">@r.BaptismDateStr</span>
-                                        @if (!string.IsNullOrEmpty(r.BaptismBookNo))
+                                </div>
+
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">2. Rước Lễ LĐ</span>
+                                    <div class="mobile-metric-value">
+                                        @if (r.HasFirstCommunion)
                                         {
-                                            <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.BaptismBookNo</small>
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">@r.FirstCommunionDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.FirstCommunionBookNo))
+                                            {
+                                                <small class="d-block text-muted fw-normal font-monospace mt-1" style="font-size: 0.7rem;">Sổ: @r.FirstCommunionBookNo</small>
+                                            }
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-secondary-subtle text-secondary">Chưa ghi</span>
-                                    }
-                                </td>
-                                <td class="text-center">
-                                    @if (r.HasFirstCommunion)
-                                    {
-                                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">@r.FirstCommunionDateStr</span>
-                                        @if (!string.IsNullOrEmpty(r.FirstCommunionBookNo))
+                                        else
                                         {
-                                            <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.FirstCommunionBookNo</small>
+                                            <span class="text-muted small fw-normal">—</span>
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">—</span>
-                                    }
-                                </td>
-                                <td class="text-center">
-                                    @if (r.HasConfirmation)
-                                    {
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">@r.ConfirmationDateStr</span>
-                                        @if (!string.IsNullOrEmpty(r.ConfirmationBookNo))
+                                    </div>
+                                </div>
+
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">3. Thêm Sức</span>
+                                    <div class="mobile-metric-value">
+                                        @if (r.HasConfirmation)
                                         {
-                                            <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.ConfirmationBookNo</small>
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">@r.ConfirmationDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.ConfirmationBookNo))
+                                            {
+                                                <small class="d-block text-muted fw-normal font-monospace mt-1" style="font-size: 0.7rem;">Sổ: @r.ConfirmationBookNo</small>
+                                            }
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">—</span>
-                                    }
-                                </td>
-                                <td class="text-center">
-                                    @if (r.HasProfessionOfFaith)
-                                    {
-                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle">@r.ProfessionDateStr</span>
-                                        @if (!string.IsNullOrEmpty(r.ProfessionBookNo))
+                                        else
                                         {
-                                            <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.ProfessionBookNo</small>
+                                            <span class="text-muted small fw-normal">—</span>
                                         }
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">—</span>
-                                    }
-                                </td>
-                                <td class="text-end pe-3">
-                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
-                                            onclick="openSacramentModal(@r.StudentId)">
-                                        <i class="bi bi-journal-bookmark-fill me-1"></i>Chi tiết
-                                    </button>
+                                    </div>
+                                </div>
+
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">4. Bao Đồng</span>
+                                    <div class="mobile-metric-value">
+                                        @if (r.HasProfessionOfFaith)
+                                        {
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle">@r.ProfessionDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.ProfessionBookNo))
+                                            {
+                                                <small class="d-block text-muted fw-normal font-monospace mt-1" style="font-size: 0.7rem;">Sổ: @r.ProfessionBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small fw-normal">—</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted bg-white rounded-3 border">
+                        Không tìm thấy hồ sơ nào khớp với điều kiện lọc.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th class="ps-3">Mã QR</th>
+                            <th>Tên Thánh & Họ Tên</th>
+                            <th>Lớp / Tuổi</th>
+                            <th class="text-center">1. Rửa Tội</th>
+                            <th class="text-center">2. Rước Lễ LĐ</th>
+                            <th class="text-center">3. Thêm Sức</th>
+                            <th class="text-center">4. Bao Đồng</th>
+                            <th class="text-end pe-3">Sổ Bộ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Rows.Any())
+                        {
+                            foreach (var r in Model.Rows)
+                            {
+                                <tr>
+                                    <td class="ps-3">
+                                        <span class="badge bg-light text-dark border font-monospace">@r.StudentCode</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark">
+                                            @r.ChristianName @r.FullName
+                                            @if (r.HasAgeWarning)
+                                            {
+                                                <i class="bi bi-exclamation-triangle-fill text-warning ms-1" title="Có Bí tích chưa cập nhật so với độ tuổi"></i>
+                                            }
+                                        </div>
+                                        <small class="text-muted">NS: @r.DateOfBirth.ToString("dd/MM/yyyy")</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-primary-subtle text-primary">@r.ClassName</span>
+                                        <small class="text-muted d-block">@r.Age tuổi</small>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (r.HasBaptism)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">@r.BaptismDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.BaptismBookNo))
+                                            {
+                                                <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.BaptismBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary">Chưa ghi</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (r.HasFirstCommunion)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">@r.FirstCommunionDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.FirstCommunionBookNo))
+                                            {
+                                                <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.FirstCommunionBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (r.HasConfirmation)
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">@r.ConfirmationDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.ConfirmationBookNo))
+                                            {
+                                                <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.ConfirmationBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (r.HasProfessionOfFaith)
+                                        {
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle">@r.ProfessionDateStr</span>
+                                            @if (!string.IsNullOrEmpty(r.ProfessionBookNo))
+                                            {
+                                                <small class="d-block text-muted font-monospace" style="font-size: 0.7rem;">Sổ: @r.ProfessionBookNo</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                                onclick="openSacramentModal(@r.StudentId)">
+                                            <i class="bi bi-journal-bookmark-fill me-1"></i>Chi tiết
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    Không tìm thấy hồ sơ nào khớp với điều kiện lọc.
                                 </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
-                                Không tìm thấy hồ sơ nào khớp với điều kiện lọc.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
+        }
 
         @if (Model.TotalPages > 1)
         {
-            <div class="card-footer bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <div class="card-footer bg-white border-0 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <span class="text-muted small">Trang @Model.CurrentPage / @Model.TotalPages (Tổng: @Model.TotalStudents em)</span>
                 <nav>
                     <ul class="pagination pagination-sm mb-0">

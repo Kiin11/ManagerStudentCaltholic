@@ -1,6 +1,8 @@
 ﻿@using ManagerStudentCaltholic.Models.Entities
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Điều Hành Nhân Sự & Luân Chuyển Chức Vụ";
+    bool isMobile = Context.Request.IsMobileDevice();
     var years = ViewBag.AcademicYears as List<AcademicYear> ?? new List<AcademicYear>();
     var selectedYearId = (int)(ViewBag.SelectedYearId ?? 0);
     var branchAssignments = ViewBag.BranchHeadAssignments as List<BranchHeadAssignment> ?? new List<BranchHeadAssignment>();
@@ -32,53 +34,104 @@
     </div>
 
     <!-- 1. BẢNG PHÂN CÔNG TRƯỞNG KHỐI THEO NIÊN KHÓA (TASK-906) -->
-    <div class="card border-0 shadow-sm rounded-3 mb-4">
-        <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+    <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
+        <div class="card-header bg-light py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h5 class="fw-bold mb-0 text-dark">
                 <i class="bi bi-diagram-3-fill text-warning me-2"></i>Phân Công Trưởng Khối (Niên Khóa Được Chọn)
             </h5>
         </div>
         <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light small text-uppercase">
-                        <tr>
-                            <th class="ps-4">Khối / Phân Đoàn</th>
-                            <th>Trưởng Khối Đương Nhiệm</th>
-                            <th>Người Bổ Nhiệm</th>
-                            <th>Ngày Gán</th>
-                            <th class="text-end pe-4">Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var grade in new[] { "Khai Tâm", "Rước Lễ", "Thêm Sức", "Bao Đồng" })
-                        {
-                            var currentAssign = branchAssignments.FirstOrDefault(b => b.ManagedGradeLevel == grade);
-                            <tr>
-                                <td class="ps-4 fw-bold text-primary">@grade</td>
-                                <td>
-                                    @if (currentAssign != null && currentAssign.User != null)
-                                    {
-                                        <div class="fw-semibold">@currentAssign.User.ChristianName @currentAssign.User.FirstName @currentAssign.User.LastName</div>
-                                        <small class="text-muted">(@currentAssign.User.Username - @currentAssign.User.PhoneNumber)</small>
-                                    }
-                                    else
-                                    {
+            @if (isMobile)
+            {
+                <div class="mobile-card-list">
+                    @foreach (var grade in new[] { "Khai Tâm", "Rước Lễ", "Thêm Sức", "Bao Đồng" })
+                    {
+                        var currentAssign = branchAssignments.FirstOrDefault(b => b.ManagedGradeLevel == grade);
+                        <div class="mobile-data-card">
+                            <div class="mobile-data-card-header">
+                                <div class="mobile-data-card-title text-primary mb-0">Khối @grade</div>
+                                <button class="btn btn-sm btn-outline-primary rounded-pill px-3 text-nowrap flex-shrink-0"
+                                        onclick="openAssignGradeModal('@grade', @(currentAssign?.UserId ?? 0))">
+                                    <i class="bi bi-arrow-repeat me-1"></i> Luân chuyển / Gán mới
+                                </button>
+                            </div>
+
+                            <div class="mb-2">
+                                <span class="mobile-metric-label">Trưởng khối đương nhiệm</span>
+                                @if (currentAssign != null && currentAssign.User != null)
+                                {
+                                    <div class="fw-semibold text-dark">@currentAssign.User.ChristianName @currentAssign.User.FirstName @currentAssign.User.LastName</div>
+                                    <small class="text-muted">(@currentAssign.User.Username - @currentAssign.User.PhoneNumber)</small>
+                                }
+                                else
+                                {
+                                    <div class="mt-1">
                                         <span class="badge bg-secondary-subtle text-secondary">Chưa phân công</span>
-                                    }
-                                </td>
-                                <td>@(currentAssign?.AssignedByUser?.FirstName ?? "Hệ thống") @(currentAssign?.AssignedByUser?.LastName ?? "")</td>
-                                <td>@(currentAssign != null ? currentAssign.AssignedAt.ToString("dd/MM/yyyy HH:mm") : "-")</td>
-                                <td class="text-end pe-4">
-                                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="openAssignGradeModal('@grade', @(currentAssign?.UserId ?? 0))">
-                                        <i class="bi bi-arrow-repeat me-1"></i> Luân chuyển / Gán mới
-                                    </button>
-                                </td>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="mobile-data-grid-2">
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">Người bổ nhiệm</span>
+                                    <div class="mobile-metric-value">
+                                        @(currentAssign?.AssignedByUser?.FirstName ?? "Hệ thống") @(currentAssign?.AssignedByUser?.LastName ?? "")
+                                    </div>
+                                </div>
+                                <div class="mobile-metric-box">
+                                    <span class="mobile-metric-label">Ngày gán</span>
+                                    <div class="mobile-metric-value">
+                                        @(currentAssign != null ? currentAssign.AssignedAt.ToString("dd/MM/yyyy HH:mm") : "-")
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="ps-4">Khối / Phân Đoàn</th>
+                                <th>Trưởng Khối Đương Nhiệm</th>
+                                <th>Người Bổ Nhiệm</th>
+                                <th>Ngày Gán</th>
+                                <th class="text-end pe-4">Thao tác</th>
                             </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
+                        </thead>
+                        <tbody>
+                            @foreach (var grade in new[] { "Khai Tâm", "Rước Lễ", "Thêm Sức", "Bao Đồng" })
+                            {
+                                var currentAssign = branchAssignments.FirstOrDefault(b => b.ManagedGradeLevel == grade);
+                                <tr>
+                                    <td class="ps-4 fw-bold text-primary">@grade</td>
+                                    <td>
+                                        @if (currentAssign != null && currentAssign.User != null)
+                                        {
+                                            <div class="fw-semibold">@currentAssign.User.ChristianName @currentAssign.User.FirstName @currentAssign.User.LastName</div>
+                                            <small class="text-muted">(@currentAssign.User.Username - @currentAssign.User.PhoneNumber)</small>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary">Chưa phân công</span>
+                                        }
+                                    </td>
+                                    <td>@(currentAssign?.AssignedByUser?.FirstName ?? "Hệ thống") @(currentAssign?.AssignedByUser?.LastName ?? "")</td>
+                                    <td>@(currentAssign != null ? currentAssign.AssignedAt.ToString("dd/MM/yyyy HH:mm") : "-")</td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="openAssignGradeModal('@grade', @(currentAssign?.UserId ?? 0))">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Luân chuyển / Gán mới
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </div>
     </div>
 
@@ -86,12 +139,12 @@
     <div class="row g-4">
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm rounded-3 h-100">
-                <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-light py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <h5 class="fw-bold mb-0 text-dark">
                         <i class="bi bi-people-fill text-primary me-2"></i>Thành Viên Ban Điều Hành
                     </h5>
                     <!-- Đã sửa gọi hàm openPromoteModal() -->
-                    <button type="button" class="btn btn-sm btn-primary rounded-pill" onclick="openPromoteModal()">
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill text-nowrap flex-shrink-0" onclick="openPromoteModal()">
                         <i class="bi bi-person-plus me-1"></i> Bổ nhiệm BĐH mới
                     </button>
                 </div>

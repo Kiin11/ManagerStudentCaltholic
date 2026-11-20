@@ -1,7 +1,9 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.Student>
 @using ManagerStudentCaltholic.Models.Entities
+@using ManagerStudentCaltholic.Extensions
 @{
     ViewData["Title"] = "Hồ Sơ Thiếu Nhi";
+    bool isMobile = Context.Request.IsMobileDevice();
     var currentPage = (int)ViewBag.CurrentPage;
     var totalPages = (int)ViewBag.TotalPages;
     var totalCount = (int)ViewBag.TotalCount;
@@ -406,79 +408,30 @@
 
     <!-- Student Table -->
     <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th class="ps-4">Mã QR / Định Danh</th>
-                        <th>Tên Thánh & Họ Tên</th>
-                        <th>Giới Tính</th>
-                        <th>Ngày Sinh</th>
-                        <th>SĐT Phụ Huynh</th>
-                        <th class="text-center">Trạng Thái</th>
-                        <th class="text-end pe-4">Thao Tác</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model != null && Model.Any())
+        @if (isMobile)
+        {
+            <div class="mobile-card-list">
+                @if (Model != null && Model.Any())
+                {
+                    @foreach (var s in Model)
                     {
-                        @foreach (var s in Model)
-                        {
-                            studentClassMap.TryGetValue(s.Id, out var currentClass);
-                            studentUserMap.TryGetValue(s.Id, out var linkedUser);
-                            bool isProbationaryStudent = currentClass != null && GradeLevel.IsProbationaryGrade(currentClass.GradeLevel);
-                            <tr>
-                                <td class="ps-4">
+                        studentClassMap.TryGetValue(s.Id, out var currentClass);
+                        studentUserMap.TryGetValue(s.Id, out var linkedUser);
+                        bool isProbationaryStudent = currentClass != null && GradeLevel.IsProbationaryGrade(currentClass.GradeLevel);
+                        <div class="mobile-data-card">
+                            <div class="mobile-data-card-header">
+                                <div class="d-flex flex-wrap align-items-center gap-1">
                                     <span class="badge bg-light text-dark border font-monospace px-2 py-1">
                                         <i class="bi bi-qr-code me-1"></i>@s.StudentCode
                                     </span>
                                     @if (currentClass != null)
                                     {
-                                        <div class="mt-1">
-                                            <span class="badge @(isProbationaryStudent ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-light text-secondary border") rounded-pill">
-                                                @currentClass.Name
-                                            </span>
-                                        </div>
+                                        <span class="badge @(isProbationaryStudent ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-light text-secondary border") rounded-pill">
+                                            @currentClass.Name
+                                        </span>
                                     }
-                                </td>
-                                <td>
-                                    <a asp-action="Details" asp-route-id="@s.Id" class="fw-bold text-dark text-decoration-none">
-                                        @s.ChristianName @s.FirstName @s.LastName
-                                    </a>
-                                    <div>
-                                        <small class="text-muted">
-                                            @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "Chưa cập nhật Rửa tội")
-                                            @(s.ConfirmationDate.HasValue ? $" | Thêm sức: {s.ConfirmationDate.Value:dd/MM/yyyy}" : "")
-                                        </small>
-                                    </div>
-                                    @if (linkedUser != null)
-                                    {
-                                        <div class="mt-1">
-                                            <span class="badge @(linkedUser.Role == UserRole.Teacher ? "bg-success-subtle text-success border border-success-subtle" : "bg-warning-subtle text-dark border border-warning-subtle") rounded-pill">
-                                                <i class="bi bi-person-badge me-1"></i>TK: @linkedUser.Username (@(linkedUser.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : linkedUser.Role))
-                                            </span>
-                                        </div>
-                                    }
-                                </td>
-                                <td>
-                                    <span class="badge @(s.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
-                                        @s.Gender
-                                    </span>
-                                </td>
-                                <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(s.ParentPhone))
-                                    {
-                                        <a href="tel:@s.ParentPhone" class="text-decoration-none">
-                                            <i class="bi bi-telephone-outbound me-1"></i>@s.ParentPhone
-                                        </a>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-muted small">Chưa có</span>
-                                    }
-                                </td>
-                                <td class="text-center">
+                                </div>
+                                <div class="flex-shrink-0">
                                     @if (s.IsActive)
                                     {
                                         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Đang học</span>
@@ -487,57 +440,222 @@
                                     {
                                         <span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-pill">Tạm nghỉ</span>
                                     }
-                                </td>
-                                <td class="text-end pe-4">
-                                    <div class="d-inline-flex flex-wrap justify-content-end gap-1">
-                                        <a asp-action="Details" asp-route-id="@s.Id" class="btn btn-outline-dark btn-sm rounded-pill px-2" title="Hồ sơ &amp; Timeline Kép">
-                                            <i class="bi bi-person-vcard"></i> Chi tiết
-                                        </a>
-                                        @if (canManageProbationary && (isProbationaryStudent || linkedUser != null || s.BaoDongPromiseDate.HasValue || s.CatechistPromiseDate.HasValue || (currentClass != null && GradeLevel.IsAfternoonGrade(currentClass.GradeLevel))))
-                                        {
-                                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
-                                                    onclick="openProbationaryModal(@s.Id)" title="Cấp tài khoản Dự Bị &amp; Cập nhật Tuyên hứa GLV">
-                                                <i class="bi bi-award-fill me-1"></i>Dự Bị / GLV
-                                            </button>
-                                        }
-                                        <!-- Nút mở Sổ bộ & Tiến trình Bí tích (FEAT-P3-03) -->
-                                        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
-                                                onclick="openSacramentModal(@s.Id)" title="Xem &amp; Cập nhật Sổ bộ Bí tích">
-                                            <i class="bi bi-journal-bookmark-fill me-1"></i>Bí Tích
-                                        </button>
-                                        <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-pill px-2" title="Tải file ảnh QR">
-                                            <i class="bi bi-qr-code"></i> QR
-                                        </a>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2" onclick="openEditModal(@s.Id)" title="Chỉnh sửa hồ sơ">
-                                            <i class="bi bi-pencil"></i> Sửa
-                                        </button>
-                                        <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-pill px-2" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
-                                                <i class="bi bi-power"></i> @(s.IsActive ? "Khóa" : "Mở")
-                                            </button>
-                                        </form>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <a asp-action="Details" asp-route-id="@s.Id" class="mobile-data-card-title text-decoration-none d-block">
+                                    @s.ChristianName @s.FirstName @s.LastName
+                                </a>
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1 small text-muted">
+                                    <span class="badge @(s.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
+                                        @s.Gender
+                                    </span>
+                                    <span><i class="bi bi-cake2 me-1"></i>@s.DateOfBirth.ToString("dd/MM/yyyy")</span>
+                                </div>
+                                <div class="small text-muted mt-1">
+                                    @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "Chưa cập nhật Rửa tội")
+                                    @(s.ConfirmationDate.HasValue ? $" | Thêm sức: {s.ConfirmationDate.Value:dd/MM/yyyy}" : "")
+                                </div>
+                                @if (linkedUser != null)
+                                {
+                                    <div class="mt-1">
+                                        <span class="badge @(linkedUser.Role == UserRole.Teacher ? "bg-success-subtle text-success border border-success-subtle" : "bg-warning-subtle text-dark border border-warning-subtle") rounded-pill">
+                                            <i class="bi bi-person-badge me-1"></i>TK: @linkedUser.Username (@(linkedUser.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : linkedUser.Role))
+                                        </span>
                                     </div>
+                                }
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center bg-light border rounded-3 px-2 py-1 mb-2 small">
+                                <span class="text-muted fw-semibold">SĐT Phụ huynh:</span>
+                                @if (!string.IsNullOrEmpty(s.ParentPhone))
+                                {
+                                    <a href="tel:@s.ParentPhone" class="text-decoration-none fw-bold text-primary">
+                                        <i class="bi bi-telephone-outbound me-1"></i>@s.ParentPhone
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Chưa có</span>
+                                }
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-1 pt-2 border-top">
+                                <a asp-action="Details" asp-route-id="@s.Id" class="btn btn-outline-dark btn-sm rounded-pill px-2 flex-fill">
+                                    <i class="bi bi-person-vcard"></i> Chi tiết
+                                </a>
+                                @if (canManageProbationary && (isProbationaryStudent || linkedUser != null || s.BaoDongPromiseDate.HasValue || s.CatechistPromiseDate.HasValue || (currentClass != null && GradeLevel.IsAfternoonGrade(currentClass.GradeLevel))))
+                                {
+                                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2 flex-fill"
+                                            onclick="openProbationaryModal(@s.Id)">
+                                        <i class="bi bi-award-fill me-1"></i>Dự Bị / GLV
+                                    </button>
+                                }
+                                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2 flex-fill"
+                                        onclick="openSacramentModal(@s.Id)">
+                                    <i class="bi bi-journal-bookmark-fill me-1"></i>Bí Tích
+                                </button>
+                                <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-pill px-2">
+                                    <i class="bi bi-qr-code"></i> QR
+                                </a>
+                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2" onclick="openEditModal(@s.Id)">
+                                    <i class="bi bi-pencil"></i> Sửa
+                                </button>
+                                <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-pill px-2">
+                                        <i class="bi bi-power"></i> @(s.IsActive ? "Khóa" : "Mở")
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted bg-white rounded-3 border">
+                        <i class="bi bi-people fs-1 d-block mb-2"></i>
+                        Không tìm thấy hồ sơ thiếu nhi nào phù hợp.
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Mã QR / Định Danh</th>
+                            <th>Tên Thánh & Họ Tên</th>
+                            <th>Giới Tính</th>
+                            <th>Ngày Sinh</th>
+                            <th>SĐT Phụ Huynh</th>
+                            <th class="text-center">Trạng Thái</th>
+                            <th class="text-end pe-4">Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model != null && Model.Any())
+                        {
+                            @foreach (var s in Model)
+                            {
+                                studentClassMap.TryGetValue(s.Id, out var currentClass);
+                                studentUserMap.TryGetValue(s.Id, out var linkedUser);
+                                bool isProbationaryStudent = currentClass != null && GradeLevel.IsProbationaryGrade(currentClass.GradeLevel);
+                                <tr>
+                                    <td class="ps-4">
+                                        <span class="badge bg-light text-dark border font-monospace px-2 py-1">
+                                            <i class="bi bi-qr-code me-1"></i>@s.StudentCode
+                                        </span>
+                                        @if (currentClass != null)
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge @(isProbationaryStudent ? "bg-primary-subtle text-primary border border-primary-subtle" : "bg-light text-secondary border") rounded-pill">
+                                                    @currentClass.Name
+                                                </span>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <a asp-action="Details" asp-route-id="@s.Id" class="fw-bold text-dark text-decoration-none">
+                                            @s.ChristianName @s.FirstName @s.LastName
+                                        </a>
+                                        <div>
+                                            <small class="text-muted">
+                                                @(s.BaptismDate.HasValue ? $"Rửa tội: {s.BaptismDate.Value:dd/MM/yyyy}" : "Chưa cập nhật Rửa tội")
+                                                @(s.ConfirmationDate.HasValue ? $" | Thêm sức: {s.ConfirmationDate.Value:dd/MM/yyyy}" : "")
+                                            </small>
+                                        </div>
+                                        @if (linkedUser != null)
+                                        {
+                                            <div class="mt-1">
+                                                <span class="badge @(linkedUser.Role == UserRole.Teacher ? "bg-success-subtle text-success border border-success-subtle" : "bg-warning-subtle text-dark border border-warning-subtle") rounded-pill">
+                                                    <i class="bi bi-person-badge me-1"></i>TK: @linkedUser.Username (@(linkedUser.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : linkedUser.Role))
+                                                </span>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(s.Gender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill px-2">
+                                            @s.Gender
+                                        </span>
+                                    </td>
+                                    <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(s.ParentPhone))
+                                        {
+                                            <a href="tel:@s.ParentPhone" class="text-decoration-none">
+                                                <i class="bi bi-telephone-outbound me-1"></i>@s.ParentPhone
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">Chưa có</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (s.IsActive)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Đang học</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-pill">Tạm nghỉ</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-inline-flex flex-wrap justify-content-end gap-1">
+                                            <a asp-action="Details" asp-route-id="@s.Id" class="btn btn-outline-dark btn-sm rounded-pill px-2" title="Hồ sơ &amp; Timeline Kép">
+                                                <i class="bi bi-person-vcard"></i> Chi tiết
+                                            </a>
+                                            @if (canManageProbationary && (isProbationaryStudent || linkedUser != null || s.BaoDongPromiseDate.HasValue || s.CatechistPromiseDate.HasValue || (currentClass != null && GradeLevel.IsAfternoonGrade(currentClass.GradeLevel))))
+                                            {
+                                                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
+                                                        onclick="openProbationaryModal(@s.Id)" title="Cấp tài khoản Dự Bị &amp; Cập nhật Tuyên hứa GLV">
+                                                    <i class="bi bi-award-fill me-1"></i>Dự Bị / GLV
+                                                </button>
+                                            }
+                                            <!-- Nút mở Sổ bộ & Tiến trình Bí tích (FEAT-P3-03) -->
+                                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-2"
+                                                    onclick="openSacramentModal(@s.Id)" title="Xem &amp; Cập nhật Sổ bộ Bí tích">
+                                                <i class="bi bi-journal-bookmark-fill me-1"></i>Bí Tích
+                                            </button>
+                                            <a asp-action="DownloadQr" asp-route-studentCode="@s.StudentCode" class="btn btn-outline-info btn-sm rounded-pill px-2" title="Tải file ảnh QR">
+                                                <i class="bi bi-qr-code"></i> QR
+                                            </a>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2" onclick="openEditModal(@s.Id)" title="Chỉnh sửa hồ sơ">
+                                                <i class="bi bi-pencil"></i> Sửa
+                                            </button>
+                                            <form asp-action="ToggleActive" asp-route-id="@s.Id" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-outline-@(s.IsActive ? "warning" : "success") btn-sm rounded-pill px-2" title="@(s.IsActive ? "Tạm ngưng" : "Kích hoạt lại")">
+                                                    <i class="bi bi-power"></i> @(s.IsActive ? "Khóa" : "Mở")
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <i class="bi bi-people fs-1 d-block mb-2"></i>
+                                    Không tìm thấy hồ sơ thiếu nhi nào phù hợp.
                                 </td>
                             </tr>
                         }
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">
-                                <i class="bi bi-people fs-1 d-block mb-2"></i>
-                                Không tìm thấy hồ sơ thiếu nhi nào phù hợp.
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
+        }
 
         @if (totalPages > 1)
         {
-            <div class="card-footer bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <div class="card-footer bg-white border-0 py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <span class="text-muted small">Trang @currentPage / @totalPages</span>
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
