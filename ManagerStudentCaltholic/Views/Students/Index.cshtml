@@ -99,12 +99,12 @@
                         <label class="form-label fw-semibold">Xếp Vào Lớp Học (Tùy chọn)</label>
                         <select name="InitialClassId" id="create_InitialClassId" class="form-select" onchange="previewStudentCodeByClass()">
                             <option value="">-- Chưa xếp lớp (Sinh mã chung) --</option>
-                            @foreach (var cls in availableClasses)
+                            @foreach (var cls in availableClasses.Where(c => !GradeLevel.IsProbationaryGrade(c.GradeLevel)))
                             {
                                 <option value="@cls.Id">[@cls.GradeLevel] @cls.Name</option>
                             }
                         </select>
-                        <small class="text-muted">Chọn lớp để tự động sinh mã theo tên lớp (VD: TS3A001).</small>
+                        <small class="text-muted">Chọn lớp để tự động sinh mã theo tên lớp (VD: TS3A001). Khối Dự Bị tạo từ tài khoản Dự Bị.</small>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Mã Thiếu Nhi / QR (Tự động hoặc Nhập tay)</label>

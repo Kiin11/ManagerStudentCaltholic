@@ -331,6 +331,13 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     selectedClass = await _context.Classes
                         .FirstOrDefaultAsync(c => c.Id == model.InitialClassId.Value);
+
+                    if (selectedClass != null && GradeLevel.IsProbationaryGrade(selectedClass.GradeLevel))
+                    {
+                        await transaction.RollbackAsync();
+                        TempData["ErrorMessage"] = "Khối Dự Bị không cho phép tạo mới học sinh trực tiếp. Vui lòng tạo tài khoản vai trò 'Dự Bị' tại Quản Trị Người Dùng trước, sau đó thêm vào lớp Dự Bị 1..4!";
+                        return RedirectToAction(nameof(Index));
+                    }
                 }
 
                 // FEAT-P4-03: Sinh mã tự động theo công thức tên lớp (VD: Thêm Sức 3A -> TS3A001)
@@ -798,6 +805,11 @@ namespace ManagerStudentCaltholic.Controllers
 
                 _context.Users.Add(createdUser);
                 await _context.SaveChangesAsync();
+
+                if (!string.Equals(student.StudentCode, createdUser.Username, StringComparison.Ordinal))
+                {
+                    student.StudentCode = createdUser.Username;
+                }
 
                 _context.UserRoleHistories.Add(new UserRoleHistory
                 {

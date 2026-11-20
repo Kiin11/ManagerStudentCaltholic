@@ -175,6 +175,71 @@ namespace ManagerStudentCaltholic.Controllers
                 ManagedGradeLevel = managedGradeLevel
             };
 
+            if (newUser.Role == UserRole.ProbationaryTeacher)
+            {
+                var strategy = _context.Database.CreateExecutionStrategy();
+                string? conflictMessage = null;
+
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    var existingStudent = await _context.Students
+                        .FirstOrDefaultAsync(s => s.StudentCode.ToLower() == usernameClean);
+
+                    if (existingStudent != null)
+                    {
+                        bool alreadyLinked = await _context.Users
+                            .AnyAsync(u => u.LinkedStudentId == existingStudent.Id || u.StudentId == existingStudent.Id);
+                        if (alreadyLinked)
+                        {
+                            conflictMessage = $"Mã học viên '{usernameClean}' đã được liên kết với một tài khoản khác.";
+                            return;
+                        }
+
+                        existingStudent.StudentCode = newUser.Username;
+                        newUser.LinkedStudentId = existingStudent.Id;
+                        newUser.StudentId = existingStudent.Id;
+                    }
+                    else
+                    {
+                        var probationaryStudent = new Student
+                        {
+                            StudentCode = newUser.Username,
+                            ChristianName = newUser.ChristianName ?? string.Empty,
+                            FirstName = normalizedFirstName.Length > 90 ? normalizedFirstName[..90] : normalizedFirstName,
+                            LastName = normalizedLastName,
+                            Gender = InferGenderFromName(newUser.ChristianName, normalizedFirstName),
+                            DateOfBirth = newUser.DateOfBirth.HasValue
+                                ? DateTime.SpecifyKind(newUser.DateOfBirth.Value.Date, DateTimeKind.Utc)
+                                : new DateTime(DateTime.UtcNow.Year - 16, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                            ParentPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
+                            IsActive = true
+                        };
+
+                        _context.Students.Add(probationaryStudent);
+                        await _context.SaveChangesAsync();
+
+                        newUser.LinkedStudentId = probationaryStudent.Id;
+                        newUser.StudentId = probationaryStudent.Id;
+                    }
+
+                    _context.Users.Add(newUser);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                if (!string.IsNullOrEmpty(conflictMessage))
+                {
+                    return Json(new { success = false, message = conflictMessage });
+                }
+
+                _logger.LogInformation("Người dùng {CurrentUser} đã tạo tài khoản Dự Bị mới: {NewUsername} (StudentCode = {StudentCode})",
+                    User.Identity?.Name, newUser.Username, newUser.Username);
+
+                return Json(new { success = true, message = $"Đã tạo tài khoản Dự Bị '{newUser.Username}' (Mã học viên: {newUser.Username})!" });
+            }
+
             _context.Users.Add(newUser);
             await _context.SaveChangesAsync();
 
@@ -695,6 +760,19 @@ namespace ManagerStudentCaltholic.Controllers
             }
         }
         #endregion
+
+        private static string InferGenderFromName(string? christianName, string? firstName)
+        {
+            string combined = $" {christianName ?? ""} {firstName ?? ""} ".ToLowerInvariant();
+            string[] femaleMarkers =
+            {
+                " maria ", " têrêsa ", " teresa ", " anna ", " lucia ", " lusia ",
+                " agatha ", " agnes ", " marta ", " catarina ", " rosa ", " mônica ",
+                " monica ", " elisabeth ", " madalena ", " cêcilia ", " clara ", " thị "
+            };
+
+            return femaleMarkers.Any(m => combined.Contains(m)) ? "Nữ" : "Nam";
+        }
 
         // Kiểm tra xem người thao tác hiện tại có quyền tác động (Tạo / Đổi MK / Khóa) lên vai trò đích không
         private bool CanManageTargetRole(string targetRole)
