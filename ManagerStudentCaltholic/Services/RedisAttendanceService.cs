@@ -348,10 +348,20 @@ namespace ManagerStudentCaltholic.Services
                 if (studentDict.TryGetValue(item.EnrollmentId, out var row))
                 {
                     row.AttendedMass = item.AttendedMass;
-                    row.MassStatus = item.MassStatus;
+                    row.MassStatus = NormalizeAttendanceStatus(item.AttendedMass, item.MassStatus, allowLinedUp: true);
+                    if (!item.AttendedMass)
+                    {
+                        row.MassCheckInTime = null;
+                    }
+
                     row.ClassAttended = item.ClassAttended;
-                    row.ClassStatus = item.ClassStatus;
-                    row.Note = item.Note;
+                    row.ClassStatus = NormalizeAttendanceStatus(item.ClassAttended, item.ClassStatus, allowLinedUp: false);
+                    if (!item.ClassAttended)
+                    {
+                        row.ClassCheckInTime = null;
+                    }
+
+                    row.Note = string.IsNullOrWhiteSpace(item.Note) ? null : item.Note.Trim();
                 }
             }
 
@@ -374,6 +384,110 @@ namespace ManagerStudentCaltholic.Services
             await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(request.ClassId, dateUtc));
 
             return (true, $"Đã lưu nhanh sổ điểm danh ngày {dateUtc:dd/MM/yyyy} lên bộ đệm Redis ({request.Items.Count} em)! Hệ thống sẽ tự động đồng bộ bền vững xuống CSDL.");
+        }
+
+        /// <summary>
+        /// 4B. Cập nhật tức thì (Write-Through Redis + PostgreSQL) trạng thái điểm danh và ghi chú lý do của 1 học sinh
+        /// </summary>
+        public async Task<(bool Success, string Message, StudentAttendanceRowItem? UpdatedRow)> QuickUpdateSingleAttendanceAsync(AttendanceSingleUpdateDto request)
+        {
+            var dateUtc = DateTime.SpecifyKind(request.AttendanceDate.Date, DateTimeKind.Utc);
+            var sheetKey = RedisAttendanceKeys.ClassSheet(request.ClassId, dateUtc);
+
+            var normalizedMassStatus = NormalizeAttendanceStatus(request.AttendedMass, request.MassStatus, allowLinedUp: true);
+            var normalizedClassStatus = NormalizeAttendanceStatus(request.ClassAttended, request.ClassStatus, allowLinedUp: false);
+
+            var sheetVm = await GetOrLoadClassSheetAsync(request.ClassId, dateUtc);
+            var targetRow = sheetVm.Students.FirstOrDefault(s => s.EnrollmentId == request.EnrollmentId);
+            if (targetRow == null)
+            {
+                return (false, "Không tìm thấy học sinh trong danh sách lớp này.", null);
+            }
+
+            targetRow.AttendedMass = request.AttendedMass;
+            targetRow.MassStatus = normalizedMassStatus;
+            if (!request.AttendedMass)
+            {
+                targetRow.MassCheckInTime = null;
+            }
+
+            targetRow.ClassAttended = request.ClassAttended;
+            targetRow.ClassStatus = normalizedClassStatus;
+            if (!request.ClassAttended)
+            {
+                targetRow.ClassCheckInTime = null;
+            }
+
+            targetRow.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+
+            // Write-Through tức thì cho duy nhất bản ghi của thiếu nhi này xuống PostgreSQL
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                var existing = await _context.Attendances
+                    .FirstOrDefaultAsync(a => a.EnrollmentId == request.EnrollmentId && a.AttendanceDate == dateUtc);
+
+                if (existing != null)
+                {
+                    existing.AttendedMass = targetRow.AttendedMass;
+                    existing.MassStatus = targetRow.MassStatus;
+                    if (!targetRow.AttendedMass)
+                    {
+                        existing.MassCheckInTime = null;
+                    }
+
+                    existing.ClassAttended = targetRow.ClassAttended;
+                    existing.ClassStatus = targetRow.ClassStatus;
+                    if (!targetRow.ClassAttended)
+                    {
+                        existing.ClassCheckInTime = null;
+                    }
+
+                    existing.Note = targetRow.Note;
+                }
+                else
+                {
+                    _context.Attendances.Add(new Attendance
+                    {
+                        EnrollmentId = request.EnrollmentId,
+                        AttendanceDate = dateUtc,
+                        DayOfWeek = dateUtc.DayOfWeek,
+                        AttendedMass = targetRow.AttendedMass,
+                        MassStatus = targetRow.MassStatus,
+                        MassCheckInTime = targetRow.MassCheckInTime,
+                        ClassAttended = targetRow.ClassAttended,
+                        ClassStatus = targetRow.ClassStatus,
+                        ClassCheckInTime = targetRow.ClassCheckInTime,
+                        Note = targetRow.Note,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
+
+            var existingSheetPayload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
+            var updatedPayload = new RedisClassAttendancePayload
+            {
+                ClassId = sheetVm.ClassId,
+                ClassName = sheetVm.ClassName,
+                GradeLevel = sheetVm.GradeLevel,
+                AttendanceDate = dateUtc,
+                CachedAtUtc = existingSheetPayload?.CachedAtUtc ?? DateTime.UtcNow,
+                LastModifiedAtUtc = DateTime.UtcNow,
+                IsDirty = existingSheetPayload?.IsDirty ?? false,
+                Students = sheetVm.Students
+            };
+
+            await _cache.SetAsync(sheetKey, updatedPayload, DefaultCacheTtl);
+            await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(request.ClassId, dateUtc));
+            await _cache.RemoveAsync($"staff_lookup:student_360:{targetRow.StudentId}");
+
+            var displayName = $"{targetRow.ChristianName} {targetRow.FullName}".Trim();
+            return (true, $"Đã lưu điểm danh: {displayName}", targetRow);
         }
 
         /// <summary>
@@ -943,6 +1057,31 @@ namespace ManagerStudentCaltholic.Services
         }
 
         #region Helpers Nội bộ
+        private static string NormalizeAttendanceStatus(bool isAttended, string? status, bool allowLinedUp)
+        {
+            var normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
+
+            if (isAttended)
+            {
+                if (normalized == AttendanceStatus.Present ||
+                    normalized == AttendanceStatus.Late ||
+                    (allowLinedUp && normalized == AttendanceStatus.LinedUp))
+                {
+                    return normalized;
+                }
+
+                return AttendanceStatus.Present;
+            }
+
+            if (normalized == AttendanceStatus.AbsentPermitted ||
+                normalized == AttendanceStatus.AbsentUnpermitted)
+            {
+                return normalized;
+            }
+
+            return AttendanceStatus.AbsentUnpermitted;
+        }
+
         private async Task MarkClassDirtyAsync(int classId, DateTime dateUtc)
         {
             var dirtyKey = RedisAttendanceKeys.DirtyPartitionsIndex(dateUtc);
@@ -977,12 +1116,20 @@ namespace ManagerStudentCaltholic.Services
                         {
                             existing.MassCheckInTime = item.MassCheckInTime;
                         }
+                        else if (!item.AttendedMass)
+                        {
+                            existing.MassCheckInTime = null;
+                        }
 
                         existing.ClassAttended = item.ClassAttended;
                         existing.ClassStatus = item.ClassStatus;
                         if (item.ClassCheckInTime.HasValue)
                         {
                             existing.ClassCheckInTime = item.ClassCheckInTime;
+                        }
+                        else if (!item.ClassAttended)
+                        {
+                            existing.ClassCheckInTime = null;
                         }
 
                         existing.Note = item.Note;

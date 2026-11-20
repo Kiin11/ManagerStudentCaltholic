@@ -27,6 +27,30 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? Note { get; set; }
     }
 
+    // DTO cập nhật tức thì (Real-time Single Row Save) trạng thái điểm danh của 1 thiếu nhi
+    public class AttendanceSingleUpdateDto
+    {
+        [Required(ErrorMessage = "Thiếu thông tin lớp học")]
+        public int ClassId { get; set; }
+
+        [Required(ErrorMessage = "Thiếu ngày điểm danh")]
+        public DateTime AttendanceDate { get; set; }
+
+        [Required(ErrorMessage = "Thiếu mã xếp lớp của học sinh")]
+        public long EnrollmentId { get; set; }
+
+        public string? StudentCode { get; set; }
+
+        public bool AttendedMass { get; set; }
+        public string MassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+
+        public bool ClassAttended { get; set; }
+        public string ClassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+
+        [StringLength(500)]
+        public string? Note { get; set; }
+    }
+
     // ViewModel phục vụ hiển thị màn hình Sổ Điểm Danh Lớp
     public class ClassAttendanceSheetViewModel
     {

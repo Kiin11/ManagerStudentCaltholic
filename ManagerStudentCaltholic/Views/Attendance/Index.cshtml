@@ -227,10 +227,11 @@
                             <div class="mobile-att-info">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                                     <div>
-                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                                             <span class="badge bg-secondary-subtle text-secondary rounded-pill">#@(stt++)</span>
                                             <span class="badge bg-light text-dark border font-monospace student-code-badge">@s.StudentCode</span>
                                             <small class="text-muted">(@s.Gender)</small>
+                                            <span class="badge rounded-pill d-none quick-save-badge"></span>
                                         </div>
                                         <div class="mobile-att-student-name student-fullname-text">@s.ChristianName @s.FullName</div>
                                     </div>
@@ -251,7 +252,7 @@
                                     </div>
                                 </div>
                                 <input type="text" class="form-control form-control-sm input-note mt-1"
-                                       placeholder="Ghi chú lý do vắng/trễ..." value="@s.Note" />
+                                       placeholder="Ghi chú lý do vắng/trễ..." value="@s.Note" onchange="onNoteChange(this)" />
                             </div>
 
                             <!-- HÀNG DƯỚI: TRƯỜNG HỢP CHÚA NHẬT (2 CỘT: ĐI HỌC CN | ĐI LỄ CHÚA NHẬT) HOẶC THỨ 5 (1 CỘT: ĐI LỄ THỨ 5) -->
@@ -272,7 +273,7 @@
                                                 <input class="form-check-input chk-class" type="checkbox" role="switch"
                                                        @(s.ClassAttended ? "checked" : "") onchange="onClassToggle(this)" />
                                             </div>
-                                            <select class="form-select form-select-sm select-class-status">
+                                            <select class="form-select form-select-sm select-class-status" onchange="onClassStatusChange(this)">
                                                 <!option value="PRESENT" @(s.ClassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                                 <!option value="LATE" @(s.ClassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
                                                 <!option value="ABSENT_PERMITTED" @(s.ClassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
@@ -295,7 +296,7 @@
                                                 <input class="form-check-input chk-mass" type="checkbox" role="switch"
                                                        @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
                                             </div>
-                                            <select class="form-select form-select-sm select-mass-status">
+                                            <select class="form-select form-select-sm select-mass-status" onchange="onMassStatusChange(this)">
                                                 <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
                                                 <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                                 <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
@@ -324,7 +325,7 @@
                                             <input class="form-check-input chk-mass" type="checkbox" role="switch"
                                                    @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
                                         </div>
-                                        <select class="form-select form-select-sm select-mass-status">
+                                        <select class="form-select form-select-sm select-mass-status" onchange="onMassStatusChange(this)">
                                             <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
                                             <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                             <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
@@ -386,7 +387,10 @@
                                     </td>
                                     <td>
                                         <div class="fw-bold text-dark student-fullname-text">@s.ChristianName @s.FullName</div>
-                                        <small class="text-muted">Giới tính: @s.Gender</small>
+                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                            <small class="text-muted">Giới tính: @s.Gender</small>
+                                            <span class="badge rounded-pill d-none quick-save-badge"></span>
+                                        </div>
                                     </td>
 
                                     <!-- CỘT CHUYÊN CẦN HỌC GIÁO LÝ -->
@@ -398,7 +402,7 @@
                                                     <input class="form-check-input chk-class" type="checkbox" role="switch"
                                                            @(s.ClassAttended ? "checked" : "") onchange="onClassToggle(this)" />
                                                 </div>
-                                                <select class="form-select form-select-sm select-class-status">
+                                                <select class="form-select form-select-sm select-class-status" onchange="onClassStatusChange(this)">
                                                     <!option value="PRESENT" @(s.ClassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                                     <!option value="LATE" @(s.ClassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
                                                     <!option value="ABSENT_PERMITTED" @(s.ClassStatus == "ABSENT_PERMITTED" ? "selected" : "")>Vắng có phép</!option>
@@ -418,7 +422,7 @@
                                                 <input class="form-check-input chk-mass" type="checkbox" role="switch"
                                                        @(s.AttendedMass ? "checked" : "") onchange="onMassToggle(this)" />
                                             </div>
-                                            <select class="form-select form-select-sm select-mass-status">
+                                            <select class="form-select form-select-sm select-mass-status" onchange="onMassStatusChange(this)">
                                                 <!option value="LINED_UP" @(s.MassStatus == "LINED_UP" ? "selected" : "")>Xếp hàng</!option>
                                                 <!option value="PRESENT" @(s.MassStatus == "PRESENT" ? "selected" : "")>Có mặt</!option>
                                                 <!option value="LATE" @(s.MassStatus == "LATE" ? "selected" : "")>Đi trễ</!option>
@@ -433,7 +437,7 @@
                                     </td>
 
                                     <td>
-                                        <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" />
+                                        <input type="text" class="form-control form-control-sm input-note" placeholder="Lý do/ghi chú..." value="@s.Note" onchange="onNoteChange(this)" />
                                     </td>
                                     <td>
                                         <!-- NÚT 1-CLICK COPY TIN BÁO VẮNG GỬI ZALO/VIBER (TASK-P3-07.4) -->
@@ -706,28 +710,215 @@
             window.location.href = `/Attendance/Index?classId=${classId}&date=${date}`;
         }
 
+        const rowSaveSequenceMap = new Map();
+        const rowBadgeHideTimers = new Map();
+
+        function buildRowAttendanceItem(row) {
+            const enrollmentId = parseInt(row.getAttribute('data-enrollment-id'));
+            const code = row.getAttribute('data-student-code') || row.querySelector('.student-code-badge')?.textContent?.trim() || '';
+
+            const chkClass = row.querySelector('.chk-class');
+            const selClass = row.querySelector('.select-class-status');
+            const classAttended = chkClass ? chkClass.checked : false;
+            const classStatus = selClass ? selClass.value : 'ABSENT_UNPERMITTED';
+
+            const chkMass = row.querySelector('.chk-mass');
+            const selMass = row.querySelector('.select-mass-status');
+            const attendedMass = chkMass ? chkMass.checked : false;
+            const massStatus = selMass ? selMass.value : 'ABSENT_UNPERMITTED';
+
+            const inputNote = row.querySelector('.input-note');
+            const note = inputNote ? inputNote.value : '';
+
+            return {
+                enrollmentId: enrollmentId,
+                studentCode: code,
+                classAttended: classAttended,
+                classStatus: classStatus,
+                attendedMass: attendedMass,
+                massStatus: massStatus,
+                note: note
+            };
+        }
+
+        function setRowSaveBadge(row, enrollmentId, state, text) {
+            const existingTimer = rowBadgeHideTimers.get(enrollmentId);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+                rowBadgeHideTimers.delete(enrollmentId);
+            }
+
+            const badge = row.querySelector('.quick-save-badge');
+            if (!badge) return;
+
+            if (state === 'saving') {
+                badge.className = 'badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle quick-save-badge';
+                badge.textContent = text || 'Đang lưu...';
+            } else if (state === 'saved') {
+                badge.className = 'badge rounded-pill bg-success-subtle text-success border border-success-subtle quick-save-badge';
+                badge.textContent = text || '✔ Đã lưu';
+                const timer = setTimeout(() => {
+                    badge.classList.add('d-none');
+                    rowBadgeHideTimers.delete(enrollmentId);
+                }, 1800);
+                rowBadgeHideTimers.set(enrollmentId, timer);
+            } else if (state === 'offline') {
+                badge.className = 'badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle quick-save-badge';
+                badge.textContent = text || '⚡ Đã lưu Offline';
+                const timer = setTimeout(() => {
+                    badge.classList.add('d-none');
+                    rowBadgeHideTimers.delete(enrollmentId);
+                }, 2200);
+                rowBadgeHideTimers.set(enrollmentId, timer);
+            } else {
+                badge.className = 'badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle quick-save-badge';
+                badge.textContent = text || 'Lỗi lưu!';
+            }
+        }
+
+        async function quickSaveRowAttendance(row) {
+            if (!row) return;
+            const classId = parseInt(document.getElementById('selectClass').value);
+            const date = document.getElementById('inputDate').value;
+            const item = buildRowAttendanceItem(row);
+            const enrollmentId = item.enrollmentId;
+
+            const seq = (rowSaveSequenceMap.get(enrollmentId) || 0) + 1;
+            rowSaveSequenceMap.set(enrollmentId, seq);
+
+            setRowSaveBadge(row, enrollmentId, 'saving', 'Đang lưu...');
+
+            if (!navigator.onLine && typeof ParishOfflineEngine !== 'undefined') {
+                await ParishOfflineEngine.saveBatchAttendanceOffline(classId, date, [item]);
+                if (rowSaveSequenceMap.get(enrollmentId) === seq) {
+                    setRowSaveBadge(row, enrollmentId, 'offline', '⚡ Đã lưu Offline');
+                }
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+
+            try {
+                const res = await fetch('/Attendance/QuickUpdateSingle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': token
+                    },
+                    body: JSON.stringify({
+                        classId: classId,
+                        attendanceDate: date,
+                        enrollmentId: item.enrollmentId,
+                        studentCode: item.studentCode,
+                        attendedMass: item.attendedMass,
+                        massStatus: item.massStatus,
+                        classAttended: item.classAttended,
+                        classStatus: item.classStatus,
+                        note: item.note
+                    })
+                });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const data = await res.json();
+                if (rowSaveSequenceMap.get(enrollmentId) !== seq) {
+                    return;
+                }
+
+                if (data.success) {
+                    if (data.data) {
+                        const chkClass = row.querySelector('.chk-class');
+                        const selClass = row.querySelector('.select-class-status');
+                        if (chkClass) chkClass.checked = !!data.data.classAttended;
+                        if (selClass && data.data.classStatus) selClass.value = data.data.classStatus;
+
+                        const chkMass = row.querySelector('.chk-mass');
+                        const selMass = row.querySelector('.select-mass-status');
+                        if (chkMass) chkMass.checked = !!data.data.attendedMass;
+                        if (selMass && data.data.massStatus) selMass.value = data.data.massStatus;
+                    }
+
+                    setRowSaveBadge(row, enrollmentId, 'saved', '✔ Đã lưu');
+
+                    const dirtyBadge = document.getElementById('badgeRedisDirtyState');
+                    if (dirtyBadge) {
+                        dirtyBadge.className = 'badge bg-success-subtle text-success border';
+                        dirtyBadge.innerHTML = '<i class="bi bi-check2-all me-1"></i>Đã đồng bộ PostgreSQL';
+                    }
+                } else {
+                    setRowSaveBadge(row, enrollmentId, 'error', 'Lỗi lưu!');
+                    showAlert(data.message || 'Không thể lưu trạng thái điểm danh.', false);
+                }
+            } catch (err) {
+                if (rowSaveSequenceMap.get(enrollmentId) !== seq) {
+                    return;
+                }
+
+                if (typeof ParishOfflineEngine !== 'undefined') {
+                    await ParishOfflineEngine.saveBatchAttendanceOffline(classId, date, [item]);
+                    setRowSaveBadge(row, enrollmentId, 'offline', '⚡ Đã lưu Offline');
+                } else {
+                    setRowSaveBadge(row, enrollmentId, 'error', 'Lỗi kết nối!');
+                }
+            }
+        }
+
         function onClassToggle(chk) {
             const row = chk.closest('[data-enrollment-id]');
+            if (!row) return;
             const selectStatus = row.querySelector('.select-class-status');
-            if (chk.checked) {
-                if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
-                    selectStatus.value = 'PRESENT';
+            if (selectStatus) {
+                if (chk.checked) {
+                    if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
+                        selectStatus.value = 'PRESENT';
+                    }
+                } else {
+                    selectStatus.value = 'ABSENT_UNPERMITTED';
                 }
-            } else {
-                selectStatus.value = 'ABSENT_UNPERMITTED';
             }
+            quickSaveRowAttendance(row);
+        }
+
+        function onClassStatusChange(selectEl) {
+            const row = selectEl.closest('[data-enrollment-id]');
+            if (!row) return;
+            const chk = row.querySelector('.chk-class');
+            if (chk) {
+                chk.checked = selectEl.value === 'PRESENT' || selectEl.value === 'LATE';
+            }
+            quickSaveRowAttendance(row);
         }
 
         function onMassToggle(chk) {
             const row = chk.closest('[data-enrollment-id]');
+            if (!row) return;
             const selectStatus = row.querySelector('.select-mass-status');
-            if (chk.checked) {
-                if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
-                    selectStatus.value = 'PRESENT';
+            if (selectStatus) {
+                if (chk.checked) {
+                    if (selectStatus.value === 'ABSENT_UNPERMITTED' || selectStatus.value === 'ABSENT_PERMITTED') {
+                        selectStatus.value = 'PRESENT';
+                    }
+                } else {
+                    selectStatus.value = 'ABSENT_UNPERMITTED';
                 }
-            } else {
-                selectStatus.value = 'ABSENT_UNPERMITTED';
             }
+            quickSaveRowAttendance(row);
+        }
+
+        function onMassStatusChange(selectEl) {
+            const row = selectEl.closest('[data-enrollment-id]');
+            if (!row) return;
+            const chk = row.querySelector('.chk-mass');
+            if (chk) {
+                chk.checked = selectEl.value === 'LINED_UP' || selectEl.value === 'PRESENT' || selectEl.value === 'LATE';
+            }
+            quickSaveRowAttendance(row);
+        }
+
+        function onNoteChange(inputEl) {
+            const row = inputEl.closest('[data-enrollment-id]');
+            if (!row) return;
+            quickSaveRowAttendance(row);
         }
 
         function markAllClass(isPresent) {
@@ -739,6 +930,7 @@
                     sel.value = isPresent ? 'PRESENT' : 'ABSENT_UNPERMITTED';
                 }
             });
+            saveBatchAttendance();
         }
 
         function markAllMass(isAttended) {
@@ -750,6 +942,7 @@
                     sel.value = isAttended ? 'PRESENT' : 'ABSENT_UNPERMITTED';
                 }
             });
+            saveBatchAttendance();
         }
 
         // SEC-NEW-09 FIX 1: Hiển thị thông báo an toàn bằng textContent thay vì cộng chuỗi innerHTML
@@ -821,27 +1014,7 @@
 
             const items = [];
             rows.forEach(r => {
-                const enrollmentId = parseInt(r.getAttribute('data-enrollment-id'));
-                const code = r.getAttribute('data-student-code') || r.querySelector('.student-code-badge')?.textContent?.trim() || '';
-
-                const chkClass = r.querySelector('.chk-class');
-                const selClass = r.querySelector('.select-class-status');
-                const classAttended = chkClass ? chkClass.checked : false;
-                const classStatus = selClass ? selClass.value : 'ABSENT_UNPERMITTED';
-
-                const attendedMass = r.querySelector('.chk-mass').checked;
-                const massStatus = r.querySelector('.select-mass-status').value;
-                const note = r.querySelector('.input-note').value;
-
-                items.push({
-                    enrollmentId: enrollmentId,
-                    studentCode: code,
-                    classAttended: classAttended,
-                    classStatus: classStatus,
-                    attendedMass: attendedMass,
-                    massStatus: massStatus,
-                    note: note
-                });
+                items.push(buildRowAttendanceItem(r));
             });
 
             // 1. Nếu thiết bị đang mất mạng -> Lưu thẳng vào IndexedDB
@@ -870,6 +1043,13 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
                 const data = await res.json();
+                if (data.success) {
+                    const dirtyBadge = document.getElementById('badgeRedisDirtyState');
+                    if (dirtyBadge) {
+                        dirtyBadge.className = 'badge bg-success-subtle text-success border';
+                        dirtyBadge.innerHTML = '<i class="bi bi-check2-all me-1"></i>Đã đồng bộ PostgreSQL';
+                    }
+                }
                 showAlert(data.message, data.success);
             } catch (err) {
                 // 2. Nếu đang bấm Lưu mà rớt mạng đột ngột -> Chuyển sang lưu vào IndexedDB không làm mất dữ liệu

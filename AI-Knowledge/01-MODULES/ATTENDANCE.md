@@ -98,7 +98,7 @@
 
 
 * **DTOs / ViewModels:**
-* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `QrScanRequestDto`, `QrScanResponseDto`, `UndoScanRequestDto`, `OfflineStudentCacheItemDto`, `ClassAttendanceSheetViewModel`, v.v.).
+* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `AttendanceSingleUpdateDto`, `QrScanRequestDto`, `QrScanResponseDto`, `UndoScanRequestDto`, `OfflineStudentCacheItemDto`, `ClassAttendanceSheetViewModel`, v.v.).
 
 
 * `D:\github\...\Models\DTOs\HighThroughputAttendanceModels.cs` (`RedisClassAttendancePayload`, `RedisQrStudentLookupItem`).
@@ -154,6 +154,15 @@
 * **Input:** `AttendanceBatchSubmitDto` (`ClassId`, `AttendanceDate`, `Items`).
 * **Business processing & Database access:** Gọi `RedisAttendanceService.SaveBatchToRedisAsync` để cập nhật sổ lớp trên Redis (`IsDirty = true`) và nạp ngay `SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate)` trong cùng HTTP request để ghi **Write-Through trực tiếp** xuống PostgreSQL (`Attendances`), đồng bộ tức thì hai tầng dữ liệu.
 * **Output:** JSON `{ success, message }`.
+
+
+### Flow 1C: Quick Single Row Update (Real-time Write-Through)
+
+* **Entry point:** `AttendanceController.QuickUpdateSingle` (`POST /Attendance/QuickUpdateSingle`).
+* **Input:** `AttendanceSingleUpdateDto` (`ClassId`, `AttendanceDate`, `EnrollmentId`, `StudentCode`, `AttendedMass`, `MassStatus`, `ClassAttended`, `ClassStatus`, `Note`).
+* **Validation:** Kiểm tra `EnrollmentId > 0`, `ClassId > 0`, quyền `CanAccessClassAsync(request.ClassId)`, và xác nhận học sinh thuộc lớp trong `GetOrLoadClassSheetAsync`.
+* **Business processing & Database access:** Gọi `RedisAttendanceService.QuickUpdateSingleAttendanceAsync` chuẩn hóa trạng thái (`NormalizeAttendanceStatus`), ghi **Write-Through tức thì** bản ghi của học sinh xuống bảng PostgreSQL `Attendances` trong transaction (`CreateExecutionStrategy()` + `BeginTransactionAsync()`), cập nhật Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), và xóa cache `ClassSessionInfo` cùng cache `staff_lookup:student_360:{studentId}`. Trên UI (`Views/Attendance/Index.cshtml`), thao tác bật/tắt `.chk-class`/`.chk-mass`, đổi `.select-class-status`/`.select-mass-status`, hoặc sửa `.input-note` tự động đồng bộ trạng thái nút gạt/dropdown kế bên và gọi API này (nếu mất mạng sẽ fallback lưu vào IndexedDB qua `ParishOfflineEngine.saveBatchAttendanceOffline`).
+* **Output:** JSON `{ success, message, data }`.
 
 
 ### Flow 2: Offline Synchronization
@@ -319,6 +328,7 @@
 | **QR Check-in** | `AttendanceController` | `RedisAttendanceService` | `NOT_FOUND` (Dùng DbContext) | `Attendance`, `StudentCodeHistory` | `ScanQr.cshtml` | `Attendances`, `StudentCodeHistories` |
 | **QR Undo Check-in (5s)** | `AttendanceController` (`UndoScanCheckIn`) | `RedisAttendanceService` (`UndoScanCheckInAsync`) | `NOT_FOUND` (Dùng DbContext) | `Attendance`, `MassCampaignRecord` | `ScanQr.cshtml` | `Attendances`, `MassCampaignRecords` |
 | **Class Grid Save** | `AttendanceController` | `RedisAttendanceService` | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
+| **Quick Single Row Save** | `AttendanceController` (`QuickUpdateSingle`) | `RedisAttendanceService` (`QuickUpdateSingleAttendanceAsync`) | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
 | **Offline Sync** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
 | **Absence Mgt** | `AbsenceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `AbsenceRequest` | `Manage.cshtml` | `AbsenceRequests` |
 | **Dispute Review** | `AttendanceController` | `AttendanceDisputeService` | `NOT_FOUND` | `AttendanceDisputeRequest` | `Index.cshtml` (Modal) | `AttendanceDisputeRequests` |

@@ -26,6 +26,11 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<(bool Success, string Message)> SaveBatchToRedisAsync(AttendanceBatchSubmitDto request);
 
         /// <summary>
+        /// Cập nhật tức thì (Write-Through Redis + PostgreSQL) trạng thái điểm danh và ghi chú lý do của 1 học sinh trên Sổ điểm danh
+        /// </summary>
+        Task<(bool Success, string Message, StudentAttendanceRowItem? UpdatedRow)> QuickUpdateSingleAttendanceAsync(AttendanceSingleUpdateDto request);
+
+        /// <summary>
         /// TASK-P3-12.3: Xử lý quét mã QR tốc độ cao trực tiếp trên Redis
         /// </summary>
         Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request);

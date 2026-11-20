@@ -161,6 +161,52 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
+        /// 2B. POST: /Attendance/QuickUpdateSingle (Cập nhật tức thì trạng thái đi học / đi lễ & lý do của 1 học sinh)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> QuickUpdateSingle([FromBody] AttendanceSingleUpdateDto request)
+        {
+            if (request == null || request.EnrollmentId <= 0 || request.ClassId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu cập nhật điểm danh không hợp lệ." });
+            }
+
+            if (!await CanAccessClassAsync(request.ClassId))
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                var (success, message, updatedRow) = await _redisAttendance.QuickUpdateSingleAttendanceAsync(request);
+                return Json(new
+                {
+                    success,
+                    message,
+                    data = updatedRow == null ? null : new
+                    {
+                        enrollmentId = updatedRow.EnrollmentId,
+                        studentId = updatedRow.StudentId,
+                        studentCode = updatedRow.StudentCode,
+                        fullName = updatedRow.FullName,
+                        classAttended = updatedRow.ClassAttended,
+                        classStatus = updatedRow.ClassStatus,
+                        attendedMass = updatedRow.AttendedMass,
+                        massStatus = updatedRow.MassStatus,
+                        note = updatedRow.Note
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi cập nhật tức thì điểm danh cho EnrollmentId: {EnrollmentId}, ClassId: {ClassId}",
+                    request.EnrollmentId, request.ClassId);
+                return Json(new { success = false, message = "Đã xảy ra lỗi khi lưu trạng thái điểm danh." });
+            }
+        }
+
+        /// <summary>
         /// GET: /Attendance/ScanQr (TASK-406 - Màn hình quét QR)
         /// </summary>
         /// <returns></returns>
