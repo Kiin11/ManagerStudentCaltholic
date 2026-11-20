@@ -2,6 +2,25 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Tạo tài liệu đặc tả Phase 6 — Phân tách Vai trò Dự Bị & Khối Chiều (`FEAT-P6-01` V3 Final)
+- **Thời gian cập nhật:** `2026-11-20T13:25:00+07:00`
+- **Mục tiêu:** Đọc đặc tả thiết kế Phase 6 từ Google Spreadsheet và biên soạn bộ tài liệu kiến trúc/nghiệp vụ vào `AI-Knowledge/` ở trạng thái `PLANNED / DESIGN SPECIFICATION` (chưa chỉnh sửa source code C# hay Database).
+- **Nguồn dữ liệu:** Google Spreadsheet Phase 6 (`1q04ZBxPKqJu8r2XFFdQwm2NAHkOPiEUSjbw4catSIUo` — 2 sheets `Danh Sach Task` & `Tong Quan & Quy Tac`, gồm `14` sub-tasks `TASK-01.1` ➔ `TASK-04.3`, tổng `10.50` ngày công).
+- **Nội dung chính đã ghi nhận:**
+  1. Thiết kế phân tách vai trò `ProbationaryTeacher` (`User.LinkedStudentId -> Students.Id`), mở rộng Khối `Dự Bị` (`DU_BI`) & thuộc tính `ClassRoom.Session` (`Morning` / `Afternoon`).
+  2. Chuẩn hóa Ma trận Khối & Ca học (4 lớp cố định `Dự Bị 1..4` ca Chiều; chặn Dự Bị dạy ca Chiều và chống IDOR).
+  3. Chuẩn hóa 5 Cột mốc Đức tin & Tuyên hứa (`BaptismDate`, `FirstCommunionDate`, `ConfirmationDate`, `BaoDongPromiseDate`, `CatechistPromiseDate` kèm ràng buộc cứng `>= 18` tuổi để nâng cấp Role lên `Teacher`).
+  4. Lộ trình tương thích ngược với hiện trạng source code (`User.StudentId`, `ClassRoom.Shift`, `StudentSacramentRecords`, `UserProfileViewModel`, `ClassesController`).
+- **Danh sách tài liệu `AI-Knowledge` tạo mới / cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md` (NEW FILE)
+  - `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md` (Modified — cập nhật cây thư mục `05-FEATURES/`)
+  - `AI-Knowledge/00-OVERVIEW/CODING-RULES.md` (Modified — bổ sung mục 5 quy chuẩn đặt tên `{yyyyMMdd}_{TenBang_Hoac_ChucNang}.sql` và chạy trực tiếp trên pgAdmin cho PostgreSQL trong thư mục `script/`)
+  - `gemini.md` (Modified — bổ sung quy tắc SQL script trong `script/` vào Mục 6, 7.1 và 8)
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md` (Modified — ghi nhận backlog 14 sub-tasks Phase 6 & danh sách tài liệu cần đồng bộ sau khi code)
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` (Modified)
+
+---
+
 ### Phiên cập nhật: Nâng hạn AccessToken lên 8 ngày & Mặc định duy trì đăng nhập 14 ngày
 - **Thời gian cập nhật:** `2026-11-16T13:20:00+07:00`
 - **Mục tiêu:** Cập nhật `AccessTokenExpirationMinutes` lên `11520` phút (8 ngày) và mặc định chọn ô "Duy trì đăng nhập (14 ngày)" (`RememberMe = true`) trên trang đăng nhập.
