@@ -3,9 +3,12 @@
 Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong `ParishDbContext.cs` và các thuộc tính `[ForeignKey]` trên Entity Models.
 
 ## 1. Core Management (Thiếu nhi & Lớp học)
+- **Users ↔ Students (1-1 Optional & Legacy n-1):**
+  - `Users.LinkedStudentId -> Students.Id` (`TASK-01.1`, Phase 6): Quan hệ 1-1 tùy chọn với Unique Filtered Index (`WHERE "LinkedStudentId" IS NOT NULL`), `DeleteBehavior.SetNull`, liên kết tài khoản GLV Dự Bị (`ProbationaryTeacher`) về hồ sơ thiếu nhi gốc.
+  - `Users.StudentId -> Students.Id` (`TASK-806`): Quan hệ hiện hữu giữ tương thích ngược cho tài khoản Thiếu nhi / Phụ huynh.
 - **Enrollments ↔ Students (n-1):** Khóa ngoại `StudentId`. DeleteBehavior: `SetNull` (qua User) và ngầm định cascade qua bảng Enrollments (có SoftDelete chặn xoá vật lý).
 - **Enrollments ↔ Classes (n-1):** Khóa ngoại `ClassRoomId`. `ClassRoom` chứa nhiều `Enrollment`. IsUnique composite index trên `(StudentId, ClassRoomId)`.
-- **Classes ↔ AcademicYears (n-1):** Khóa ngoại `AcademicYearId` liên kết với niên khóa.
+- **Classes ↔ AcademicYears (n-1):** Khóa ngoại `AcademicYearId` liên kết với niên khóa (`Classes.Session` phân tách `Morning` / `Afternoon`).
 - **ClassTeachers ↔ Users (n-1):** Khóa ngoại `UserId`. DeleteBehavior: `SetNull`.
 - **ClassTeachers ↔ Classes (n-1):** Khóa ngoại `ClassRoomId`. DeleteBehavior: `Cascade`.
 
@@ -45,6 +48,7 @@ Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong
 
 ```mermaid
 erDiagram
+    Students ||--o| Users : "1-1 (LinkedStudentId)"
     Students ||--o{ Enrollments : "1-N"
     Classes ||--o{ Enrollments : "1-N"
     AcademicYears ||--o{ Classes : "1-N"
@@ -85,7 +89,10 @@ erDiagram
                                                            "Gender",
                                                            "DateOfBirth",
                                                            "BaptismDate",
+                                                           "FirstCommunionDate",
                                                            "ConfirmationDate",
+                                                           "BaoDongPromiseDate",
+                                                           "CatechistPromiseDate",
                                                            "ParentPhone",
                                                            "IsActive",
                                                            "IsDeleted",
@@ -101,7 +108,9 @@ erDiagram
                                                            "IsDeleted",
                                                            "StudentCode",
                                                            "LastName, FirstName",
-                                                           "ChristianName"
+                                                           "ChristianName",
+                                                           "BaoDongPromiseDate",
+                                                           "CatechistPromiseDate"
                                                        ]
                                        },
                                        {
@@ -131,6 +140,7 @@ erDiagram
                                                            "GradeLevel",
                                                            "RoomName",
                                                            "Shift",
+                                                           "Session",
                                                            "AcademicYearId",
                                                            "ClassRoomLocationId",
                                                            "IsGradeLocked",
@@ -153,7 +163,9 @@ erDiagram
                                                                }
                                                            ],
                                            "indexes":  [
-                                                           "IsDeleted"
+                                                           "IsDeleted",
+                                                           "Session",
+                                                           "GradeLevel, Session"
                                                        ]
                                        },
                                        {
@@ -316,7 +328,8 @@ erDiagram
                                                            "AvatarUrl",
                                                            "ManagedGradeLevel",
                                                            "ClassTeacherId",
-                                                           "StudentId"
+                                                           "StudentId",
+                                                           "LinkedStudentId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -331,6 +344,11 @@ erDiagram
                                                                    "column":  "StudentId",
                                                                    "principalTable":  "Students",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "LinkedStudentId",
+                                                                   "principalTable":  "Students",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
@@ -338,7 +356,8 @@ erDiagram
                                                            "Email",
                                                            "PhoneNumber",
                                                            "Role",
-                                                           "ManagedGradeLevel"
+                                                           "ManagedGradeLevel",
+                                                           "LinkedStudentId"
                                                        ]
                                        },
                                        {

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ManagerStudentCaltholic.Controllers
 {
-    [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
+    [Authorize(Roles = RoleGroups.Staff)]
     public class GradesController : Controller
     {
         private readonly ParishDbContext _context;
@@ -49,6 +49,13 @@ namespace ManagerStudentCaltholic.Controllers
         private async Task<bool> HasAccessToClassAsync(ClassRoom targetClass)
         {
             if (IsLeadership) return true;
+
+            // TASK-02.3: Chặn tuyệt đối GLV Dự Bị truy cập / sửa điểm các lớp Ca Chiều (IDOR)
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
 
             if (User.IsInRole(UserRole.BranchHead))
             {
@@ -99,6 +106,17 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
                 }
+            }
+            else if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                // TASK-02.3: GLV Dự Bị chỉ được phép truy cập các lớp được phân công thuộc Ca Sáng
+                var uid = CurrentUserId;
+                classesQuery = classesQuery.Where(c =>
+                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
+                    c.Session != GradeLevel.SessionAfternoon &&
+                    c.GradeLevel != GradeLevel.BaoDong &&
+                    c.GradeLevel != GradeLevel.DuBi &&
+                    c.GradeLevel != GradeLevel.DuBiCode);
             }
             else
             {

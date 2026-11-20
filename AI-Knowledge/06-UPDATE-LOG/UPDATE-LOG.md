@@ -2,6 +2,33 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Triển khai Phase 6 — `TASK-01` (Database & Migration) & `TASK-02` (Authorization & Policy)
+- **Thời gian cập nhật:** `2026-11-20T13:46:00+07:00`
+- **Mục tiêu:** Triển khai mã nguồn cho `7` sub-tasks đầu tiên của Phase 6 (`TASK-01.1` ➔ `TASK-02.3`), tạo script SQL chuẩn PostgreSQL chạy trực tiếp trên pgAdmin, đồng bộ trạng thái `Đã xong` lên Google Sheet và cập nhật tài liệu `AI-Knowledge/`.
+- **Danh sách file source & script đã tạo/cập nhật:**
+  - `ManagerStudentCaltholic/Models/Entities/UserRole.cs` (thêm `ProbationaryTeacher`, cập nhật `RoleGroups.Staff`, thêm `RoleGroups.TeachingStaff`)
+  - `ManagerStudentCaltholic/Models/Entities/User.cs` (thêm `LinkedStudentId` & navigation `LinkedStudent`, giữ `StudentId` tương thích ngược)
+  - `ManagerStudentCaltholic/Models/Entities/GradeLevel.cs` *(NEW FILE)* (hằng số khối gồm `Dự Bị` / `DU_BI`, `SessionMorning` / `SessionAfternoon`, 4 lớp chuẩn `Dự Bị 1..4`, helpers `IsAfternoonGrade`, `ResolveSession`, `IsAfternoonSession`)
+  - `ManagerStudentCaltholic/Models/Entities/ClassRoom.cs` (thêm thuộc tính `Session` tự ánh xạ theo `GradeLevel`, giữ `Shift` tương thích ngược)
+  - `ManagerStudentCaltholic/Models/Entities/Student.cs` (thêm `FirstCommunionDate`, `BaoDongPromiseDate`, `CatechistPromiseDate`)
+  - `ManagerStudentCaltholic/Data/ParishDbContext.cs` (Fluent API cho `User.LinkedStudentId` 1-1 Unique Filtered Index, `ClassRoom.Session` & index, index `*PromiseDate` trên `Student`)
+  - `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs` (cập nhật Policy `RequireStaff`, tách thêm `RequireTeachingStaff` và `RequireOfficialTeacher`)
+  - `ManagerStudentCaltholic/Services/FeatureNavigationService.cs` (đồng bộ `AllowedRolesCsv` từ `Teacher` sang `ProbationaryTeacher`, lọc lớp Ca Sáng cho Dự Bị, nhãn `"GLV Dự Bị"`)
+  - `ManagerStudentCaltholic/Views/FeaturePermissions/Index.cshtml` (thêm tùy chọn vai trò `GLV Dự Bị` trên bảng phân quyền Master UI)
+  - `ManagerStudentCaltholic/Interface/Services/IGradePermissionService.cs` & `ManagerStudentCaltholic/Services/GradePermissionService.cs` (khóa phạm vi Ca Sáng cho `ProbationaryTeacher`)
+  - `ManagerStudentCaltholic/Controllers/GradesController.cs`, `ManagerStudentCaltholic/Services/ClassEvaluationService.cs`, `ManagerStudentCaltholic/Controllers/AttendanceController.cs` (ràng buộc Ca Sáng & chặn IDOR Ca Chiều)
+  - `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql` *(NEW FILE)* (script SQL idempotent cho pgAdmin / PostgreSQL)
+- **Kiểm tra:** `dotnet build ManagerStudentCaltholic/ManagerStudentCaltholic.csproj --no-restore` (`0 Warning(s)`, `0 Error(s)`); Google Sheet `Tong Quan & Quy Tac` hiển thị `TASK-01`: `100,0%`, `TASK-02`: `100,0%` (`7/14` sub-tasks `Đã xong`).
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`
+  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md`
+  - `AI-Knowledge/02-DATABASE/TABLE-INDEX.json`
+  - `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md`
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+
+---
+
 ### Phiên cập nhật: Tạo tài liệu đặc tả Phase 6 — Phân tách Vai trò Dự Bị & Khối Chiều (`FEAT-P6-01` V3 Final)
 - **Thời gian cập nhật:** `2026-11-20T13:25:00+07:00`
 - **Mục tiêu:** Đọc đặc tả thiết kế Phase 6 từ Google Spreadsheet và biên soạn bộ tài liệu kiến trúc/nghiệp vụ vào `AI-Knowledge/` ở trạng thái `PLANNED / DESIGN SPECIFICATION` (chưa chỉnh sửa source code C# hay Database).

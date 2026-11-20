@@ -33,27 +33,27 @@ namespace ManagerStudentCaltholic.Services
                 new() { FeatureCode = "COM_LOOKUP", MasterCode = "COMMON", DisplayName = "Tra Cứu Học Viên & Điểm Danh", Description = "Xem kết quả đi lễ, đi học từng ngày, bảng điểm & báo sai sót điểm danh", IconClass = "bi-search-heart-fill", TargetUrl = "/TraCuu", BadgeColor = "primary", AllowedRolesCsv = "ALL", SortOrder = 1 },
                 new() { FeatureCode = "COM_REGISTRATION", MasterCode = "COMMON", DisplayName = "Đăng Ký Tuyển Sinh Đầu Năm", Description = "Nộp hồ sơ đăng ký học Giáo lý trực tuyến cho thiếu nhi mới", IconClass = "bi-person-plus-fill", TargetUrl = "/PublicRegistration/Index", BadgeColor = "success", AllowedRolesCsv = "ALL", SortOrder = 2 },
                 new() { FeatureCode = "COM_REG_STATUS", MasterCode = "COMMON", DisplayName = "Tra Cứu Hồ Sơ Tuyển Sinh", Description = "Kiểm tra kết quả xét duyệt và lớp xếp cho hồ sơ đăng ký mới", IconClass = "bi-clipboard2-check-fill", TargetUrl = "/PublicRegistration/CheckStatus", BadgeColor = "info", AllowedRolesCsv = "ALL", SortOrder = 3 },
-                new() { FeatureCode = "COM_ANNOUNCEMENTS", MasterCode = "COMMON", DisplayName = "Bảng Tin & Dặn Dò Giáo Xứ", Description = "Xem và đăng thông báo chung toàn xứ, theo khối hoặc theo lớp học", IconClass = "bi-megaphone-fill", TargetUrl = "/Announcements/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 4 },
-                new() { FeatureCode = "COM_PARENT_MSG", MasterCode = "COMMON", DisplayName = "Mẫu Tin Nhắn Phụ Huynh 1-Click", Description = "Sao chép nhanh tin nhắn báo vắng, nhắc nhở gửi Zalo Phụ huynh miễn phí", IconClass = "bi-chat-quote-fill", TargetUrl = "/ParentMessages/Index", BadgeColor = "secondary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 5 },
+                new() { FeatureCode = "COM_ANNOUNCEMENTS", MasterCode = "COMMON", DisplayName = "Bảng Tin & Dặn Dò Giáo Xứ", Description = "Xem và đăng thông báo chung toàn xứ, theo khối hoặc theo lớp học", IconClass = "bi-megaphone-fill", TargetUrl = "/Announcements/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 4 },
+                new() { FeatureCode = "COM_PARENT_MSG", MasterCode = "COMMON", DisplayName = "Mẫu Tin Nhắn Phụ Huynh 1-Click", Description = "Sao chép nhanh tin nhắn báo vắng, nhắc nhở gửi Zalo Phụ huynh miễn phí", IconClass = "bi-chat-quote-fill", TargetUrl = "/ParentMessages/Index", BadgeColor = "secondary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 5 },
 
                 // 2. Phân khu ATTENDANCE (Điểm danh & Chuyên cần)
-                new() { FeatureCode = "ATT_QR_SCAN", MasterCode = "ATTENDANCE", DisplayName = "Quét QR Điểm Danh (Online/Offline)", Description = "Mở camera quét thẻ QR thiếu nhi tốc độ cao, tự lưu IndexedDB khi mất mạng", IconClass = "bi-qr-code-scan", TargetUrl = "/Attendance/ScanQr", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 1 },
-                new() { FeatureCode = "ATT_CLASS_BOOK", MasterCode = "ATTENDANCE", DisplayName = "Sổ Điểm Danh Lớp & Duyệt Sai Sót", Description = "Điểm danh Lễ Thứ Năm, Lễ Chúa Nhật, Học Giáo lý & duyệt báo sai sót từ PH", IconClass = "bi-calendar2-check-fill", TargetUrl = "/Attendance/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 2 },
-                new() { FeatureCode = "ATT_MASS_CAMPAIGN", MasterCode = "ATTENDANCE", DisplayName = "Chiến Dịch Đi Lễ 1 Tháng (Lớp Bí Tích)", Description = "Thiết lập & điểm danh ma trận 30 ngày liên tục cho lớp RL2, TS3, BĐ3, DB4", IconClass = "bi-calendar2-heart-fill", TargetUrl = "/MassCampaigns/Index", BadgeColor = "danger", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SacramentClassesOnly = true, SortOrder = 3 },
-                new() { FeatureCode = "ATT_MONTHLY_STAT", MasterCode = "ATTENDANCE", DisplayName = "Tổng Hợp Điểm Danh Tháng", Description = "Xem ma trận chuyên cần theo tháng và xuất báo cáo Excel từng lớp", IconClass = "bi-calendar-month-fill", TargetUrl = "/Attendance/MonthlySummary", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 4 },
+                new() { FeatureCode = "ATT_QR_SCAN", MasterCode = "ATTENDANCE", DisplayName = "Quét QR Điểm Danh (Online/Offline)", Description = "Mở camera quét thẻ QR thiếu nhi tốc độ cao, tự lưu IndexedDB khi mất mạng", IconClass = "bi-qr-code-scan", TargetUrl = "/Attendance/ScanQr", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 1 },
+                new() { FeatureCode = "ATT_CLASS_BOOK", MasterCode = "ATTENDANCE", DisplayName = "Sổ Điểm Danh Lớp & Duyệt Sai Sót", Description = "Điểm danh Lễ Thứ Năm, Lễ Chúa Nhật, Học Giáo lý & duyệt báo sai sót từ PH", IconClass = "bi-calendar2-check-fill", TargetUrl = "/Attendance/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 2 },
+                new() { FeatureCode = "ATT_MASS_CAMPAIGN", MasterCode = "ATTENDANCE", DisplayName = "Chiến Dịch Đi Lễ 1 Tháng (Lớp Bí Tích)", Description = "Thiết lập & điểm danh ma trận 30 ngày liên tục cho lớp RL2, TS3, BĐ3, DB4", IconClass = "bi-calendar2-heart-fill", TargetUrl = "/MassCampaigns/Index", BadgeColor = "danger", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SacramentClassesOnly = true, SortOrder = 3 },
+                new() { FeatureCode = "ATT_MONTHLY_STAT", MasterCode = "ATTENDANCE", DisplayName = "Tổng Hợp Điểm Danh Tháng", Description = "Xem ma trận chuyên cần theo tháng và xuất báo cáo Excel từng lớp", IconClass = "bi-calendar-month-fill", TargetUrl = "/Attendance/MonthlySummary", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 4 },
                 new() { FeatureCode = "ATT_STATISTICS", MasterCode = "ATTENDANCE", DisplayName = "Báo Cáo Thống Kê Chuyên Cần Năm", Description = "Thống kê tổng hợp tỷ lệ đi lễ, đi học và xét điều kiện Bí tích", IconClass = "bi-pie-chart-fill", TargetUrl = "/Attendance/Statistics", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead", SortOrder = 5 },
-                new() { FeatureCode = "ATT_ABSENCE_REQ", MasterCode = "ATTENDANCE", DisplayName = "Duyệt Đơn Xin Phép Nghỉ Học", Description = "Xem và phê duyệt đơn xin nghỉ phép trực tuyến từ phụ huynh", IconClass = "bi-envelope-paper-fill", TargetUrl = "/Absence/Manage", BadgeColor = "secondary", AllowedRolesCsv = "Admin,ExecutiveBoard,BranchHead,Teacher", SortOrder = 6 },
+                new() { FeatureCode = "ATT_ABSENCE_REQ", MasterCode = "ATTENDANCE", DisplayName = "Duyệt Đơn Xin Phép Nghỉ Học", Description = "Xem và phê duyệt đơn xin nghỉ phép trực tuyến từ phụ huynh", IconClass = "bi-envelope-paper-fill", TargetUrl = "/Absence/Manage", BadgeColor = "secondary", AllowedRolesCsv = "Admin,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 6 },
 
                 // 3. Phân khu ACADEMIC (Học vụ & Bảng điểm)
-                new() { FeatureCode = "ACD_GRADEBOOK", MasterCode = "ACADEMIC", DisplayName = "Sổ Điểm Giáo Lý & Xét Duyệt Cuối Năm", Description = "Nhập điểm HK1, HK2 và bấm Xét Lên Lớp / Xét Bí Tích / Xét Tuyên Hứa", IconClass = "bi-journal-check", TargetUrl = "/Grades/Index", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 1 },
-                new() { FeatureCode = "ACD_ATTENDANCE_DIRECT", MasterCode = "ACADEMIC", DisplayName = "Điểm Danh Lớp", Description = "Mở trực tiếp Sổ điểm danh lớp học được phân công", IconClass = "bi-calendar2-check-fill", TargetUrl = "/Attendance/Index?classId={class_id}", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 2 },
-                new() { FeatureCode = "ACD_STUDENTS", MasterCode = "ACADEMIC", DisplayName = "Hồ Sơ Thiếu Nhi & In Thẻ QR", Description = "Quản lý danh sách thiếu nhi, sinh mã theo tên lớp (TS3A001) & in thẻ QR", IconClass = "bi-people-fill", TargetUrl = "/Students/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 3 },
-                new() { FeatureCode = "ACD_CLASSES", MasterCode = "ACADEMIC", DisplayName = "Quản Lý Lớp Học & Phân Công GLV", Description = "Danh sách các lớp Giáo lý, sĩ số, phân công Giáo lý viên đứng lớp", IconClass = "bi-mortarboard-fill", TargetUrl = "/Classes/Index", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 4 },
-                new() { FeatureCode = "ACD_LESSON_PLANS", MasterCode = "ACADEMIC", DisplayName = "Kế Hoạch Bài Giảng & Giáo Án", Description = "Tải tài liệu bài giảng, phân phối chương trình học từng tuần", IconClass = "bi-calendar3-week-fill", TargetUrl = "/LessonPlans/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 5 },
-                new() { FeatureCode = "ACD_FACILITIES", MasterCode = "ACADEMIC", DisplayName = "Sơ Đồ Phòng Học & Cơ Sở Vật Chất", Description = "Sơ đồ phòng học các khu nhà, sĩ số thực tế và báo cáo sự cố thiết bị", IconClass = "bi-building-gear", TargetUrl = "/Facilities/Index", BadgeColor = "dark", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 6 },
+                new() { FeatureCode = "ACD_GRADEBOOK", MasterCode = "ACADEMIC", DisplayName = "Sổ Điểm Giáo Lý & Xét Duyệt Cuối Năm", Description = "Nhập điểm HK1, HK2 và bấm Xét Lên Lớp / Xét Bí Tích / Xét Tuyên Hứa", IconClass = "bi-journal-check", TargetUrl = "/Grades/Index", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 1 },
+                new() { FeatureCode = "ACD_ATTENDANCE_DIRECT", MasterCode = "ACADEMIC", DisplayName = "Điểm Danh Lớp", Description = "Mở trực tiếp Sổ điểm danh lớp học được phân công", IconClass = "bi-calendar2-check-fill", TargetUrl = "/Attendance/Index?classId={class_id}", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 2 },
+                new() { FeatureCode = "ACD_STUDENTS", MasterCode = "ACADEMIC", DisplayName = "Hồ Sơ Thiếu Nhi & In Thẻ QR", Description = "Quản lý danh sách thiếu nhi, sinh mã theo tên lớp (TS3A001) & in thẻ QR", IconClass = "bi-people-fill", TargetUrl = "/Students/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 3 },
+                new() { FeatureCode = "ACD_CLASSES", MasterCode = "ACADEMIC", DisplayName = "Quản Lý Lớp Học & Phân Công GLV", Description = "Danh sách các lớp Giáo lý, sĩ số, phân công Giáo lý viên đứng lớp", IconClass = "bi-mortarboard-fill", TargetUrl = "/Classes/Index", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 4 },
+                new() { FeatureCode = "ACD_LESSON_PLANS", MasterCode = "ACADEMIC", DisplayName = "Kế Hoạch Bài Giảng & Giáo Án", Description = "Tải tài liệu bài giảng, phân phối chương trình học từng tuần", IconClass = "bi-calendar3-week-fill", TargetUrl = "/LessonPlans/Index", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 5 },
+                new() { FeatureCode = "ACD_FACILITIES", MasterCode = "ACADEMIC", DisplayName = "Sơ Đồ Phòng Học & Cơ Sở Vật Chất", Description = "Sơ đồ phòng học các khu nhà, sĩ số thực tế và báo cáo sự cố thiết bị", IconClass = "bi-building-gear", TargetUrl = "/Facilities/Index", BadgeColor = "dark", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 6 },
 
                 // 4. Phân khu SACRAMENT (Bí tích & Kết chuyển)
-                new() { FeatureCode = "SAC_REGISTRY", MasterCode = "SACRAMENT", DisplayName = "Sổ Bộ Bí Tích Điện Tử", Description = "Quản lý sổ bộ Rửa Tội, Rước Lễ Lần Đầu, Thêm Sức, Tuyên Hứa Bao Đồng", IconClass = "bi-journal-bookmark-fill", TargetUrl = "/Sacraments/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher", SortOrder = 1 },
+                new() { FeatureCode = "SAC_REGISTRY", MasterCode = "SACRAMENT", DisplayName = "Sổ Bộ Bí Tích Điện Tử", Description = "Quản lý sổ bộ Rửa Tội, Rước Lễ Lần Đầu, Thêm Sức, Tuyên Hứa Bao Đồng", IconClass = "bi-journal-bookmark-fill", TargetUrl = "/Sacraments/Index", BadgeColor = "success", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead,Teacher,ProbationaryTeacher", SortOrder = 1 },
                 new() { FeatureCode = "SAC_EVALUATION", MasterCode = "SACRAMENT", DisplayName = "Tờ Trình Xét Duyệt Bí Tích Cha Xứ", Description = "Tổng hợp tờ trình từ các lớp RL2, TS3, BĐ3, DB4 để Cha Xứ phê duyệt", IconClass = "bi-award-fill", TargetUrl = "/Sacraments/Evaluation", BadgeColor = "warning", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead", SortOrder = 2 },
                 new() { FeatureCode = "SAC_PROMOTION", MasterCode = "SACRAMENT", DisplayName = "Kết Chuyển Lên Lớp & Đổi Mã Năm Cũ", Description = "Xét lên lớp tự động và chuyển StudentCode gắn đuôi năm học cũ (_2526)", IconClass = "bi-arrow-up-right-circle-fill", TargetUrl = "/Promotion/Index", BadgeColor = "primary", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard", SortOrder = 3 },
                 new() { FeatureCode = "SAC_ADMISSIONS", MasterCode = "SACRAMENT", DisplayName = "Duyệt Hồ Sơ Tuyển Sinh Đầu Năm", Description = "Xét duyệt đơn đăng ký trực tuyến, xem Giấy Rửa Tội và tự động xếp lớp", IconClass = "bi-person-vcard-fill", TargetUrl = "/StudentRegistrations/Index", BadgeColor = "info", AllowedRolesCsv = "Admin,SpiritualDirector,ExecutiveBoard", SortOrder = 4 },
@@ -77,6 +77,24 @@ namespace ManagerStudentCaltholic.Services
                 }
                 else
                 {
+                    // TASK-02.2: Đồng bộ quyền mặc định từ Teacher sang ProbationaryTeacher nếu chưa cấu hình thủ công
+                    if (string.IsNullOrEmpty(existing.UpdatedBy))
+                    {
+                        var existingTokens = existing.AllowedRolesCsv
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(r => r.Trim())
+                            .ToList();
+
+                        if (existingTokens.Contains(UserRole.Teacher, StringComparer.OrdinalIgnoreCase) &&
+                            !existingTokens.Contains(UserRole.ProbationaryTeacher, StringComparer.OrdinalIgnoreCase))
+                        {
+                            existingTokens.Add(UserRole.ProbationaryTeacher);
+                            existing.AllowedRolesCsv = string.Join(",", existingTokens);
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            changed = true;
+                        }
+                    }
+
                     if (rule.FeatureCode == "ACD_ATTENDANCE_DIRECT")
                     {
                         if (existing.TargetUrl != rule.TargetUrl || existing.SortOrder != 2 || !existing.IsEnabled)
@@ -172,10 +190,22 @@ namespace ManagerStudentCaltholic.Services
                     }
                     else if (currentUserId > 0)
                     {
-                        var assignedClasses = await _context.ClassTeachers
+                        var assignedClassesQuery = _context.ClassTeachers
                             .AsNoTracking()
                             .Include(ct => ct.ClassRoom)
-                            .Where(ct => ct.UserId == currentUserId && ct.ClassRoom != null && ct.ClassRoom.AcademicYearId == currentYear.Id)
+                            .Where(ct => ct.UserId == currentUserId && ct.ClassRoom != null && ct.ClassRoom.AcademicYearId == currentYear.Id);
+
+                        // TASK-02.3: GLV Dự Bị chỉ thao tác trên các lớp giảng dạy thuộc Ca Sáng
+                        if (currentRole == UserRole.ProbationaryTeacher)
+                        {
+                            assignedClassesQuery = assignedClassesQuery.Where(ct =>
+                                ct.ClassRoom!.Session != GradeLevel.SessionAfternoon &&
+                                ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                                ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                                ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                        }
+
+                        var assignedClasses = await assignedClassesQuery
                             .Select(ct => ct.ClassRoom!)
                             .ToListAsync();
 
@@ -215,7 +245,7 @@ namespace ManagerStudentCaltholic.Services
             {
                 defaultClassId = userClassIds.First();
             }
-            else if (currentYear != null)
+            else if (currentYear != null && currentRole != UserRole.ProbationaryTeacher)
             {
                 var firstClass = await _context.Classes
                     .AsNoTracking()
@@ -399,6 +429,7 @@ namespace ManagerStudentCaltholic.Services
             UserRole.ExecutiveBoard => "Ban Điều Hành",
             UserRole.BranchHead => "Trưởng Khối",
             UserRole.Teacher => "Giáo Lý Viên",
+            UserRole.ProbationaryTeacher => "GLV Dự Bị",
             _ => "Thành viên"
         };
 

@@ -116,6 +116,13 @@ namespace ManagerStudentCaltholic.Services
             if (classRoom == null)
                 return false;
 
+            // TASK-02.3: Chặn GLV Dự Bị xét duyệt/đánh giá các lớp Ca Chiều (Bao Đồng, Dự Bị)
+            if (user.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(classRoom.Session, classRoom.GradeLevel))
+            {
+                return false;
+            }
+
             if (user.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value;

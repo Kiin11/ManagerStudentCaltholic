@@ -1,6 +1,6 @@
 # FEATURE SPECIFICATION: PHÂN TÁCH VAI TRÒ DỰ BỊ & KHỐI CHIỀU — CHUẨN HÓA 5 CỘT MỐC ĐỨC TIN (`FEAT-P6-01`)
 
-> **Trạng thái:** `PLANNED / DESIGN SPECIFICATION (PHASE 6 - V3 FINAL)` *(Chưa triển khai source code C# / EF Core Migration)*  
+> **Trạng thái:** `IN PROGRESS (TASK-01 & TASK-02 COMPLETED — 7/14 Sub-tasks, 4.00/10.50 Man-days)` *(Cần user chạy script SQL trên pgAdmin; chờ triển khai `TASK-03` & `TASK-04`)*  
 > **Nguồn đặc tả:** Google Spreadsheet Phase 6 (`1q04ZBxPKqJu8r2XFFdQwm2NAHkOPiEUSjbw4catSIUo` — Sheets: `Danh Sach Task`, `Tong Quan & Quy Tac`)  
 > **Quy mô:** `14 Sub-tasks` (`TASK-01.1` ➔ `TASK-04.3`) • Tổng ngày công ước tính: `10.50 Man-days`  
 > **Module liên quan:** `UserAccount`, `Security`, `Classes`, `Students`, `Attendance`, `Grades`, `Sacraments`  
@@ -16,15 +16,15 @@ Trong mô hình Xứ Đoàn Thiếu Nhi Thánh Thể trước Phase 6, hệ th�
 2. **Phân định Ma trận Khối & Ca học (`Session`):** Chuẩn hóa thuộc tính `Session` (`Morning` / `Afternoon`) trên thực thể `ClassRoom`, bổ sung Khối `Dự Bị` (`DU_BI`) cố định 4 lớp (`Dự Bị 1` ➔ `Dự Bị 4`) ở ca Chiều, và chặn tuyệt đối việc phân công hoặc truy cập IDOR của `ProbationaryTeacher` vào công tác giảng dạy các lớp ca Chiều.
 3. **Chuẩn hóa 5 Cột mốc Đức tin & Tuyên hứa + Profile Lịch sử Kép:** Bổ sung đủ 5 mốc (`BaptismDate`, `FirstCommunionDate`, `ConfirmationDate`, `BaoDongPromiseDate`, `CatechistPromiseDate`), áp dụng ràng buộc cứng **đủ 18 tuổi** tại mốc Tuyên hứa GLV để mở khóa luồng nâng cấp vai trò lên `Teacher`, và hiển thị Timeline song song *Lớp đang học* – *Lớp đang dạy* trên trang Profile.
 
-### 1.1. Bảng Tổng hợp Tiến độ & Ngày công Dự kiến (V3 Final)
+### 1.1. Bảng Tổng hợp Tiến độ & Ngày công (Cập nhật từ Google Sheet — `2026-11-20`)
 
 | STT | Nhóm Task | Tổng Sub-task | Tổng Ngày Công (Man-days) | Chưa Làm | Đang Làm | Đã Xong | Tỷ Lệ Hoàn Thành |
 |---|---|---|---|---|---|---|---|
-| 1 | `TASK-01`: Database & Migration | 4 | 2.00 | 4 | 0 | 0 | 0.0% |
-| 2 | `TASK-02`: Authorization & Policy | 3 | 2.00 | 3 | 0 | 0 | 0.0% |
+| 1 | `TASK-01`: Database & Migration | 4 | 2.00 | 0 | 0 | 4 | **100.0%** |
+| 2 | `TASK-02`: Authorization & Policy | 3 | 2.00 | 0 | 0 | 3 | **100.0%** |
 | 3 | `TASK-03`: Quản lý Lớp Chiều & Tuyển hứa | 4 | 3.50 | 4 | 0 | 0 | 0.0% |
 | 4 | `TASK-04`: Giao diện Profile Lịch sử Kép | 3 | 3.00 | 3 | 0 | 0 | 0.0% |
-| **TỔNG CỘNG** | **4 Nhóm Task** | **14** | **10.50** | **14** | **0** | **0** | **0.0%** |
+| **TỔNG CỘNG** | **4 Nhóm Task** | **14** | **10.50** | **7** | **0** | **7** | **50.0%** |
 
 ---
 
@@ -185,5 +185,6 @@ flowchart TD
 
 ## 7. Ghi chú Kiểm định & Đồng bộ `AI-Knowledge`
 
-- **Trạng thái hiện tại:** Toàn bộ 14 sub-tasks trong tài liệu này đang ở trạng thái **Thiết kế đã chốt (`PLANNED / V3 FINAL`)**, chưa chỉnh sửa mã nguồn C# hay cấu trúc PostgreSQL thực tế.
-- **Quy tắc nhất quán chỉ mục:** Theo `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md`, các tệp máy đọc phản ánh mã nguồn hiện hành (`02-DATABASE/TABLE-INDEX.json`, `03-CODE-INDEX/*.jsonl`) **không** ghi nhận trước các symbol/cột chưa tồn tại ở trạng thái code hiện tại; chỉ cập nhật các tệp này và `KNOWLEDGE-BASELINE.json` ngay sau khi hoàn tất lập trình & EF Core Migration cho từng nhóm Task `TASK-01` ➔ `TASK-04`.
+- **Trạng thái hiện tại:** Đã hoàn thành lập trình và kiểm chứng biên dịch (`0 Error(s)`) cho **TASK-01 (`TASK-01.1` ➔ `TASK-01.4`)** và **TASK-02 (`TASK-02.1` ➔ `TASK-02.3`)**; đã đồng bộ trạng thái `Đã xong` trên Google Sheet và cập nhật `AI-Knowledge/02-DATABASE/` (`DATABASE-OVERVIEW.md`, `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`).
+- **SQL Script PostgreSQL (pgAdmin):** Đã tạo script idempotent tại `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql` để người dùng thực thi trực tiếp trên pgAdmin Query Tool.
+- **Phạm vi còn lại:** `TASK-03` (`TASK-03.1` ➔ `TASK-03.4`) và `TASK-04` (`TASK-04.1` ➔ `TASK-04.3`) vẫn đang chờ triển khai (`Chưa làm`). Sau khi hoàn tất `TASK-03` và `TASK-04`, sẽ cập nhật toàn bộ `AI-Knowledge/03-CODE-INDEX/*.jsonl`, `AI-Knowledge/00-OVERVIEW/` và `KNOWLEDGE-BASELINE.json`.

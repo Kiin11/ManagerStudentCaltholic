@@ -17,6 +17,9 @@
         // 5. Giáo lý viên / Huynh trưởng phụ trách lớp
         public const string Teacher = "Teacher";
 
+        // 5b. Giáo lý viên Dự Bị (Học viên Khối Dự Bị Ca Chiều, tập sự trợ giảng Ca Sáng)
+        public const string ProbationaryTeacher = "ProbationaryTeacher";
+
         // 6. Phụ huynh / Thiếu nhi
         public const string Parent = "Parent";
     }
@@ -32,7 +35,10 @@
         // Nhóm điều hành học vụ: Cha Tuyên Úy, Ban Điều Hành, Trưởng Khối
         public const string AcademicManagement = $"{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}";
 
-        // Nhóm ban giảng dạy & quản lý: Tất cả các cấp từ GLV trở lên
-        public const string Staff = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}";
+        // Nhóm ban giảng dạy & quản lý: Tất cả các cấp từ GLV Dự Bị / GLV trở lên
+        public const string Staff = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher},{UserRole.ProbationaryTeacher}";
+
+        // Nhóm trực tiếp giảng dạy / trợ giảng tại lớp: GLV Chính thức và GLV Dự Bị
+        public const string TeachingStaff = $"{UserRole.Teacher},{UserRole.ProbationaryTeacher}";
     }
 }

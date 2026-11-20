@@ -665,6 +665,10 @@ namespace ManagerStudentCaltholic.Controllers
                     return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
                 }
             }
+            else if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            {
+                return Forbid(); // TASK-02.3: Chặn GLV Dự Bị xuất báo cáo lớp Ca Chiều hoặc lớp không phụ trách
+            }
 
             var enrollments = targetClass.Enrollments
                 .Where(e => e.Student.IsActive)
@@ -978,6 +982,17 @@ namespace ManagerStudentCaltholic.Controllers
                     classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
                 }
             }
+            else if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                // TASK-02.3: GLV Dự Bị chỉ được xem báo cáo điểm danh tháng các lớp Ca Sáng được phân công
+                var uid = CurrentUserId;
+                classesQuery = classesQuery.Where(c =>
+                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
+                    c.Session != GradeLevel.SessionAfternoon &&
+                    c.GradeLevel != GradeLevel.BaoDong &&
+                    c.GradeLevel != GradeLevel.DuBi &&
+                    c.GradeLevel != GradeLevel.DuBiCode);
+            }
 
             var classes = await classesQuery
                 .OrderBy(c => c.GradeLevel)
@@ -1150,6 +1165,11 @@ namespace ManagerStudentCaltholic.Controllers
             var targetClass = await _context.Classes.FindAsync(classId);
             if (targetClass == null) return NotFound(new { success = false, message = "Không tìm thấy lớp" });
 
+            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            {
+                return Forbid();
+            }
+
             // Kiểm tra quyền: Admin, Cha, BĐH hoặc GLV Chủ nhiệm của lớp
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             long.TryParse(userIdStr, out var currentUserId);
@@ -1194,6 +1214,11 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> SaveClassRule([FromBody] ClassAttendanceRuleDto dto)
         {
             if (dto == null) return Json(new { success = false, message = "Dữ liệu không hợp lệ" });
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(dto.ClassId))
+            {
+                return Forbid();
+            }
 
             if (dto.ThursdayMassWeightPercent + dto.SundayMassWeightPercent + dto.ClassWeightPercent != 100)
             {
@@ -1261,6 +1286,10 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
                 }
+            }
+            else if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            {
+                return Forbid(); // TASK-02.3: Chặn GLV Dự Bị xuất báo cáo tháng của lớp Ca Chiều hoặc lớp không phụ trách
             }
 
             var targetMonth = month ?? DateTime.Today.Month;
@@ -1951,6 +1980,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// - Leadership (Admin, Cha Xứ, BĐH): Toàn bộ lớp
         /// - BranchHead (Trưởng khối): Các lớp thuộc khối phụ trách + lớp đứng dạy trực tiếp
         /// - Teacher (Giáo lý viên): Chỉ các lớp được phân công trong bảng ClassTeachers
+        /// - ProbationaryTeacher (GLV Dự Bị): Chỉ các lớp được phân công thuộc Ca Sáng (loại trừ Bao Đồng, Dự Bị)
         /// </summary>
         private async Task<List<ClassRoom>> GetAuthorizedClassesAsync(int academicYearId)
         {
@@ -1975,6 +2005,16 @@ namespace ManagerStudentCaltholic.Controllers
                     query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
                 }
             }
+            else if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                // TASK-02.3: GLV Dự Bị chỉ được thao tác các lớp được phân công thuộc Ca Sáng
+                query = query.Where(c =>
+                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
+                    c.Session != GradeLevel.SessionAfternoon &&
+                    c.GradeLevel != GradeLevel.BaoDong &&
+                    c.GradeLevel != GradeLevel.DuBi &&
+                    c.GradeLevel != GradeLevel.DuBiCode);
+            }
             else
             {
                 // Vai trò Teacher: Bắt buộc chỉ lấy các lớp được phân công dạy
@@ -1994,6 +2034,13 @@ namespace ManagerStudentCaltholic.Controllers
 
             var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
             if (targetClass == null) return false;
+
+            // TASK-02.3: Chặn tuyệt đối GLV Dự Bị truy cập / thao tác các lớp Ca Chiều (IDOR)
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
 
             if (User.IsInRole(UserRole.BranchHead))
             {
@@ -2049,6 +2096,11 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetClassDisputes(int classId, string status = "PENDING")
         {
+            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            {
+                return Forbid();
+            }
+
             var list = await _disputeService.GetDisputesForClassAsync(classId, status, User);
             return Ok(new { success = true, data = list });
         }
