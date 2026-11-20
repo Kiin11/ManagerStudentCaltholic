@@ -147,6 +147,18 @@
                                 Khối @Model.ManagedGradeLevel
                             </span>
                         }
+                        @if (Model.FeastDay.HasValue)
+                        {
+                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill px-2 py-1">
+                                <i class="bi bi-stars me-1"></i>Ngày kính: @Model.FeastDay.Value.ToString("dd/MM")
+                            </span>
+                        }
+                        @if (Model.LegacyStudentCodes.Any())
+                        {
+                            <span class="badge bg-info-subtle text-dark border border-info-subtle rounded-pill px-2 py-1 font-monospace">
+                                <i class="bi bi-clock-history me-1"></i>Mã HS cũ: @string.Join(", ", Model.LegacyStudentCodes)
+                            </span>
+                        }
                     </div>
                 </div>
             </div>
@@ -260,12 +272,42 @@
                             <input type="date" name="DateOfBirth" class="form-control" value="@(Model.DateOfBirth?.ToString("yyyy-MM-dd"))" />
                         </div>
                         <div class="col-12">
+                            <label class="form-label small fw-bold mb-1">Ngày Kính (Bổn mạng)</label>
+                            <input type="date" name="FeastDay" class="form-control" value="@(Model.FeastDay?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-12">
                             <label class="form-label small fw-bold mb-1">Email</label>
                             <input type="email" name="Email" class="form-control" value="@Model.Email" placeholder="example@gmail.com" />
                         </div>
                         <div class="col-12">
                             <label class="form-label small fw-bold mb-1">Giáo Khu / Địa Chỉ</label>
                             <input type="text" name="Address" class="form-control" value="@Model.Address" placeholder="Giáo khu..." />
+                        </div>
+
+                        <div class="col-12 mt-3 pt-2 border-top">
+                            <div class="small fw-bold text-primary mb-1">
+                                <i class="bi bi-stars text-warning me-1"></i>Cột Mốc Bí Tích &amp; Tuyên Hứa
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold mb-1">1. Ngày Rửa Tội</label>
+                            <input type="date" name="BaptismDate" class="form-control" value="@(Model.BaptismDate?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold mb-1">2. Ngày Rước Lễ</label>
+                            <input type="date" name="FirstCommunionDate" class="form-control" value="@(Model.FirstCommunionDate?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold mb-1">3. Ngày Thêm Sức</label>
+                            <input type="date" name="ConfirmationDate" class="form-control" value="@(Model.ConfirmationDate?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold mb-1">4. Tuyên Hứa Dự Bị</label>
+                            <input type="date" name="BaoDongPromiseDate" class="form-control" value="@(Model.BaoDongPromiseDate?.ToString("yyyy-MM-dd"))" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold mb-1">5. Tuyên Hứa Giáo Lý Viên <span class="text-muted fw-normal">(&ge; 18 tuổi)</span></label>
+                            <input type="date" name="CatechistPromiseDate" class="form-control" value="@(Model.CatechistPromiseDate?.ToString("yyyy-MM-dd"))" />
                         </div>
                     </div>
                     <div class="d-grid mt-3">
@@ -430,6 +472,22 @@ else
                                 Khối @Model.ManagedGradeLevel
                             </span>
                         }
+                        @if (Model.FeastDay.HasValue)
+                        {
+                            <div class="mt-2">
+                                <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill px-3 py-1">
+                                    <i class="bi bi-stars me-1"></i>Ngày kính: @Model.FeastDay.Value.ToString("dd/MM")
+                                </span>
+                            </div>
+                        }
+                        @if (Model.LegacyStudentCodes.Any())
+                        {
+                            <div class="mt-2">
+                                <span class="badge bg-info-subtle text-dark border border-info-subtle rounded-pill px-3 py-1 font-monospace">
+                                    <i class="bi bi-clock-history me-1"></i>Mã HS cũ: @string.Join(", ", Model.LegacyStudentCodes)
+                                </span>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -591,8 +649,39 @@ else
                                     <input type="date" name="DateOfBirth" class="form-control" value="@(Model.DateOfBirth?.ToString("yyyy-MM-dd"))" />
                                 </div>
                                 <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Ngày Kính (Bổn mạng)</label>
+                                    <input type="date" name="FeastDay" class="form-control" value="@(Model.FeastDay?.ToString("yyyy-MM-dd"))" />
+                                </div>
+                                <div class="col-md-6">
                                     <label class="form-label small fw-bold">Giáo Khu</label>
                                     <input type="text" name="Address" class="form-control" value="@Model.Address" placeholder="Giáo khu..." />
+                                </div>
+
+                                <div class="col-12 mt-4 pt-3 border-top">
+                                    <h6 class="fw-bold text-primary mb-1">
+                                        <i class="bi bi-stars text-warning me-1"></i>Cột Mốc Bí Tích &amp; Tuyên Hứa
+                                    </h6>
+                                    <small class="text-muted">Cập nhật ngày lãnh nhận các Bí tích, Tuyên hứa Dự Bị và Tuyên hứa Giáo lý viên.</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">1. Ngày Rửa Tội</label>
+                                    <input type="date" name="BaptismDate" class="form-control" value="@(Model.BaptismDate?.ToString("yyyy-MM-dd"))" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">2. Ngày Rước Lễ</label>
+                                    <input type="date" name="FirstCommunionDate" class="form-control" value="@(Model.FirstCommunionDate?.ToString("yyyy-MM-dd"))" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">3. Ngày Thêm Sức</label>
+                                    <input type="date" name="ConfirmationDate" class="form-control" value="@(Model.ConfirmationDate?.ToString("yyyy-MM-dd"))" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">4. Ngày Tuyên Hứa Dự Bị</label>
+                                    <input type="date" name="BaoDongPromiseDate" class="form-control" value="@(Model.BaoDongPromiseDate?.ToString("yyyy-MM-dd"))" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">5. Ngày Tuyên Hứa Giáo Lý Viên <span class="text-muted fw-normal">(&ge; 18 tuổi)</span></label>
+                                    <input type="date" name="CatechistPromiseDate" class="form-control" value="@(Model.CatechistPromiseDate?.ToString("yyyy-MM-dd"))" />
                                 </div>
                             </div>
                             <div class="text-end mt-4">

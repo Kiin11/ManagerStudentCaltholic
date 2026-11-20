@@ -29,6 +29,30 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [Display(Name = "Ngày Sinh")]
         public DateTime? DateOfBirth { get; set; }
 
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Kính Bổn Mạng")]
+        public DateTime? FeastDay { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Rửa Tội")]
+        public DateTime? BaptismDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Rước Lễ")]
+        public DateTime? FirstCommunionDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Thêm Sức")]
+        public DateTime? ConfirmationDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Tuyên Hứa Dự Bị")]
+        public DateTime? BaoDongPromiseDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Tuyên Hứa Giáo Lý Viên")]
+        public DateTime? CatechistPromiseDate { get; set; }
+
         [EmailAddress(ErrorMessage = "Định dạng Email không hợp lệ")]
         [StringLength(100)]
         [Display(Name = "Email")]
@@ -56,6 +80,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         // TASK-04.1 / TASK-04.2 / TASK-04.3 (Phase 6): Hồ sơ Thiếu nhi liên kết, Timeline kép & 5 Cột mốc Đức tin
         public long? LinkedStudentId { get; set; }
         public string? LinkedStudentCode { get; set; }
+        public List<string> LegacyStudentCodes { get; set; } = new();
         public DateTime? StudentDateOfBirth { get; set; }
         public string? StudentGender { get; set; }
         public string? ParentPhone { get; set; }

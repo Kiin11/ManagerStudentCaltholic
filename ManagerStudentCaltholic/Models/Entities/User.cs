@@ -43,6 +43,12 @@ namespace ManagerStudentCaltholic.Models.Entities
         [MaxLength(50)]
         public string? ChristianName { get; set; } // Tên Thánh (ví dụ: Giuse, Maria...)
         public DateTime? DateOfBirth { get; set; } // Ngày sinh
+        public DateTime? FeastDay { get; set; }             // Ngày kính Thánh Bổn mạng
+        public DateTime? BaptismDate { get; set; }          // Ngày Rửa tội
+        public DateTime? FirstCommunionDate { get; set; }   // Ngày Rước lễ lần đầu
+        public DateTime? ConfirmationDate { get; set; }     // Ngày Thêm sức
+        public DateTime? BaoDongPromiseDate { get; set; }   // Ngày Tuyên hứa Dự Bị / Bao Đồng
+        public DateTime? CatechistPromiseDate { get; set; } // Ngày Tuyên hứa Giáo lý viên (>= 18 tuổi)
 
         [MaxLength(200)]
         public string? Address { get; set; } // Giáo họ / Địa chỉ cư ngụ

@@ -795,6 +795,12 @@ namespace ManagerStudentCaltholic.Controllers
                     FirstName = student.FirstName,
                     LastName = student.LastName,
                     DateOfBirth = student.DateOfBirth,
+                    FeastDay = student.FeastDay,
+                    BaptismDate = student.BaptismDate,
+                    FirstCommunionDate = student.FirstCommunionDate,
+                    ConfirmationDate = student.ConfirmationDate,
+                    BaoDongPromiseDate = student.BaoDongPromiseDate,
+                    CatechistPromiseDate = student.CatechistPromiseDate,
                     PhoneNumber = student.ParentPhone,
                     Role = UserRole.ProbationaryTeacher,
                     LinkedStudentId = student.Id,
@@ -806,8 +812,32 @@ namespace ManagerStudentCaltholic.Controllers
                 _context.Users.Add(createdUser);
                 await _context.SaveChangesAsync();
 
-                if (!string.Equals(student.StudentCode, createdUser.Username, StringComparison.Ordinal))
+                var oldStudentCode = student.StudentCode;
+                if (!string.Equals(oldStudentCode, createdUser.Username, StringComparison.Ordinal))
                 {
+                    int? historyYearId = currentYear?.Id ?? (await _context.AcademicYears
+                        .AsNoTracking()
+                        .OrderByDescending(y => y.StartDate)
+                        .Select(y => (int?)y.Id)
+                        .FirstOrDefaultAsync());
+
+                    if (!string.IsNullOrWhiteSpace(oldStudentCode) && historyYearId.HasValue)
+                    {
+                        _context.StudentCodeHistories.Add(new StudentCodeHistory
+                        {
+                            StudentId = student.Id,
+                            SourceAcademicYearId = historyYearId.Value,
+                            TargetAcademicYearId = historyYearId.Value,
+                            OriginalCode = oldStudentCode.Length > 50 ? oldStudentCode[..50] : oldStudentCode,
+                            ArchivedYearCode = oldStudentCode.Length > 50 ? oldStudentCode[..50] : oldStudentCode,
+                            NewCode = createdUser.Username,
+                            RolloverOutcome = "PROBATIONARY_ACCOUNT",
+                            TargetClassName = "Khối Dự Bị",
+                            ChangedBy = User.Identity?.Name ?? "System",
+                            ChangedAt = DateTime.UtcNow
+                        });
+                    }
+
                     student.StudentCode = createdUser.Username;
                 }
 
@@ -819,7 +849,7 @@ namespace ManagerStudentCaltholic.Controllers
                     AcademicYearId = currentYear?.Id,
                     ChangedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
                     ChangedAt = DateTime.UtcNow,
-                    Reason = $"Cấp tài khoản GLV Dự Bị từ hồ sơ thiếu nhi {student.StudentCode}"
+                    Reason = $"Cấp tài khoản GLV Dự Bị từ hồ sơ thiếu nhi {oldStudentCode}"
                 });
 
                 await _context.SaveChangesAsync();

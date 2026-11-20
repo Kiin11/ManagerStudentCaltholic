@@ -40,6 +40,13 @@ namespace ManagerStudentCaltholic.Services
                     .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Id == linkedStudentId.Value);
             }
+            else if (!string.IsNullOrWhiteSpace(user.Username))
+            {
+                var uname = user.Username.Trim().ToLowerInvariant();
+                linkedStudent = await _context.Students
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.StudentCode.ToLower() == uname);
+            }
 
             return await BuildCompositeViewModelAsync(user, linkedStudent);
         }
@@ -70,6 +77,12 @@ namespace ManagerStudentCaltholic.Services
                 FirstName = user?.FirstName ?? student?.FirstName ?? string.Empty,
                 LastName = user?.LastName ?? student?.LastName ?? string.Empty,
                 DateOfBirth = user?.DateOfBirth ?? student?.DateOfBirth,
+                FeastDay = user?.FeastDay ?? student?.FeastDay,
+                BaptismDate = user?.BaptismDate ?? student?.BaptismDate,
+                FirstCommunionDate = user?.FirstCommunionDate ?? student?.FirstCommunionDate,
+                ConfirmationDate = user?.ConfirmationDate ?? student?.ConfirmationDate,
+                BaoDongPromiseDate = user?.BaoDongPromiseDate ?? student?.BaoDongPromiseDate,
+                CatechistPromiseDate = user?.CatechistPromiseDate ?? student?.CatechistPromiseDate,
                 Email = user?.Email,
                 PhoneNumber = user?.PhoneNumber ?? student?.ParentPhone,
                 Address = user?.Address,
@@ -145,6 +158,7 @@ namespace ManagerStudentCaltholic.Services
 
             // 2. Lấy lịch sử học tập (Enrollments + GradeRecords) qua LinkedStudentId/Student.Id
             var learningItems = new List<StudentLearningHistoryItemDto>();
+            var sacDict = new Dictionary<int, DateTime>();
             if (student != null)
             {
                 var enrollments = await _context.Enrollments
@@ -242,25 +256,51 @@ namespace ManagerStudentCaltholic.Services
                     });
                 }
 
-                // 3. Xây dựng 5 Cột mốc Đức tin & Tuyên hứa (TASK-04.3)
+                // 3. Đọc thêm Sổ bộ Bí tích & Mã học sinh cũ của Student liên kết (nếu có)
                 var sacRecords = await _context.StudentSacramentRecords
                     .AsNoTracking()
                     .Where(r => r.StudentId == student.Id)
                     .ToListAsync();
-                var sacDict = sacRecords
+                sacDict = sacRecords
                     .GroupBy(r => r.SacramentType)
                     .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.ReceivedDate).First().ReceivedDate);
 
-                DateTime? moc1 = student.BaptismDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.Baptism, out var d1) ? d1 : null);
-                DateTime? moc2 = student.FirstCommunionDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.FirstCommunion, out var d2) ? d2 : null);
-                DateTime? moc3 = student.ConfirmationDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.Confirmation, out var d3) ? d3 : null);
-                DateTime? moc4 = student.BaoDongPromiseDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.ProfessionOfFaith, out var d4) ? d4 : null);
-                DateTime? moc5 = student.CatechistPromiseDate;
+                var codeHistories = await _context.StudentCodeHistories
+                    .AsNoTracking()
+                    .Where(h => h.StudentId == student.Id)
+                    .OrderBy(h => h.ChangedAt)
+                    .ToListAsync();
 
-                int currentAge = StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, DateTime.Today);
-                int? ageM5 = moc5.HasValue ? StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, moc5.Value) : null;
-                bool isUnder18AtPromise = moc5.HasValue && moc5.Value.Date < student.DateOfBirth.Date.AddYears(18);
-                bool isCurrentlyProbationaryAndUnder18 = !moc5.HasValue && currentAge < 18 &&
+                viewModel.LegacyStudentCodes = codeHistories
+                    .SelectMany(h => new[] { h.OriginalCode, h.ArchivedYearCode })
+                    .Where(c => !string.IsNullOrWhiteSpace(c) &&
+                                !string.Equals(c, student.StudentCode, StringComparison.OrdinalIgnoreCase) &&
+                                (user == null || !string.Equals(c, user.Username, StringComparison.OrdinalIgnoreCase)))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            // 3B. Xây dựng 5 Cột mốc Đức tin & Tuyên hứa cho cả User & Student liên kết (TASK-04.3)
+            if (user != null || student != null)
+            {
+                DateTime? moc1 = user?.BaptismDate ?? student?.BaptismDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.Baptism, out var d1) ? d1 : null);
+                DateTime? moc2 = user?.FirstCommunionDate ?? student?.FirstCommunionDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.FirstCommunion, out var d2) ? d2 : null);
+                DateTime? moc3 = user?.ConfirmationDate ?? student?.ConfirmationDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.Confirmation, out var d3) ? d3 : null);
+                DateTime? moc4 = user?.BaoDongPromiseDate ?? student?.BaoDongPromiseDate ?? (sacDict.TryGetValue((int)SacramentTypeEnum.ProfessionOfFaith, out var d4) ? d4 : null);
+                DateTime? moc5 = user?.CatechistPromiseDate ?? student?.CatechistPromiseDate;
+
+                viewModel.BaptismDate = moc1;
+                viewModel.FirstCommunionDate = moc2;
+                viewModel.ConfirmationDate = moc3;
+                viewModel.BaoDongPromiseDate = moc4;
+                viewModel.CatechistPromiseDate = moc5;
+
+                DateTime? effectiveDob = user?.DateOfBirth ?? student?.DateOfBirth;
+                bool hasValidDob = effectiveDob.HasValue;
+                int currentAge = hasValidDob ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, DateTime.Today) : 0;
+                int? ageM5 = (hasValidDob && moc5.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc5.Value) : null;
+                bool isUnder18AtPromise = hasValidDob && moc5.HasValue && moc5.Value.Date < effectiveDob!.Value.Date.AddYears(18);
+                bool isCurrentlyProbationaryAndUnder18 = hasValidDob && !moc5.HasValue && currentAge < 18 &&
                     (user?.Role == UserRole.ProbationaryTeacher || learningItems.Any(l => GradeLevel.IsProbationaryGrade(l.GradeLevel)));
 
                 viewModel.IsUnder18CatechistWarning = isUnder18AtPromise || isCurrentlyProbationaryAndUnder18;
@@ -281,7 +321,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Bí tích Rửa Tội",
                         FieldName = nameof(Student.BaptismDate),
                         EventDate = moc1,
-                        AgeAtMilestone = moc1.HasValue ? StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, moc1.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc1.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc1.Value) : null,
                         IsCompleted = moc1.HasValue,
                         Description = "Khởi đầu đời sống Kitô hữu, định danh hồ sơ Thiếu nhi."
                     },
@@ -291,7 +331,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Xưng Tội & Rước Lễ Lần Đầu",
                         FieldName = nameof(Student.FirstCommunionDate),
                         EventDate = moc2,
-                        AgeAtMilestone = moc2.HasValue ? StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, moc2.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc2.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc2.Value) : null,
                         IsCompleted = moc2.HasValue,
                         Description = "Hoàn tất Khối Rước Lễ (Rước Lễ 2), đủ điều kiện lên Khối Thêm Sức."
                     },
@@ -301,31 +341,31 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Bí tích Thêm Sức",
                         FieldName = nameof(Student.ConfirmationDate),
                         EventDate = moc3,
-                        AgeAtMilestone = moc3.HasValue ? StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, moc3.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc3.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc3.Value) : null,
                         IsCompleted = moc3.HasValue,
                         Description = "Hoàn tất Khối Thêm Sức, điều kiện tiên quyết chuyển lên Khối Bao Đồng (Ca Chiều)."
                     },
                     new()
                     {
                         StepNumber = 4,
-                        MilestoneName = "Tuyên Hứa Bao Đồng",
+                        MilestoneName = "Tuyên Hứa Dự Bị (Bao Đồng)",
                         FieldName = nameof(Student.BaoDongPromiseDate),
                         EventDate = moc4,
-                        AgeAtMilestone = moc4.HasValue ? StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, moc4.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc4.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc4.Value) : null,
                         IsCompleted = moc4.HasValue,
-                        Description = "Hoàn tất Khối Bao Đồng, điều kiện xét tuyển vào Khối Dự Bị GLV."
+                        Description = "Hoàn tất Khối Bao Đồng / Tuyên hứa bước vào giai đoạn Dự Bị GLV."
                     },
                     new()
                     {
                         StepNumber = 5,
-                        MilestoneName = "Hoàn Thành Dự Bị & Tuyên Hứa GLV",
+                        MilestoneName = "Tuyên Hứa Giáo Lý Viên",
                         FieldName = nameof(Student.CatechistPromiseDate),
                         EventDate = moc5,
                         AgeAtMilestone = ageM5,
                         IsCompleted = moc5.HasValue && !isUnder18AtPromise,
                         IsWarning = viewModel.IsUnder18CatechistWarning,
                         WarningMessage = viewModel.CatechistWarningMessage,
-                        Description = "Hoàn tất Khối Dự Bị (Dự Bị 4) và đủ 18 tuổi để nâng cấp lên Giáo lý viên chính thức."
+                        Description = "Hoàn tất Dự Bị và đủ 18 tuổi để tuyên hứa Giáo lý viên chính thức."
                     }
                 };
             }

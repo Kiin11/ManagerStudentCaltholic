@@ -1,9 +1,15 @@
 using System.ComponentModel.DataAnnotations;
+using ManagerStudentCaltholic.Models.Entities;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
     public class BatchTeacherItemDto
     {
+        public long? StudentId { get; set; }
+        public string? OldStudentCode { get; set; }
+        public string? CustomUsername { get; set; }
+        public string? Role { get; set; }
+
         [Required(ErrorMessage = "Thiếu Tên Thánh")]
         public string ChristianName { get; set; } = string.Empty;
 
@@ -23,6 +29,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
     public class BatchCreateTeachersRequestDto
     {
         public string? DefaultPassword { get; set; } = "GLV@2026!"; // Mật khẩu khởi tạo chung
+        public string TargetRole { get; set; } = UserRole.ProbationaryTeacher;
         public List<BatchTeacherItemDto> Teachers { get; set; } = new();
     }
 
@@ -34,6 +41,26 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string PhoneNumber { get; set; } = string.Empty;
         public string InitialPassword { get; set; } = string.Empty;
         public string? ManagedGradeLevel { get; set; }
+        public string? OldStudentCode { get; set; }
+        public string Role { get; set; } = string.Empty;
+    }
+
+    public class BaoDongGraduateCandidateDto
+    {
+        public long StudentId { get; set; }
+        public string OldStudentCode { get; set; } = string.Empty;
+        public string ChristianName { get; set; } = string.Empty;
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string DateOfBirth { get; set; } = string.Empty;
+        public string Gender { get; set; } = string.Empty;
+        public string? ParentPhone { get; set; }
+        public string? ClassName { get; set; }
+        public string? GradeLevel { get; set; }
+        public string? BaoDongPromiseDate { get; set; }
+        public bool IsBaoDongCompleted { get; set; }
+        public string SuggestedUsername { get; set; } = string.Empty;
     }
 
     public class BatchCreateTeachersResultDto

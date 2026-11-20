@@ -341,7 +341,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateProfile([Bind("Id,ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address")] UserProfileViewModel model)
+        public async Task<IActionResult> UpdateProfile([Bind("Id,ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address,FeastDay,BaptismDate,FirstCommunionDate,ConfirmationDate,BaoDongPromiseDate,CatechistPromiseDate")] UserProfileViewModel model)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!long.TryParse(userIdStr, out var currentUserId))
@@ -377,6 +377,15 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
             }
 
+            var effectiveDob = model.DateOfBirth ?? user.DateOfBirth;
+            if (model.CatechistPromiseDate.HasValue && effectiveDob.HasValue &&
+                model.CatechistPromiseDate.Value.Date < effectiveDob.Value.Date.AddYears(18))
+            {
+                int ageAtPromise = StudentViewModel.CalculateAgeAtDate(effectiveDob.Value, model.CatechistPromiseDate.Value);
+                TempData["ErrorMessage"] = $"Ngày Tuyên hứa Giáo lý viên ({model.CatechistPromiseDate.Value:dd/MM/yyyy}) ghi nhận mới {ageAtPromise} tuổi (quy định tối thiểu 18 tuổi trở lên).";
+                return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
+            }
+
             var cleanPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
             var cleanEmail = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email.Trim().ToLowerInvariant();
 
@@ -404,15 +413,57 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
+            static DateTime? ToUtcDate(DateTime? d) =>
+                d.HasValue ? DateTime.SpecifyKind(d.Value.Date, DateTimeKind.Utc) : null;
+
             user.ChristianName = model.ChristianName?.Trim();
             user.FirstName = model.FirstName.Trim();
             user.LastName = model.LastName.Trim();
-            user.DateOfBirth = model.DateOfBirth.HasValue
-                ? DateTime.SpecifyKind(model.DateOfBirth.Value.Date, DateTimeKind.Utc)
-                : null;
+            user.DateOfBirth = ToUtcDate(model.DateOfBirth);
+            user.FeastDay = ToUtcDate(model.FeastDay);
+            user.BaptismDate = ToUtcDate(model.BaptismDate);
+            user.FirstCommunionDate = ToUtcDate(model.FirstCommunionDate);
+            user.ConfirmationDate = ToUtcDate(model.ConfirmationDate);
+            user.BaoDongPromiseDate = ToUtcDate(model.BaoDongPromiseDate);
+            user.CatechistPromiseDate = ToUtcDate(model.CatechistPromiseDate);
             user.Email = cleanEmail;
             user.PhoneNumber = cleanPhone;
             user.Address = model.Address?.Trim();
+
+            // Đồng bộ 2 chiều sang hồ sơ Student liên kết (nếu có)
+            long? linkedStudentId = user.LinkedStudentId ?? user.StudentId;
+            if (linkedStudentId.HasValue && linkedStudentId.Value > 0)
+            {
+                var linkedStudent = await _context.Students
+                    .FirstOrDefaultAsync(s => s.Id == linkedStudentId.Value);
+
+                if (linkedStudent != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(user.ChristianName))
+                    {
+                        linkedStudent.ChristianName = user.ChristianName.Length > 50 ? user.ChristianName[..50] : user.ChristianName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.FirstName))
+                    {
+                        linkedStudent.FirstName = user.FirstName.Length > 90 ? user.FirstName[..90] : user.FirstName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.LastName))
+                    {
+                        linkedStudent.LastName = user.LastName.Length > 10 ? user.LastName[..10] : user.LastName;
+                    }
+                    if (user.DateOfBirth.HasValue)
+                    {
+                        linkedStudent.DateOfBirth = user.DateOfBirth.Value;
+                    }
+
+                    linkedStudent.FeastDay = user.FeastDay;
+                    linkedStudent.BaptismDate = user.BaptismDate;
+                    linkedStudent.FirstCommunionDate = user.FirstCommunionDate;
+                    linkedStudent.ConfirmationDate = user.ConfirmationDate;
+                    linkedStudent.BaoDongPromiseDate = user.BaoDongPromiseDate;
+                    linkedStudent.CatechistPromiseDate = user.CatechistPromiseDate;
+                }
+            }
 
             // SEC-05 FIX 3: Đồng bộ lại tên và SĐT hiển thị trên các lớp mà GLV này được gán qua đúng UserId
             var assignedRecords = await _context.ClassTeachers

@@ -16,13 +16,24 @@
                 <h6 class="fw-bold text-dark mb-0">
                     <i class="bi bi-stars text-warning me-2"></i>5 Cột Mốc Đức Tin &amp; Tuyên Hứa
                 </h6>
-                @if (!string.IsNullOrEmpty(Model.LinkedStudentCode))
+                @if (!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any() || Model.FeastDay.HasValue || Model.StudentDateOfBirth.HasValue)
                 {
                     <small class="text-muted">
-                        Liên kết hồ sơ thiếu nhi: <code class="fw-bold">@Model.LinkedStudentCode</code>
+                        @if (!string.IsNullOrEmpty(Model.LinkedStudentCode))
+                        {
+                            <span>Mã hiện tại: <code class="fw-bold">@Model.LinkedStudentCode</code></span>
+                        }
+                        @if (Model.LegacyStudentCodes.Any())
+                        {
+                            <span>@(!string.IsNullOrEmpty(Model.LinkedStudentCode) ? " • " : "")Mã HS cũ: <code class="fw-bold text-primary">@string.Join(", ", Model.LegacyStudentCodes)</code></span>
+                        }
+                        @if (Model.FeastDay.HasValue)
+                        {
+                            <span>@((!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any()) ? " • " : "")Ngày kính: <strong>@Model.FeastDay.Value.ToString("dd/MM/yyyy")</strong></span>
+                        }
                         @if (Model.StudentDateOfBirth.HasValue)
                         {
-                            <span> • Ngày sinh: @Model.StudentDateOfBirth.Value.ToString("dd/MM/yyyy")</span>
+                            <span>@((!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any() || Model.FeastDay.HasValue) ? " • " : "")Ngày sinh: @Model.StudentDateOfBirth.Value.ToString("dd/MM/yyyy")</span>
                         }
                     </small>
                 }
