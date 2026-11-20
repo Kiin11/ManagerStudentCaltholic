@@ -91,11 +91,20 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Student>().HasIndex(e => e.StudentCode);
             modelBuilder.Entity<Student>().HasIndex(e => new { e.LastName, e.FirstName });
             modelBuilder.Entity<Student>().HasIndex(e => e.ChristianName);
+            modelBuilder.Entity<Student>().HasIndex(e => e.BaoDongPromiseDate);
+            modelBuilder.Entity<Student>().HasIndex(e => e.CatechistPromiseDate);
             modelBuilder.Entity<Enrollment>().HasIndex(e => new { e.StudentId, e.AcademicYearId });
 
             modelBuilder.Entity<ClassRoom>(entity =>
             {
                 entity.Property(c => c.IsGradeLocked).HasDefaultValue(false);
+                entity.Property(c => c.Session)
+                      .HasMaxLength(20)
+                      .HasDefaultValue(GradeLevel.SessionMorning)
+                      .IsRequired();
+
+                entity.HasIndex(c => c.Session);
+                entity.HasIndex(c => new { c.GradeLevel, c.Session });
 
                 entity.HasOne(c => c.ClassRoomLocation)
                       .WithMany()
@@ -205,6 +214,15 @@ namespace ManagerStudentCaltholic.Data
                       .WithMany()
                       .HasForeignKey(u => u.StudentId)
                       .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasOne(u => u.LinkedStudent)
+                      .WithOne()
+                      .HasForeignKey<User>(u => u.LinkedStudentId)
+                      .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.LinkedStudentId)
+                      .IsUnique()
+                      .HasFilter("\"LinkedStudentId\" IS NOT NULL");
 
                 entity.HasIndex(u => u.ManagedGradeLevel);
             });

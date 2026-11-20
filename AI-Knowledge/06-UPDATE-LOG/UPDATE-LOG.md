@@ -2,6 +2,71 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Hoàn tất Phase 6 — `TASK-03` (Quản lý Lớp Chiều & Tuyển hứa) & `TASK-04` (Profile Lịch sử Kép)
+- **Thời gian cập nhật:** `2026-11-20T14:07:00+07:00`
+- **Mục tiêu:** Triển khai `7` sub-tasks còn lại của Phase 6 (`TASK-03.1` ➔ `TASK-04.3`), nâng tổng tiến độ lên `14/14` (`100,0%` — `10.50` ngày công) trên Google Sheet và đồng bộ trạng thái `COMPLETED` vào `AI-Knowledge/`.
+- **Danh sách file source & view đã tạo/cập nhật:**
+  - `ManagerStudentCaltholic/Controllers/ClassesController.cs` & `ManagerStudentCaltholic/Views/Classes/Index.cshtml` (`QuickCreateProbationaryClasses` tạo nhanh 4 lớp `Dự Bị 1..4` Ca Chiều, lọc & chặn tuyệt đối `ProbationaryTeacher` dạy các lớp Ca Chiều `Bao Đồng`/`Dự Bị`, hiển thị badge Ca học)
+  - `ManagerStudentCaltholic/Controllers/UsersController.cs` & `ManagerStudentCaltholic/Views/Users/Index.cshtml` (hỗ trợ vai trò `ProbationaryTeacher` / `"GLV Dự Bị"` và khối `Dự Bị`)
+  - `ManagerStudentCaltholic/Models/ViewModels/StudentViewModel.cs` (`FirstCommunionDate`, `BaoDongPromiseDate`, `CatechistPromiseDate`, `ProvisionProbationaryUserRequestDto`, `CatechistPromiseUpgradeRequestDto`, `CalculateAgeAtDate`)
+  - `ManagerStudentCaltholic/Services/SacramentRegistryService.cs` (đồng bộ 2 chiều cả 4 mốc đầu với bảng `StudentSacramentRecords`)
+  - `ManagerStudentCaltholic/Controllers/StudentsController.cs` & `ManagerStudentCaltholic/Views/Students/Index.cshtml` (cấp tài khoản `ProbationaryTeacher` từ hồ sơ thiếu nhi qua `ProvisionProbationaryAccount` chống trùng 1-1; form Tuyên hứa GLV `SaveCatechistPromiseAndUpgrade` chặn cứng `< 18` tuổi và nâng Role lên `Teacher` kèm `UserRoleHistories`; trang `Details`)
+  - `ManagerStudentCaltholic/Models/ViewModels/UserProfileViewModel.cs`, `ManagerStudentCaltholic/Interface/Services/IProfileHistoryService.cs` *(NEW FILE)*, `ManagerStudentCaltholic/Services/ProfileHistoryService.cs` *(NEW FILE)*, `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs`, `ManagerStudentCaltholic/Controllers/AccountController.cs` (hợp nhất lịch sử học tập & giảng dạy theo từng niên khóa + 5 Cột mốc Đức tin & Tuyên hứa)
+  - `ManagerStudentCaltholic/Views/Shared/_ProfileDualTimelineAndMilestones.cshtml` *(NEW FILE)*, `ManagerStudentCaltholic/Views/Account/Profile.cshtml` (cả Mobile & Desktop), `ManagerStudentCaltholic/Views/Students/Details.cshtml` *(NEW FILE)* (Timeline kép 2 vế song song Lớp Học & Lớp Dạy + 5 Cột mốc Đức tin kèm tuổi & cảnh báo `< 18` tuổi)
+- **Kiểm tra:** `dotnet build ManagerStudentCaltholic/ManagerStudentCaltholic.csproj --no-restore` (`0 Warning(s)`, `0 Error(s)`); Google Sheet `Tong Quan & Quy Tac` hiển thị `TASK-01`..`TASK-04` đều `100,0%` (`14/14` sub-tasks `Đã xong`).
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+
+---
+
+### Phiên cập nhật: Triển khai Phase 6 — `TASK-01` (Database & Migration) & `TASK-02` (Authorization & Policy)
+- **Thời gian cập nhật:** `2026-11-20T13:46:00+07:00`
+- **Mục tiêu:** Triển khai mã nguồn cho `7` sub-tasks đầu tiên của Phase 6 (`TASK-01.1` ➔ `TASK-02.3`), tạo script SQL chuẩn PostgreSQL chạy trực tiếp trên pgAdmin, đồng bộ trạng thái `Đã xong` lên Google Sheet và cập nhật tài liệu `AI-Knowledge/`.
+- **Danh sách file source & script đã tạo/cập nhật:**
+  - `ManagerStudentCaltholic/Models/Entities/UserRole.cs` (thêm `ProbationaryTeacher`, cập nhật `RoleGroups.Staff`, thêm `RoleGroups.TeachingStaff`)
+  - `ManagerStudentCaltholic/Models/Entities/User.cs` (thêm `LinkedStudentId` & navigation `LinkedStudent`, giữ `StudentId` tương thích ngược)
+  - `ManagerStudentCaltholic/Models/Entities/GradeLevel.cs` *(NEW FILE)* (hằng số khối gồm `Dự Bị` / `DU_BI`, `SessionMorning` / `SessionAfternoon`, 4 lớp chuẩn `Dự Bị 1..4`, helpers `IsAfternoonGrade`, `ResolveSession`, `IsAfternoonSession`)
+  - `ManagerStudentCaltholic/Models/Entities/ClassRoom.cs` (thêm thuộc tính `Session` tự ánh xạ theo `GradeLevel`, giữ `Shift` tương thích ngược)
+  - `ManagerStudentCaltholic/Models/Entities/Student.cs` (thêm `FirstCommunionDate`, `BaoDongPromiseDate`, `CatechistPromiseDate`)
+  - `ManagerStudentCaltholic/Data/ParishDbContext.cs` (Fluent API cho `User.LinkedStudentId` 1-1 Unique Filtered Index, `ClassRoom.Session` & index, index `*PromiseDate` trên `Student`)
+  - `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs` (cập nhật Policy `RequireStaff`, tách thêm `RequireTeachingStaff` và `RequireOfficialTeacher`)
+  - `ManagerStudentCaltholic/Services/FeatureNavigationService.cs` (đồng bộ `AllowedRolesCsv` từ `Teacher` sang `ProbationaryTeacher`, lọc lớp Ca Sáng cho Dự Bị, nhãn `"GLV Dự Bị"`)
+  - `ManagerStudentCaltholic/Views/FeaturePermissions/Index.cshtml` (thêm tùy chọn vai trò `GLV Dự Bị` trên bảng phân quyền Master UI)
+  - `ManagerStudentCaltholic/Interface/Services/IGradePermissionService.cs` & `ManagerStudentCaltholic/Services/GradePermissionService.cs` (khóa phạm vi Ca Sáng cho `ProbationaryTeacher`)
+  - `ManagerStudentCaltholic/Controllers/GradesController.cs`, `ManagerStudentCaltholic/Services/ClassEvaluationService.cs`, `ManagerStudentCaltholic/Controllers/AttendanceController.cs` (ràng buộc Ca Sáng & chặn IDOR Ca Chiều)
+  - `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql` *(NEW FILE)* (script SQL idempotent cho pgAdmin / PostgreSQL)
+- **Kiểm tra:** `dotnet build ManagerStudentCaltholic/ManagerStudentCaltholic.csproj --no-restore` (`0 Warning(s)`, `0 Error(s)`); Google Sheet `Tong Quan & Quy Tac` hiển thị `TASK-01`: `100,0%`, `TASK-02`: `100,0%` (`7/14` sub-tasks `Đã xong`).
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`
+  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md`
+  - `AI-Knowledge/02-DATABASE/TABLE-INDEX.json`
+  - `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md`
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+
+---
+
+### Phiên cập nhật: Tạo tài liệu đặc tả Phase 6 — Phân tách Vai trò Dự Bị & Khối Chiều (`FEAT-P6-01` V3 Final)
+- **Thời gian cập nhật:** `2026-11-20T13:25:00+07:00`
+- **Mục tiêu:** Đọc đặc tả thiết kế Phase 6 từ Google Spreadsheet và biên soạn bộ tài liệu kiến trúc/nghiệp vụ vào `AI-Knowledge/` ở trạng thái `PLANNED / DESIGN SPECIFICATION` (chưa chỉnh sửa source code C# hay Database).
+- **Nguồn dữ liệu:** Google Spreadsheet Phase 6 (`1q04ZBxPKqJu8r2XFFdQwm2NAHkOPiEUSjbw4catSIUo` — 2 sheets `Danh Sach Task` & `Tong Quan & Quy Tac`, gồm `14` sub-tasks `TASK-01.1` ➔ `TASK-04.3`, tổng `10.50` ngày công).
+- **Nội dung chính đã ghi nhận:**
+  1. Thiết kế phân tách vai trò `ProbationaryTeacher` (`User.LinkedStudentId -> Students.Id`), mở rộng Khối `Dự Bị` (`DU_BI`) & thuộc tính `ClassRoom.Session` (`Morning` / `Afternoon`).
+  2. Chuẩn hóa Ma trận Khối & Ca học (4 lớp cố định `Dự Bị 1..4` ca Chiều; chặn Dự Bị dạy ca Chiều và chống IDOR).
+  3. Chuẩn hóa 5 Cột mốc Đức tin & Tuyên hứa (`BaptismDate`, `FirstCommunionDate`, `ConfirmationDate`, `BaoDongPromiseDate`, `CatechistPromiseDate` kèm ràng buộc cứng `>= 18` tuổi để nâng cấp Role lên `Teacher`).
+  4. Lộ trình tương thích ngược với hiện trạng source code (`User.StudentId`, `ClassRoom.Shift`, `StudentSacramentRecords`, `UserProfileViewModel`, `ClassesController`).
+- **Danh sách tài liệu `AI-Knowledge` tạo mới / cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md` (NEW FILE)
+  - `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md` (Modified — cập nhật cây thư mục `05-FEATURES/`)
+  - `AI-Knowledge/00-OVERVIEW/CODING-RULES.md` (Modified — bổ sung mục 5 quy chuẩn đặt tên `{yyyyMMdd}_{TenBang_Hoac_ChucNang}.sql` và chạy trực tiếp trên pgAdmin cho PostgreSQL trong thư mục `script/`)
+  - `gemini.md` (Modified — bổ sung quy tắc SQL script trong `script/` vào Mục 6, 7.1 và 8)
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md` (Modified — ghi nhận backlog 14 sub-tasks Phase 6 & danh sách tài liệu cần đồng bộ sau khi code)
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` (Modified)
+
+---
+
 ### Phiên cập nhật: Nâng hạn AccessToken lên 8 ngày & Mặc định duy trì đăng nhập 14 ngày
 - **Thời gian cập nhật:** `2026-11-16T13:20:00+07:00`
 - **Mục tiêu:** Cập nhật `AccessTokenExpirationMinutes` lên `11520` phút (8 ngày) và mặc định chọn ô "Duy trì đăng nhập (14 ngày)" (`RememberMe = true`) trên trang đăng nhập.

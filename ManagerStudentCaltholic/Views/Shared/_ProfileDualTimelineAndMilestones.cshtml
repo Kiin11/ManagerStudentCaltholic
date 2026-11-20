@@ -1,0 +1,276 @@
+@model ManagerStudentCaltholic.Models.ViewModels.UserProfileViewModel
+@using ManagerStudentCaltholic.Models.Entities
+@{
+    bool isCompactMobile = ViewData["IsCompactMobile"] as bool? ?? false;
+    bool isLeftColumn = ViewData["IsLeftColumn"] as bool? ?? false;
+    string renderMode = (ViewData["RenderMode"] as string) ?? "ALL";
+    bool showMilestones = renderMode == "ALL" || renderMode == "MILESTONES_ONLY";
+    bool showTimeline = renderMode == "ALL" || renderMode == "TIMELINE_ONLY";
+    string cardPad = isCompactMobile ? "p-3" : (isLeftColumn ? "p-3" : "p-4");
+    string blockColClass = isLeftColumn ? "col-12" : "col-12 col-md-6";
+}
+
+<!-- ========================================================================= -->
+<!-- 1. CHUỖI 5 CỘT MỐC ĐỨC TIN & TUYÊN HỨA (TASK-04.3)                        -->
+<!-- ========================================================================= -->
+@if (showMilestones && (Model.LinkedStudentId.HasValue || Model.FaithMilestones.Any()))
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 pt-3 px-4 pb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h6 class="fw-bold text-dark mb-0">
+                    <i class="bi bi-stars text-warning me-2"></i>5 Cột Mốc Đức Tin &amp; Tuyên Hứa
+                </h6>
+                @if (!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any() || Model.FeastDay.HasValue || Model.StudentDateOfBirth.HasValue)
+                {
+                    <small class="text-muted">
+                        @if (!string.IsNullOrEmpty(Model.LinkedStudentCode))
+                        {
+                            <span>Mã hiện tại: <code class="fw-bold">@Model.LinkedStudentCode</code></span>
+                        }
+                        @if (Model.LegacyStudentCodes.Any())
+                        {
+                            <span>@(!string.IsNullOrEmpty(Model.LinkedStudentCode) ? " • " : "")Mã HS cũ: <code class="fw-bold text-primary">@string.Join(", ", Model.LegacyStudentCodes)</code></span>
+                        }
+                        @if (Model.FeastDay.HasValue)
+                        {
+                            <span>@((!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any()) ? " • " : "")Ngày kính: <strong>@Model.FeastDay.Value.ToString("dd/MM/yyyy")</strong></span>
+                        }
+                        @if (Model.StudentDateOfBirth.HasValue)
+                        {
+                            <span>@((!string.IsNullOrEmpty(Model.LinkedStudentCode) || Model.LegacyStudentCodes.Any() || Model.FeastDay.HasValue) ? " • " : "")Ngày sinh: @Model.StudentDateOfBirth.Value.ToString("dd/MM/yyyy")</span>
+                        }
+                    </small>
+                }
+            </div>
+            @if (Model.IsUnder18CatechistWarning)
+            {
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3 py-1">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Chưa đủ 18 tuổi Tuyên hứa GLV
+                </span>
+            }
+        </div>
+        <div class="card-body @cardPad pt-2">
+            @if (Model.IsUnder18CatechistWarning && !string.IsNullOrEmpty(Model.CatechistWarningMessage))
+            {
+                <div class="alert alert-danger border-0 rounded-3 small py-2 mb-3">
+                    <i class="bi bi-exclamation-octagon-fill me-1"></i>@Model.CatechistWarningMessage
+                </div>
+            }
+
+            <div class="row g-2">
+                @foreach (var m in Model.FaithMilestones)
+                {
+                    string borderCls = m.IsWarning
+                        ? "border-danger bg-danger-subtle bg-opacity-25"
+                        : (m.IsCompleted ? "border-success bg-success-subtle bg-opacity-25" : "border-light-subtle bg-light");
+                    string badgeCls = m.IsWarning
+                        ? "bg-danger text-white"
+                        : (m.IsCompleted ? "bg-success text-white" : "bg-secondary text-white");
+
+                    <div class="col-12 @(isCompactMobile ? "" : "col-md-6 col-xl")">
+                        <div class="h-100 border rounded-3 p-3 @borderCls">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="badge @badgeCls rounded-pill">Mốc @m.StepNumber</span>
+                                @if (m.AgeAtMilestone.HasValue)
+                                {
+                                    <span class="badge @(m.StepNumber == 5 && m.AgeAtMilestone.Value < 18 ? "bg-danger text-white" : "bg-white text-dark border") rounded-pill">
+                                        @m.AgeAtMilestone.Value tuổi
+                                    </span>
+                                }
+                            </div>
+                            <div class="fw-bold text-dark small mb-1">@m.MilestoneName</div>
+                            @if (m.EventDate.HasValue)
+                            {
+                                <div class="fw-semibold @(m.IsWarning ? "text-danger" : "text-success") small">
+                                    <i class="bi bi-calendar-check me-1"></i>@m.EventDate.Value.ToString("dd/MM/yyyy")
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-muted small fst-italic">
+                                    <i class="bi bi-hourglass-split me-1"></i>Chưa ghi nhận
+                                </div>
+                            }
+                            <div class="text-muted mt-1" style="font-size: 0.72rem;">@m.Description</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ========================================================================= -->
+<!-- 2. QUÁ TRÌNH HỌC TẬP & GIẢNG DẠY ĐA NIÊN KHÓA (TASK-04.2)                 -->
+<!-- ========================================================================= -->
+@if (showTimeline)
+{
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-header bg-white border-0 pt-3 px-4 pb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <h6 class="fw-bold text-dark mb-0">
+                <i class="bi bi-columns-gap text-primary me-2"></i>Quá Trình Học Tập &amp; Giảng Dạy
+            </h6>
+            <small class="text-muted">Lớp đang học / đang dạy và lớp đã học / đã dạy qua các niên khóa</small>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+            @Model.DualTimeline.Count niên khóa
+        </span>
+    </div>
+    <div class="card-body @cardPad pt-2">
+        @if (Model.DualTimeline.Any())
+        {
+            <div class="d-flex flex-column gap-3">
+                @foreach (var year in Model.DualTimeline)
+                {
+                    bool isDualParallel = year.LearningClasses.Any() && year.TeachingClasses.Any();
+                    string learnLabel = year.IsCurrentYear ? "Lớp Đang Học" : "Lớp Đã Học";
+                    string teachLabel = year.IsCurrentYear ? "Lớp Đang Dạy" : "Lớp Đã Dạy";
+
+                    <div class="border rounded-4 overflow-hidden @(year.IsCurrentYear ? "border-primary" : "border-light-subtle")">
+                        <div class="px-3 py-2 d-flex flex-wrap justify-content-between align-items-center gap-2 @(year.IsCurrentYear ? "bg-primary-subtle" : "bg-light")">
+                            <div class="fw-bold text-dark">
+                                <i class="bi bi-calendar3-range me-1 text-primary"></i>Niên khóa @year.AcademicYearName
+                                @if (year.IsCurrentYear)
+                                {
+                                    <span class="badge bg-primary rounded-pill ms-1">Hiện hành</span>
+                                }
+                            </div>
+                            @if (isDualParallel)
+                            {
+                                <span class="badge bg-warning text-dark rounded-pill">
+                                    <i class="bi bi-arrow-left-right me-1"></i>Song song Học Chiều &amp; Dạy Sáng
+                                </span>
+                            }
+                        </div>
+                        <div class="p-3 bg-white">
+                            <div class="row g-3">
+                                <!-- LỚP ĐANG HỌC / ĐÃ HỌC -->
+                                <div class="@blockColClass">
+                                    <div class="h-100 rounded-3 p-3 border bg-info-subtle bg-opacity-10">
+                                        <div class="small fw-bold text-uppercase text-info-emphasis mb-2">
+                                            <i class="bi bi-backpack-fill me-1"></i>@learnLabel
+                                        </div>
+                                        @if (year.LearningClasses.Any())
+                                        {
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var lc in year.LearningClasses)
+                                                {
+                                                    <div class="bg-white rounded-3 p-2 border">
+                                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                                            <div>
+                                                                <strong class="text-dark">@lc.ClassName</strong>
+                                                                <div class="small text-muted">Khối: @lc.GradeLevel</div>
+                                                            </div>
+                                                            <span class="badge @(lc.Session == GradeLevel.SessionAfternoon ? "bg-dark-subtle text-dark" : "bg-light text-secondary border") rounded-pill">
+                                                                @lc.SessionDisplay
+                                                            </span>
+                                                        </div>
+                                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2 pt-2 border-top small">
+                                                            <span>
+                                                                ĐTB Cả năm:
+                                                                <strong class="text-primary">@(lc.YearAverage.HasValue ? lc.YearAverage.Value.ToString("0.00") : "--")</strong>
+                                                            </span>
+                                                            <span class="text-muted">
+                                                                (HK1: @(lc.Semester1Average?.ToString("0.00") ?? "--") | HK2: @(lc.Semester2Average?.ToString("0.00") ?? "--"))
+                                                            </span>
+                                                            <span class="badge bg-light text-dark border ms-auto">@lc.AcademicRank</span>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small fst-italic py-2">
+                                                Không ghi nhận lớp theo học trong niên khóa này.
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                <!-- LỚP ĐANG DẠY / ĐÃ DẠY -->
+                                <div class="@blockColClass">
+                                    <div class="h-100 rounded-3 p-3 border bg-success-subtle bg-opacity-10">
+                                        <div class="small fw-bold text-uppercase text-success-emphasis mb-2">
+                                            <i class="bi bi-easel2-fill me-1"></i>@teachLabel
+                                        </div>
+                                        @if (year.TeachingClasses.Any())
+                                        {
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var tc in year.TeachingClasses)
+                                                {
+                                                    <div class="bg-white rounded-3 p-2 border">
+                                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                                            <div>
+                                                                <strong class="text-dark">@tc.ClassName</strong>
+                                                                <div class="small text-muted">
+                                                                    Khối: @tc.GradeLevel
+                                                                    @(string.IsNullOrEmpty(tc.RoomNumber) ? "" : $" • Phòng: {tc.RoomNumber}")
+                                                                </div>
+                                                            </div>
+                                                            <span class="badge @(tc.Session == GradeLevel.SessionAfternoon ? "bg-dark-subtle text-dark" : "bg-warning-subtle text-dark border") rounded-pill">
+                                                                @tc.SessionDisplay
+                                                            </span>
+                                                        </div>
+                                                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2 pt-2 border-top small">
+                                                            <span class="badge @(tc.RoleInClass == "HEAD" ? "bg-primary" : "bg-secondary") rounded-pill">
+                                                                @tc.RoleName
+                                                            </span>
+                                                            <span class="text-muted">Sĩ số: @tc.TotalStudents em</span>
+                                                            @if (tc.IsCurrentYear)
+                                                            {
+                                                                bool isViewerLeadership = User.IsInRole(UserRole.Admin) ||
+                                                                                          User.IsInRole(UserRole.SpiritualDirector) ||
+                                                                                          User.IsInRole(UserRole.ExecutiveBoard);
+                                                                bool isViewerBranchHeadForClass = User.IsInRole(UserRole.BranchHead) &&
+                                                                    !string.IsNullOrWhiteSpace(User.FindFirst("ManagedGradeLevel")?.Value) &&
+                                                                    string.Equals(tc.GradeLevel, User.FindFirst("ManagedGradeLevel")?.Value, StringComparison.OrdinalIgnoreCase);
+                                                                long.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var viewerUserId);
+                                                                bool isOwnProfile = viewerUserId > 0 && Model.Id == viewerUserId;
+                                                                bool isProbationaryBlocked = User.IsInRole(UserRole.ProbationaryTeacher) &&
+                                                                    GradeLevel.IsAfternoonSession(tc.Session, tc.GradeLevel);
+                                                                bool canViewRosterForClass = !isProbationaryBlocked &&
+                                                                    (isViewerLeadership || isViewerBranchHeadForClass || isOwnProfile);
+
+                                                                <div class="d-inline-flex flex-wrap gap-1">
+                                                                    @if (canViewRosterForClass)
+                                                                    {
+                                                                        <a href="/Students/Index?classId=@tc.ClassId" class="btn btn-primary btn-sm rounded-pill py-0 px-2" style="font-size: 0.72rem;">
+                                                                            <i class="bi bi-people-fill me-1"></i>Xem DS Lớp
+                                                                        </a>
+                                                                    }
+                                                                    <a href="/Attendance/Index?classId=@tc.ClassId" class="btn btn-outline-primary btn-sm rounded-pill py-0 px-2" style="font-size: 0.72rem;">
+                                                                        Điểm danh
+                                                                    </a>
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-muted small fst-italic py-2">
+                                                @(year.IsCurrentYear ? "Chưa được phân công giảng dạy trong niên khóa này." : "Không ghi nhận lớp giảng dạy trong niên khóa này.")
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="text-center py-4 text-muted small fst-italic">
+                Chưa có dữ liệu lịch sử học tập hoặc giảng dạy qua các niên khóa.
+            </div>
+        }
+    </div>
+</div>
+}

@@ -116,6 +116,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IDeviceStudentRecognitionService, DeviceStudentRecognitionService>();
             // FEAT-P5-01: Service Truy vấn 360 độ Thiếu nhi Nội bộ
             services.AddScoped<IStaffStudentLookupService, StaffStudentLookupService>();
+            // TASK-04.1 (Phase 6): Service tổng hợp Profile Lịch sử Kép & 5 Cột mốc Đức tin
+            services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
 
             return services;
         }
@@ -236,7 +238,28 @@ namespace ManagerStudentCaltholic.Extensions
                     policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard));
 
                 options.AddPolicy("RequireStaff", policy =>
-                    policy.RequireRole(UserRole.Admin, UserRole.SpiritualDirector, UserRole.ExecutiveBoard, UserRole.BranchHead, UserRole.Teacher));
+                    policy.RequireRole(
+                        UserRole.Admin,
+                        UserRole.SpiritualDirector,
+                        UserRole.ExecutiveBoard,
+                        UserRole.BranchHead,
+                        UserRole.Teacher,
+                        UserRole.ProbationaryTeacher));
+
+                // TASK-02.1 (Phase 6): Nhận diện độc lập nhóm trực tiếp giảng dạy (GLV Chính thức & GLV Dự Bị)
+                options.AddPolicy("RequireTeachingStaff", policy =>
+                    policy.RequireRole(
+                        UserRole.Teacher,
+                        UserRole.ProbationaryTeacher));
+
+                // TASK-02.1 (Phase 6): Phân tách nhóm có quyền GLV chính thức trở lên để sẵn sàng thu hẹp quyền Dự Bị ở các phase sau
+                options.AddPolicy("RequireOfficialTeacher", policy =>
+                    policy.RequireRole(
+                        UserRole.Admin,
+                        UserRole.SpiritualDirector,
+                        UserRole.ExecutiveBoard,
+                        UserRole.BranchHead,
+                        UserRole.Teacher));
             });
 
             return services;

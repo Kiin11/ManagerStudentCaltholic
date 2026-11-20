@@ -68,6 +68,7 @@
                         <!option value="@UserRole.ExecutiveBoard" @(ViewBag.SelectedRole == UserRole.ExecutiveBoard ? "selected" : "")>Ban Điều Hành</!option>
                         <!option value="@UserRole.BranchHead" @(ViewBag.SelectedRole == UserRole.BranchHead ? "selected" : "")>Trưởng Khối</!option>
                         <!option value="@UserRole.Teacher" @(ViewBag.SelectedRole == UserRole.Teacher ? "selected" : "")>Giáo Lý Viên</!option>
+                        <!option value="@UserRole.ProbationaryTeacher" @(ViewBag.SelectedRole == UserRole.ProbationaryTeacher ? "selected" : "")>Dự Bị</!option>
                     </select>
                     <div class="input-group">
                         <input type="text" name="search" class="form-control" placeholder="Tìm tên hoặc username..." value="@ViewBag.SearchKeyword" />
@@ -139,10 +140,13 @@
                             <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                  u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                  u.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                                 u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-2 py-1">
+                                                 u.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                                 u.Role == UserRole.ProbationaryTeacher ? "bg-purple text-white" : "bg-secondary") rounded-pill px-2 py-1"
+                                  style="@(u.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                                 @(u.Role == UserRole.Admin ? "Quản trị viên" : u.Role == UserRole.SpiritualDirector ? "Cha" :
                                   u.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                                  u.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                                  u.Role == UserRole.BranchHead ? "Trưởng khối" :
+                                  u.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                             </span>
                             @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
                             {
@@ -228,6 +232,7 @@ else
                                 <!option value="@UserRole.ExecutiveBoard" @(ViewBag.SelectedRole == UserRole.ExecutiveBoard ? "selected" : "")>Ban Điều Hành</!option>
                                 <!option value="@UserRole.BranchHead" @(ViewBag.SelectedRole == UserRole.BranchHead ? "selected" : "")>Trưởng Khối</!option>
                                 <!option value="@UserRole.Teacher" @(ViewBag.SelectedRole == UserRole.Teacher ? "selected" : "")>Giáo Lý Viên</!option>
+                                <!option value="@UserRole.ProbationaryTeacher" @(ViewBag.SelectedRole == UserRole.ProbationaryTeacher ? "selected" : "")>Dự Bị</!option>
                             </select>
                             <input type="text" name="search" class="form-control" placeholder="Tìm tên/username..." value="@ViewBag.SearchKeyword" />
                             <button type="submit" class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
@@ -238,7 +243,7 @@ else
                             <i class="bi bi-person-x-fill me-1"></i> Rà Soát GLV Nghỉ Năm Mới
                         </button>
                         <button type="button" class="btn btn-outline-success rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#batchCreateModal">
-                            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Tạo Hàng Loạt GLV Mới
+                            <i class="bi bi-file-earmark-spreadsheet me-1"></i> Tạo Hàng Loạt Dự Bị / GLV
                         </button>
                         <button type="button" class="btn btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
                             <i class="bi bi-person-plus-fill me-1"></i> Tạo Tài Khoản Mới
@@ -287,10 +292,13 @@ else
                                         <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                                                                        u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                                                        u.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                                                                                       u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
+                                                                                                       u.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                                                                                       u.Role == UserRole.ProbationaryTeacher ? "text-white" : "bg-secondary") rounded-pill px-3 py-1"
+                                              style="@(u.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                                             @(u.Role == UserRole.Admin ? "Quản trị viên" : u.Role == UserRole.SpiritualDirector ? "Cha" :
                                                                             u.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                                                                            u.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                                                                            u.Role == UserRole.BranchHead ? "Trưởng khối" :
+                                                                            u.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                                         </span>
                                         @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
                                         {
@@ -378,6 +386,7 @@ else
                             <label class="form-label small fw-bold">Vai trò</label>
                             <select id="newRole" class="form-select" onchange="toggleManagedGradeField()">
                                 <option value="@UserRole.Teacher">Giáo Lý Viên</option>
+                                <option value="@UserRole.ProbationaryTeacher">Dự Bị</option>
                                 <option value="@UserRole.BranchHead">Trưởng Khối</option>
                                 <option value="@UserRole.ExecutiveBoard">Ban Điều Hành</option>
                                 @if (User.IsInRole(UserRole.Admin))
@@ -394,6 +403,7 @@ else
                                 <option value="Rước Lễ">Khối Rước Lễ</option>
                                 <option value="Thêm Sức">Khối Thêm Sức</option>
                                 <option value="Bao Đồng">Khối Bao Đồng</option>
+                                <option value="Dự Bị">Khối Dự Bị</option>
                             </select>
                         </div>
                     </div>
@@ -406,6 +416,11 @@ else
                             <label class="form-label small fw-bold">Email (tùy chọn)</label>
                             <input type="email" id="newEmail" class="form-control" placeholder="email@domain.com" />
                         </div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label small fw-bold">Mã Học Sinh Cũ (Tùy chọn - gắn lịch sử giáo lý)</label>
+                        <input type="text" id="newOldStudentCode" class="form-control font-monospace" placeholder="VD: BD3A001, TN-2026-0001..." maxlength="50" />
+                        <div class="form-text small text-muted">Nhập mã học sinh cũ để liên kết quá trình học tập &amp; 5 cột mốc lên Profile.</div>
                     </div>
                 </form>
             </div>
@@ -438,69 +453,134 @@ else
     </div>
 </div>
 
-<!-- MODAL TẠO HÀNG LOẠT GLV (TASK-814) -->
+<!-- MODAL TẠO HÀNG LOẠT TÀI KHOẢN DỰ BỊ / GLV (SAU BAO ĐỒNG & TUYÊN HỨA) -->
 <div class="modal fade mobile-modal-sheet" id="batchCreateModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
         <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title fw-bold fs-6">
-                    <i class="bi bi-person-plus-fill me-2"></i>Tạo Hàng Loạt GLV Mới (Sau Lễ Tuyên Hứa)
+                    <i class="bi bi-person-plus-fill me-2"></i>Tạo Hàng Loạt Tài Khoản Dự Bị / GLV (Sau Bao Đồng &amp; Tuyên Hứa)
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-3 p-md-4">
-                <ul class="nav nav-pills mb-3 nav-fill" id="pills-tab" role="tablist">
+                <ul class="nav nav-pills mb-3 nav-fill gap-1" id="pills-tab" role="tablist">
                     <li class="nav-item">
-                        <button class="nav-link active fw-bold small touch-target-44" id="pills-excel-tab" data-bs-toggle="pill" data-bs-target="#tabExcel">
+                        <button class="nav-link active fw-bold small touch-target-44" id="pills-grad-tab" data-bs-toggle="pill" data-bs-target="#tabBaoDongGraduates" type="button">
+                            <i class="bi bi-mortarboard-fill me-1"></i> Chọn Từ DS Bao Đồng / Tuyên Hứa
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link fw-bold small touch-target-44" id="pills-excel-tab" data-bs-toggle="pill" data-bs-target="#tabExcel" type="button">
                             <i class="bi bi-file-earmark-excel me-1"></i> Nạp Từ File Excel
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link fw-bold small touch-target-44" id="pills-text-tab" data-bs-toggle="pill" data-bs-target="#tabManual">
+                        <button class="nav-link fw-bold small touch-target-44" id="pills-text-tab" data-bs-toggle="pill" data-bs-target="#tabManual" type="button">
                             <i class="bi bi-card-text me-1"></i> Nhập Nhanh (Text)
                         </button>
                     </li>
                 </ul>
 
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">Mật khẩu khởi tạo chung cho đợt này</label>
-                    <input type="text" id="batchDefaultPassword" class="form-control" value="GLV@2026!" />
-                    <div class="form-text small text-muted">GLV sẽ dùng mật khẩu này để đăng nhập lần đầu và tự đổi trong Hồ sơ cá nhân.</div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Vai trò tài khoản khởi tạo</label>
+                        <select id="batchTargetRole" class="form-select" onchange="loadBaoDongGraduatesForBatch()">
+                            <option value="@UserRole.ProbationaryTeacher" selected>Dự Bị (Sau hoàn thành Bao Đồng / Tuyên hứa)</option>
+                            <option value="@UserRole.Teacher">Giáo Lý Viên Chính Thức (Sau Tuyên hứa GLV)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Mật khẩu khởi tạo chung cho đợt này</label>
+                        <input type="text" id="batchDefaultPassword" class="form-control" value="GLV@2026!" />
+                        <div class="form-text small text-muted">Ít nhất 8 ký tự (gồm chữ hoa, chữ thường, số &amp; ký tự đặc biệt).</div>
+                    </div>
                 </div>
 
                 <div class="tab-content border rounded-3 p-3 bg-light-subtle">
-                    <!-- TAB 1: NẠP TỪ FILE EXCEL -->
-                    <div class="tab-pane fade show active" id="tabExcel">
+                    <!-- TAB 1: CHỌN TỪ DS HOÀN THÀNH BAO ĐỒNG / TUYÊN HỨA -->
+                    <div class="tab-pane fade show active" id="tabBaoDongGraduates">
+                        <div class="row g-2 align-items-center mb-3">
+                            <div class="col-md-4">
+                                <select id="gradScopeSelect" class="form-select form-select-sm" onchange="loadBaoDongGraduatesForBatch()">
+                                    <option value="BAO_DONG" selected>Đã học Bao Đồng / Đã Tuyên hứa</option>
+                                    <option value="ALL">Tất cả thiếu nhi chưa có tài khoản</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="gradSearchInput" class="form-control" placeholder="Tìm mã HS cũ, họ tên..."
+                                           onkeyup="filterBaoDongGradRows(this.value)" />
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex flex-wrap align-items-center justify-content-md-end gap-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllBaoDongGrads(true)">Chọn tất cả</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleAllBaoDongGrads(false)">Bỏ chọn</button>
+                                <span class="badge bg-primary px-2 py-2">Đã chọn: <span id="selectedGradCount">0</span></span>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive border rounded-3 bg-white" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-hover align-middle mb-0 small" id="baoDongGradTable">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width: 38px;" class="text-center">
+                                            <input type="checkbox" class="form-check-input" id="masterGradChk" onchange="toggleAllBaoDongGrads(this.checked)" />
+                                        </th>
+                                        <th>Mã HS Cũ</th>
+                                        <th>Họ Và Tên</th>
+                                        <th>Lớp / Ngày Tuyên Hứa</th>
+                                        <th>Username Cấp Mới</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="baoDongGradTbody">
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">Đang nạp danh sách...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="form-text small text-muted mt-2">
+                            <i class="bi bi-link-45deg text-primary me-1"></i>Hệ thống tự động gắn kết 1-1 với hồ sơ cũ, lưu vết Mã HS cũ vào lịch sử và giữ nguyên toàn bộ quá trình học tập lên Profile cá nhân.
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: NẠP TỪ FILE EXCEL -->
+                    <div class="tab-pane fade" id="tabExcel">
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                            <span class="small text-muted">Tải file mẫu để điền danh sách GLV tuyên hứa:</span>
+                            <span class="small text-muted">Tải file mẫu mới (có thêm cột <strong>Mã Học Sinh Cũ</strong> để gắn lịch sử):</span>
                             <a href="/Users/DownloadTeacherTemplate" class="btn btn-outline-primary btn-sm rounded-pill touch-target-44 d-inline-flex align-items-center">
                                 <i class="bi bi-download me-1"></i> Tải File Mẫu (.xlsx)
                             </a>
                         </div>
                         <div class="mb-3">
-                            <input type="file" id="batchTeacherExcelFile" class="form-control" accept=".xlsx, .xls" />
+                            <input type="file" id="batchTeacherExcelFile" class="form-control" accept=".xlsx" />
                         </div>
                     </div>
 
-                    <!-- TAB 2: NHẬP NHANH BẰNG TEXT -->
+                    <!-- TAB 3: NHẬP NHANH BẰNG TEXT -->
                     <div class="tab-pane fade" id="tabManual">
                         <div class="small text-muted mb-2">
-                            Nhập mỗi GLV một dòng theo định dạng: <code>Tên Thánh | Họ và Tên đệm | Tên | SĐT | Khối</code>
+                            Nhập mỗi người một dòng theo định dạng: <code>Tên Thánh | Họ và Tên đệm | Tên | SĐT | Khối | Mã HS Cũ (tùy chọn)</code>
                         </div>
                         <textarea id="batchTeacherRawText" class="form-control font-monospace small" rows="5"
-                                  placeholder="Phaolô | Nguyễn Văn | An | 0901234567 | Khai Tâm&#10;Maria | Trần Thị | Bình | 0987654321 | Rước Lễ"></textarea>
+                                  placeholder="Phaolô | Nguyễn Văn | An | 0901234567 | Dự Bị | BD3A001&#10;Maria | Trần Thị | Bình | 0987654321 | Khai Tâm | TN-2026-0002"></textarea>
                     </div>
                 </div>
 
                 <!-- Bảng kết quả hiển thị danh sách Username tự sinh -->
                 <div id="batchResultArea" class="d-none mt-3">
                     <div class="alert alert-success border-0 small mb-2 fw-semibold" id="batchResultMsg"></div>
-                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                    <div class="alert alert-warning border-0 small mb-2 d-none" id="batchErrorListMsg"></div>
+                    <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
                         <table class="table table-sm table-bordered table-striped small mb-0 font-monospace">
                             <thead class="table-dark">
                                 <tr>
                                     <th>Username</th>
                                     <th>Họ và Tên</th>
+                                    <th>Vai Trò</th>
+                                    <th>Mã HS Cũ</th>
                                     <th>SĐT</th>
                                     <th>Mật Khẩu</th>
                                     <th>Khối</th>
@@ -632,7 +712,8 @@ else
                 role: role,
                 phoneNumber: phone || null,
                 email: email || null,
-                managedGradeLevel: managedGradeLevel
+                managedGradeLevel: managedGradeLevel,
+                oldStudentCode: document.getElementById("newOldStudentCode")?.value.trim() || null
             };
             try {
                 const res = await fetch('/Users/Create', {
@@ -739,21 +820,176 @@ else
             }
         }
 
+        let baoDongGraduatesCache = [];
+        let batchCreatedAny = false;
+
+        function escapeBatchHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        async function loadBaoDongGraduatesForBatch() {
+            const tbody = document.getElementById('baoDongGradTbody');
+            if (!tbody) return;
+
+            const scope = document.getElementById('gradScopeSelect')?.value || 'BAO_DONG';
+            const targetRole = document.getElementById('batchTargetRole')?.value || 'ProbationaryTeacher';
+
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Đang tải danh sách học viên...</td></tr>';
+            const masterChk = document.getElementById('masterGradChk');
+            if (masterChk) masterChk.checked = false;
+            document.getElementById('selectedGradCount').innerText = '0';
+
+            try {
+                const res = await fetch(`/Users/GetBaoDongGraduatesForBatchAccount?scope=${encodeURIComponent(scope)}&targetRole=${encodeURIComponent(targetRole)}`);
+                const json = await res.json();
+
+                if (!json.success) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-3 text-danger">${escapeBatchHtml(json.message)}</td></tr>`;
+                    return;
+                }
+
+                baoDongGraduatesCache = json.data || [];
+                if (baoDongGraduatesCache.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted fst-italic">Chưa có học viên nào thuộc phạm vi này (hoặc tất cả đã được cấp tài khoản).</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = baoDongGraduatesCache.map(item => `
+                    <tr class="grad-candidate-row">
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input chk-grad-candidate" value="${item.studentId}" onchange="updateSelectedGradCount()" />
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border font-monospace">${escapeBatchHtml(item.oldStudentCode)}</span>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark">${escapeBatchHtml(item.fullName)}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">${escapeBatchHtml(item.gender)} • Sinh: ${escapeBatchHtml(item.dateOfBirth)}${item.parentPhone ? ' • ' + escapeBatchHtml(item.parentPhone) : ''}</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary border">${escapeBatchHtml(item.className)}</span>
+                            ${item.baoDongPromiseDate ? `<div class="text-success mt-1" style="font-size: 0.72rem;"><i class="bi bi-award-fill me-1"></i>Tuyên hứa: ${escapeBatchHtml(item.baoDongPromiseDate)}</div>` : ''}
+                        </td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm font-monospace grad-username-input"
+                                   data-student-id="${item.studentId}"
+                                   value="${escapeBatchHtml(item.suggestedUsername)}" maxlength="45" />
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-danger">Lỗi kết nối khi tải danh sách học viên.</td></tr>';
+            }
+        }
+
+        function filterBaoDongGradRows(kw) {
+            const term = (kw || '').trim().toLowerCase();
+            document.querySelectorAll('#baoDongGradTbody .grad-candidate-row').forEach(tr => {
+                tr.style.display = (!term || tr.innerText.toLowerCase().includes(term)) ? '' : 'none';
+            });
+        }
+
+        function toggleAllBaoDongGrads(checked) {
+            document.querySelectorAll('.chk-grad-candidate').forEach(cb => {
+                if (cb.closest('tr').style.display !== 'none') {
+                    cb.checked = checked;
+                }
+            });
+            const masterChk = document.getElementById('masterGradChk');
+            if (masterChk) masterChk.checked = checked;
+            updateSelectedGradCount();
+        }
+
+        function updateSelectedGradCount() {
+            const count = document.querySelectorAll('.chk-grad-candidate:checked').length;
+            const span = document.getElementById('selectedGradCount');
+            if (span) span.innerText = count;
+        }
+
         document.addEventListener("DOMContentLoaded", function () {
             toggleManagedGradeField();
+            const batchModal = document.getElementById('batchCreateModal');
+            if (batchModal) {
+                batchModal.addEventListener('show.bs.modal', function () {
+                    batchCreatedAny = false;
+                    loadBaoDongGraduatesForBatch();
+                });
+                batchModal.addEventListener('hidden.bs.modal', function () {
+                    if (batchCreatedAny) {
+                        location.reload();
+                    }
+                });
+            }
         });
 
         async function submitBatchCreateTeachers() {
-            const isExcelTab = document.getElementById('pills-excel-tab').classList.contains('active');
+            const isGradTab = document.getElementById('pills-grad-tab')?.classList.contains('active');
+            const isExcelTab = document.getElementById('pills-excel-tab')?.classList.contains('active');
+            const targetRole = document.getElementById('batchTargetRole')?.value || 'ProbationaryTeacher';
             const defaultPassword = document.getElementById('batchDefaultPassword').value.trim() || 'GLV@2026!';
             const resultArea = document.getElementById('batchResultArea');
             const resultMsg = document.getElementById('batchResultMsg');
+            const errorListMsg = document.getElementById('batchErrorListMsg');
             const tbody = document.getElementById('batchResultTableBody');
 
             resultArea.classList.add('d-none');
+            if (errorListMsg) errorListMsg.classList.add('d-none');
             tbody.innerHTML = '';
 
-            if (isExcelTab) {
+            if (isGradTab) {
+                const selectedCheckboxes = Array.from(document.querySelectorAll('.chk-grad-candidate:checked'));
+                if (selectedCheckboxes.length === 0) {
+                    alert("Vui lòng tích chọn ít nhất 1 học viên để tạo tài khoản!");
+                    return;
+                }
+
+                const candidateMap = new Map(baoDongGraduatesCache.map(x => [x.studentId, x]));
+                const teachers = [];
+
+                selectedCheckboxes.forEach(cb => {
+                    const sid = parseInt(cb.value);
+                    const c = candidateMap.get(sid);
+                    const usernameInput = document.querySelector(`.grad-username-input[data-student-id="${sid}"]`);
+                    const customUsername = usernameInput ? usernameInput.value.trim() : (c?.suggestedUsername || '');
+
+                    if (c) {
+                        teachers.push({
+                            studentId: c.studentId,
+                            oldStudentCode: c.oldStudentCode,
+                            customUsername: customUsername,
+                            role: targetRole,
+                            christianName: c.christianName,
+                            firstName: c.firstName,
+                            lastName: c.lastName,
+                            phoneNumber: c.parentPhone || null
+                        });
+                    }
+                });
+
+                try {
+                    const res = await fetch('/Users/BatchCreateTeachers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': getCsrfToken()
+                        },
+                        body: JSON.stringify({
+                            defaultPassword: defaultPassword,
+                            targetRole: targetRole,
+                            teachers: teachers
+                        })
+                    });
+                    const data = await res.json();
+                    handleBatchResponse(data);
+                } catch (err) {
+                    alert("Lỗi kết nối khi tạo tài khoản hàng loạt: " + err.message);
+                }
+            } else if (isExcelTab) {
                 // Nạp qua File Excel
                 const fileInput = document.getElementById('batchTeacherExcelFile');
                 if (!fileInput.files || fileInput.files.length === 0) {
@@ -764,6 +1000,7 @@ else
                 const formData = new FormData();
                 formData.append("file", fileInput.files[0]);
                 formData.append("defaultPassword", defaultPassword);
+                formData.append("targetRole", targetRole);
 
                 try {
                     const res = await fetch('/Users/ImportTeachersFromExcel', {
@@ -782,7 +1019,7 @@ else
                 // Nạp qua Textarea
                 const rawText = document.getElementById('batchTeacherRawText').value.trim();
                 if (!rawText) {
-                    alert("Vui lòng nhập ít nhất một dòng thông tin GLV!");
+                    alert("Vui lòng nhập ít nhất một dòng thông tin!");
                     return;
                 }
 
@@ -797,7 +1034,9 @@ else
                             firstName: parts[1] || '',
                             lastName: parts[2] || '',
                             phoneNumber: parts[3] || '',
-                            managedGradeLevel: parts[4] || null
+                            managedGradeLevel: parts[4] || null,
+                            oldStudentCode: parts[5] || null,
+                            role: targetRole
                         });
                     }
                 });
@@ -816,6 +1055,7 @@ else
                         },
                         body: JSON.stringify({
                             defaultPassword: defaultPassword,
+                            targetRole: targetRole,
                             teachers: teachers
                         })
                     });
@@ -832,23 +1072,28 @@ else
                     resultMsg.innerText = data.message;
                     tbody.innerHTML = '';
 
+                    if (errorListMsg && data.errors && data.errors.length > 0) {
+                        errorListMsg.innerText = data.errors.join(' | ');
+                        errorListMsg.classList.remove('d-none');
+                    }
+
                     data.createdTeachers.forEach(t => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                            <td class="fw-bold text-primary">${t.username}</td>
-                            <td>${t.christianName} ${t.fullName}</td>
-                            <td>${t.phoneNumber || '--'}</td>
-                            <td><code>${t.initialPassword}</code></td>
-                            <td><span class="badge bg-light text-dark border">${t.managedGradeLevel || 'Chưa gán'}</span></td>
+                            <td class="fw-bold text-primary">${escapeBatchHtml(t.username)}</td>
+                            <td>${escapeBatchHtml(t.christianName)} ${escapeBatchHtml(t.fullName)}</td>
+                            <td><span class="badge bg-info-subtle text-dark border">${escapeBatchHtml(t.role || '')}</span></td>
+                            <td><code>${escapeBatchHtml(t.oldStudentCode || '--')}</code></td>
+                            <td>${escapeBatchHtml(t.phoneNumber || '--')}</td>
+                            <td><code>${escapeBatchHtml(t.initialPassword)}</code></td>
+                            <td><span class="badge bg-light text-dark border">${escapeBatchHtml(t.managedGradeLevel || 'Chưa gán')}</span></td>
                         `;
                         tbody.appendChild(tr);
                     });
 
+                    batchCreatedAny = true;
                     resultArea.classList.remove('d-none');
-                    setTimeout(() => {
-                        // Tự động tải lại trang sau 3.5 giây để đồng bộ danh sách bên ngoài
-                        location.reload();
-                    }, 3500);
+                    loadBaoDongGraduatesForBatch();
                 } else {
                     alert("Lỗi: " + data.message);
                 }

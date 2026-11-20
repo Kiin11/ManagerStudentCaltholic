@@ -21,11 +21,40 @@ namespace ManagerStudentCaltholic.Services
             if (isAdmin) return true;
             if (!long.TryParse(userId, out var uid)) return false;
 
-            return await _db.ClassTeachers
+            var userRole = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == uid && u.IsActive)
+                .Select(u => u.Role)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrEmpty(userRole)) return false;
+
+            if (userRole == UserRole.Admin ||
+                userRole == UserRole.SpiritualDirector ||
+                userRole == UserRole.ExecutiveBoard)
+            {
+                return true;
+            }
+
+            var query = _db.ClassTeachers
+                .AsNoTracking()
                 .Include(ct => ct.AcademicYear)
-                .AnyAsync(ct => ct.UserId == uid &&
-                                ct.ClassRoomId == classId &&
-                                (ct.AcademicYear.Name == academicYear || ct.AcademicYear.IsCurrent));
+                .Include(ct => ct.ClassRoom)
+                .Where(ct => ct.UserId == uid &&
+                             ct.ClassRoomId == classId &&
+                             (ct.AcademicYear.Name == academicYear || ct.AcademicYear.IsCurrent));
+
+            // TASK-02.3: GLV Dự Bị chỉ được phép thao tác các lớp được phân công thuộc Ca Sáng
+            if (userRole == UserRole.ProbationaryTeacher)
+            {
+                query = query.Where(ct =>
+                    ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+            }
+
+            return await query.AnyAsync();
         }
 
         public async Task<List<int>> GetAssignedClassIdsAsync(string userId, string academicYear, bool isAdmin)
@@ -49,8 +78,29 @@ namespace ManagerStudentCaltholic.Services
 
             if (!long.TryParse(userId, out var uid)) return new List<int>();
 
-            return await _db.ClassTeachers
-                .Where(ct => ct.UserId == uid && (yearId == 0 || ct.AcademicYearId == yearId))
+            var userRole = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == uid && u.IsActive)
+                .Select(u => u.Role)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrEmpty(userRole)) return new List<int>();
+
+            var query = _db.ClassTeachers
+                .AsNoTracking()
+                .Where(ct => ct.UserId == uid && (yearId == 0 || ct.AcademicYearId == yearId));
+
+            // TASK-02.3: GLV Dự Bị chỉ được phép thao tác các lớp được phân công thuộc Ca Sáng
+            if (userRole == UserRole.ProbationaryTeacher)
+            {
+                query = query.Where(ct =>
+                    ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+            }
+
+            return await query
                 .Select(ct => ct.ClassRoomId)
                 .Distinct()
                 .ToListAsync();

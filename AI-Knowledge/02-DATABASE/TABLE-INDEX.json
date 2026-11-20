@@ -15,7 +15,10 @@
                                                            "Gender",
                                                            "DateOfBirth",
                                                            "BaptismDate",
+                                                           "FirstCommunionDate",
                                                            "ConfirmationDate",
+                                                           "BaoDongPromiseDate",
+                                                           "CatechistPromiseDate",
                                                            "ParentPhone",
                                                            "IsActive",
                                                            "IsDeleted",
@@ -31,7 +34,9 @@
                                                            "IsDeleted",
                                                            "StudentCode",
                                                            "LastName, FirstName",
-                                                           "ChristianName"
+                                                           "ChristianName",
+                                                           "BaoDongPromiseDate",
+                                                           "CatechistPromiseDate"
                                                        ]
                                        },
                                        {
@@ -61,6 +66,7 @@
                                                            "GradeLevel",
                                                            "RoomName",
                                                            "Shift",
+                                                           "Session",
                                                            "AcademicYearId",
                                                            "ClassRoomLocationId",
                                                            "IsGradeLocked",
@@ -83,7 +89,9 @@
                                                                }
                                                            ],
                                            "indexes":  [
-                                                           "IsDeleted"
+                                                           "IsDeleted",
+                                                           "Session",
+                                                           "GradeLevel, Session"
                                                        ]
                                        },
                                        {
@@ -246,7 +254,8 @@
                                                            "AvatarUrl",
                                                            "ManagedGradeLevel",
                                                            "ClassTeacherId",
-                                                           "StudentId"
+                                                           "StudentId",
+                                                           "LinkedStudentId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -261,6 +270,11 @@
                                                                    "column":  "StudentId",
                                                                    "principalTable":  "Students",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "LinkedStudentId",
+                                                                   "principalTable":  "Students",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
@@ -268,7 +282,8 @@
                                                            "Email",
                                                            "PhoneNumber",
                                                            "Role",
-                                                           "ManagedGradeLevel"
+                                                           "ManagedGradeLevel",
+                                                           "LinkedStudentId"
                                                        ]
                                        },
                                        {

@@ -1,0 +1,92 @@
+@model ManagerStudentCaltholic.Models.ViewModels.UserProfileViewModel
+@using ManagerStudentCaltholic.Models.Entities
+@{
+    ViewData["Title"] = $"Hồ Sơ Chi Tiết: {Model.ChristianName} {Model.FirstName} {Model.LastName}".Trim();
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 pb-2 border-bottom">
+        <div>
+            <h3 class="fw-bold text-primary mb-1">
+                <i class="bi bi-person-vcard-fill me-2"></i>Hồ Sơ Chi Tiết &amp; Tiến Trình Lịch Sử Kép
+            </h3>
+            <p class="text-muted mb-0">
+                Theo dõi xuyên suốt hành trình Đức tin, Tuyên hứa và lịch sử Học &amp; Dạy từ Khai Tâm ➔ Bao Đồng ➔ Dự Bị ➔ GLV
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (Model.Id > 0)
+            {
+                <a asp-controller="Account" asp-action="Profile" asp-route-id="@Model.Id" class="btn btn-outline-primary rounded-pill px-3">
+                    <i class="bi bi-person-badge me-1"></i> Xem Tài Khoản (@Model.Username)
+                </a>
+            }
+            <a asp-controller="Students" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="bi bi-arrow-left me-1"></i> Danh Sách Thiếu Nhi
+            </a>
+        </div>
+    </div>
+
+    <!-- Thẻ Thông Tin Tổng Quan Thiếu Nhi & Tài Khoản Liên Kết -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width: 68px; height: 68px;">
+                            <i class="bi bi-person-fill fs-1"></i>
+                        </div>
+                        <div>
+                            <h4 class="fw-bold text-dark mb-1">
+                                @(!string.IsNullOrEmpty(Model.ChristianName) ? $"{Model.ChristianName} " : "")@Model.FirstName @Model.LastName
+                            </h4>
+                            <div class="d-flex flex-wrap gap-2 small">
+                                <span class="badge bg-light text-dark border font-monospace">
+                                    <i class="bi bi-qr-code me-1"></i>@Model.LinkedStudentCode
+                                </span>
+                                @if (Model.StudentDateOfBirth.HasValue)
+                                {
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="bi bi-cake2 me-1"></i>@Model.StudentDateOfBirth.Value.ToString("dd/MM/yyyy")
+                                    </span>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.StudentGender))
+                                {
+                                    <span class="badge @(Model.StudentGender == "Nam" ? "bg-info-subtle text-primary" : "bg-danger-subtle text-danger") rounded-pill">
+                                        @Model.StudentGender
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    @if (Model.Id > 0)
+                    {
+                        <div class="mb-1">
+                            <span class="badge @(Model.Role == UserRole.Teacher ? "bg-success" : Model.Role == UserRole.ProbationaryTeacher ? "text-white" : "bg-secondary") rounded-pill px-3 py-1"
+                                  style="@(Model.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
+                                Tài khoản liên kết: @@@Model.Username (@(Model.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : Model.Role == UserRole.Teacher ? "GLV Chính Thức" : Model.Role))
+                            </span>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-3 py-1">
+                            Chưa cấp tài khoản GLV / Dự Bị
+                        </span>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.ParentPhone))
+                    {
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-telephone me-1"></i>SĐT liên hệ: <strong>@Model.ParentPhone</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @await Html.PartialAsync("_ProfileDualTimelineAndMilestones", Model)
+</div>

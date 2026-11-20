@@ -1,6 +1,8 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.ClassEnrollmentViewModel
+@using ManagerStudentCaltholic.Models.Entities
 @{
     ViewData["Title"] = $"Xếp Lớp - {Model.ClassName}";
+    bool isProbationaryClass = GradeLevel.IsProbationaryGrade(Model.GradeLevel);
 }
 
 <div class="container-fluid py-4">
@@ -19,12 +21,28 @@
             </div>
             <p class="text-muted mb-0 ms-5 ps-2">Sĩ số hiện tại: <strong id="currentCount">@Model.EnrolledStudents.Count</strong> học sinh</p>
         </div>
-        <div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (isProbationaryClass)
+            {
+                <a href="/Users/Index?role=ProbationaryTeacher" class="btn btn-outline-primary shadow-sm px-3">
+                    <i class="bi bi-person-gear me-1"></i> Tạo / Quản Lý Account Dự Bị
+                </a>
+            }
             <button type="button" class="btn btn-success shadow-sm px-3" data-bs-toggle="modal" data-bs-target="#assignStudentsModal">
-                <i class="bi bi-person-plus-fill me-1"></i> Thêm Học Sinh Vào Lớp
+                <i class="bi bi-person-plus-fill me-1"></i> @(isProbationaryClass ? "Thêm Tài Khoản Dự Bị Vào Lớp" : "Thêm Học Sinh Vào Lớp")
             </button>
         </div>
     </div>
+
+    @if (isProbationaryClass)
+    {
+        <div class="alert alert-info border-0 shadow-sm rounded-3 d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div class="small">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <strong>Quy định Khối Dự Bị:</strong> Học viên Khối Dự Bị sử dụng trực tiếp <strong>Tài khoản vai trò Dự Bị</strong> (Mã học viên = <code>Username</code>). Không tạo mới học sinh trực tiếp — vui lòng tạo tài khoản vai trò <strong>Dự Bị</strong> trước rồi thêm vào lớp Dự Bị 1..4 (mỗi học viên chỉ học 1 lớp Dự Bị tại một thời điểm).
+            </div>
+        </div>
+    }
 
     <!-- Alert Box Ajax -->
     <div id="alertBox" class="alert d-none shadow-sm border-0" role="alert"></div>
@@ -102,9 +120,11 @@
             <div class="modal-header bg-light">
                 <div>
                     <h5 class="modal-title fw-bold text-primary mb-0">
-                        <i class="bi bi-person-check me-2"></i>Chọn Học Sinh Chưa Có Lớp
+                        <i class="bi bi-person-check me-2"></i>@(isProbationaryClass ? "Chọn Tài Khoản Dự Bị Chưa Xếp Lớp" : "Chọn Học Sinh Chưa Có Lớp")
                     </h5>
-                    <small class="text-muted">Niên khóa: @Model.AcademicYearName | Còn lại: <strong>@Model.UnassignedStudents.Count</strong> em chưa xếp lớp</small>
+                    <small class="text-muted">
+                        Niên khóa: @Model.AcademicYearName | Còn lại: <strong>@Model.UnassignedStudents.Count</strong> @(isProbationaryClass ? "tài khoản Dự Bị chưa xếp lớp" : "em chưa xếp lớp")
+                    </small>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -114,7 +134,9 @@
                     <div class="col-md-6">
                         <div class="input-group">
                             <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                            <input type="text" id="searchUnassigned" class="form-control" placeholder="Tìm theo Tên, Mã QR, SĐT..." onkeyup="filterTable('unassignedTable', this.value)" />
+                            <input type="text" id="searchUnassigned" class="form-control"
+                                   placeholder="@(isProbationaryClass ? "Tìm theo Tên, Username, SĐT..." : "Tìm theo Tên, Mã QR, SĐT...")"
+                                   onkeyup="filterTable('unassignedTable', this.value)" />
                         </div>
                     </div>
                     <div class="col-md-6 d-flex align-items-center justify-content-end gap-2">
@@ -132,7 +154,7 @@
                                 <th style="width: 40px;" class="text-center">
                                     <input type="checkbox" class="form-check-input" id="masterCheckbox" onchange="toggleSelectAll(this)" />
                                 </th>
-                                <th>Mã Định Danh</th>
+                                <th>@(isProbationaryClass ? "Mã Học Viên (Username)" : "Mã Định Danh")</th>
                                 <th>Họ Và Tên</th>
                                 <th>Giới Tính</th>
                                 <th>Ngày Sinh</th>
@@ -164,7 +186,9 @@
                             {
                                 <tr>
                                     <td colspan="6" class="text-center py-4 text-muted">
-                                        Tất cả học sinh trong hệ thống đã được xếp lớp cho niên khóa này!
+                                        @(isProbationaryClass
+                                            ? "Không còn tài khoản vai trò Dự Bị nào chưa xếp lớp trong niên khóa này. Vui lòng tạo tài khoản Dự Bị mới trước khi thêm vào lớp!"
+                                            : "Tất cả học sinh trong hệ thống đã được xếp lớp cho niên khóa này!")
                                     </td>
                                 </tr>
                             }

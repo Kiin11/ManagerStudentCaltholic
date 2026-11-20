@@ -20,13 +20,20 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IPasswordHasherService _passwordHasher;
         private readonly ITokenService _tokenService;
         private readonly ILogger<AccountController> _logger;
+        private readonly IProfileHistoryService _profileHistoryService;
 
-        public AccountController(ParishDbContext context, IPasswordHasherService passwordHasher, ITokenService tokenService, ILogger<AccountController> logger)
+        public AccountController(
+            ParishDbContext context,
+            IPasswordHasherService passwordHasher,
+            ITokenService tokenService,
+            ILogger<AccountController> logger,
+            IProfileHistoryService profileHistoryService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _tokenService = tokenService;
             _logger = logger;
+            _profileHistoryService = profileHistoryService;
         }
         /// <summary>
         /// 1. GET: /Account/Login
@@ -316,73 +323,9 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            var user = await _context.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == targetUserId && u.IsActive);
-
-            if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
-
-            // SEC-05 FIX: Chỉ lấy phân công giảng dạy khớp chính xác với khóa ngoại UserId của tài khoản
-            // Tuyệt đối không nối OR theo TeacherName hay PhoneNumber để chống mạo danh / trùng tên
-            var allAssignments = await _context.ClassTeachers
-                .Include(ct => ct.ClassRoom)
-                    .ThenInclude(c => c.AcademicYear)
-                .Include(ct => ct.ClassRoom)
-                    .ThenInclude(c => c.Enrollments)
-                .Where(ct => ct.UserId == user.Id)
-                .OrderByDescending(ct => ct.ClassRoom.AcademicYear.StartDate)
-                .ThenBy(ct => ct.ClassRoom.Name)
-                .Select(ct => new AssignedClassItemDto
-                {
-                    ClassId = ct.ClassRoomId,
-                    ClassName = ct.ClassRoom.Name,
-                    GradeLevel = ct.ClassRoom.GradeLevel,
-                    AcademicYearId = ct.ClassRoom.AcademicYearId,
-                    AcademicYearName = ct.ClassRoom.AcademicYear.Name,
-                    IsCurrentYear = ct.ClassRoom.AcademicYear.IsCurrent,
-                    RoleInClass = ct.RoleInClass,
-                    RoleName = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" :
-                               ct.RoleInClass == "MEMBER" ? "Giáo Lý Viên" : "Dự bị",
-                    RoomNumber = ct.ClassRoom.RoomName,
-                    TotalStudents = ct.ClassRoom.Enrollments.Count,
-                    AssignedAt = ct.AssignedAt
-                })
-                .AsNoTracking()
-                .ToListAsync();
-
-            // 1. Phân tách lớp đang dạy trong niên khóa hiện tại
-            var currentClasses = allAssignments.Where(c => c.IsCurrentYear).ToList();
-
-            // 2. Gom nhóm lịch sử các niên khóa cũ
-            var pastHistory = allAssignments
-                .Where(c => !c.IsCurrentYear)
-                .GroupBy(c => new { c.AcademicYearId, c.AcademicYearName })
-                .Select(g => new TeachingHistoryByYearDto
-                {
-                    AcademicYearId = g.Key.AcademicYearId,
-                    AcademicYearName = g.Key.AcademicYearName,
-                    Classes = g.ToList()
-                })
-                .ToList();
-
-            var viewModel = new UserProfileViewModel
-            {
-                Id = user.Id,
-                Username = user.Username,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                ChristianName = user.ChristianName,
-                DateOfBirth = user.DateOfBirth,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Address = user.Address,
-                AvatarUrl = user.AvatarUrl,
-                Role = user.Role,
-                ManagedGradeLevel = user.ManagedGradeLevel,
-                LastLoginAt = user.LastLoginAt,
-                CurrentClasses = currentClasses,
-                TeachingHistory = pastHistory
-            };
+            // TASK-04.1 (Phase 6): Tổng hợp Profile Lịch sử Kép (Lớp học + Lớp dạy đa niên khóa) & 5 Cột mốc Đức tin
+            var viewModel = await _profileHistoryService.BuildUserProfileAsync(targetUserId);
+            if (viewModel == null) return NotFound("Không tìm thấy thông tin tài khoản.");
 
             ViewBag.IsViewingOther = isViewingOther;
             ViewBag.TargetUserId = targetUserId;
@@ -398,7 +341,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [Authorize]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateProfile([Bind("Id,ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address")] UserProfileViewModel model)
+        public async Task<IActionResult> UpdateProfile([Bind("Id,ChristianName,FirstName,LastName,DateOfBirth,Email,PhoneNumber,Address,FeastDay,BaptismDate,FirstCommunionDate,ConfirmationDate,BaoDongPromiseDate,CatechistPromiseDate")] UserProfileViewModel model)
         {
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!long.TryParse(userIdStr, out var currentUserId))
@@ -434,6 +377,15 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
             }
 
+            var effectiveDob = model.DateOfBirth ?? user.DateOfBirth;
+            if (model.CatechistPromiseDate.HasValue && effectiveDob.HasValue &&
+                model.CatechistPromiseDate.Value.Date < effectiveDob.Value.Date.AddYears(18))
+            {
+                int ageAtPromise = StudentViewModel.CalculateAgeAtDate(effectiveDob.Value, model.CatechistPromiseDate.Value);
+                TempData["ErrorMessage"] = $"Ngày Tuyên hứa Giáo lý viên ({model.CatechistPromiseDate.Value:dd/MM/yyyy}) ghi nhận mới {ageAtPromise} tuổi (quy định tối thiểu 18 tuổi trở lên).";
+                return RedirectToAction(nameof(Profile), isViewingOther ? new { id = targetUserId } : null);
+            }
+
             var cleanPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim();
             var cleanEmail = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email.Trim().ToLowerInvariant();
 
@@ -461,15 +413,57 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
+            static DateTime? ToUtcDate(DateTime? d) =>
+                d.HasValue ? DateTime.SpecifyKind(d.Value.Date, DateTimeKind.Utc) : null;
+
             user.ChristianName = model.ChristianName?.Trim();
             user.FirstName = model.FirstName.Trim();
             user.LastName = model.LastName.Trim();
-            user.DateOfBirth = model.DateOfBirth.HasValue
-                ? DateTime.SpecifyKind(model.DateOfBirth.Value.Date, DateTimeKind.Utc)
-                : null;
+            user.DateOfBirth = ToUtcDate(model.DateOfBirth);
+            user.FeastDay = ToUtcDate(model.FeastDay);
+            user.BaptismDate = ToUtcDate(model.BaptismDate);
+            user.FirstCommunionDate = ToUtcDate(model.FirstCommunionDate);
+            user.ConfirmationDate = ToUtcDate(model.ConfirmationDate);
+            user.BaoDongPromiseDate = ToUtcDate(model.BaoDongPromiseDate);
+            user.CatechistPromiseDate = ToUtcDate(model.CatechistPromiseDate);
             user.Email = cleanEmail;
             user.PhoneNumber = cleanPhone;
             user.Address = model.Address?.Trim();
+
+            // Đồng bộ 2 chiều sang hồ sơ Student liên kết (nếu có)
+            long? linkedStudentId = user.LinkedStudentId ?? user.StudentId;
+            if (linkedStudentId.HasValue && linkedStudentId.Value > 0)
+            {
+                var linkedStudent = await _context.Students
+                    .FirstOrDefaultAsync(s => s.Id == linkedStudentId.Value);
+
+                if (linkedStudent != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(user.ChristianName))
+                    {
+                        linkedStudent.ChristianName = user.ChristianName.Length > 50 ? user.ChristianName[..50] : user.ChristianName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.FirstName))
+                    {
+                        linkedStudent.FirstName = user.FirstName.Length > 90 ? user.FirstName[..90] : user.FirstName;
+                    }
+                    if (!string.IsNullOrWhiteSpace(user.LastName))
+                    {
+                        linkedStudent.LastName = user.LastName.Length > 10 ? user.LastName[..10] : user.LastName;
+                    }
+                    if (user.DateOfBirth.HasValue)
+                    {
+                        linkedStudent.DateOfBirth = user.DateOfBirth.Value;
+                    }
+
+                    linkedStudent.FeastDay = user.FeastDay;
+                    linkedStudent.BaptismDate = user.BaptismDate;
+                    linkedStudent.FirstCommunionDate = user.FirstCommunionDate;
+                    linkedStudent.ConfirmationDate = user.ConfirmationDate;
+                    linkedStudent.BaoDongPromiseDate = user.BaoDongPromiseDate;
+                    linkedStudent.CatechistPromiseDate = user.CatechistPromiseDate;
+                }
+            }
 
             // SEC-05 FIX 3: Đồng bộ lại tên và SĐT hiển thị trên các lớp mà GLV này được gán qua đúng UserId
             var assignedRecords = await _context.ClassTeachers

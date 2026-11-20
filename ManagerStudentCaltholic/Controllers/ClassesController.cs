@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml.Office2016.Excel;
+﻿using System.Security.Claims;
+using DocumentFormat.OpenXml.Office2016.Excel;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
@@ -24,6 +25,43 @@ namespace ManagerStudentCaltholic.Controllers
             _context = context;
             _logger = logger;
             _excelService = excelService;
+        }
+
+        private long CurrentUserId =>
+            long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+        private bool IsLeadership =>
+            User.IsInRole(UserRole.Admin) ||
+            User.IsInRole(UserRole.SpiritualDirector) ||
+            User.IsInRole(UserRole.ExecutiveBoard);
+
+        /// <summary>
+        /// Kiểm tra quyền xem danh sách thiếu nhi / xuất dữ liệu của một Lớp học theo vai trò user.
+        /// </summary>
+        private async Task<bool> CanAccessClassRosterAsync(ClassRoom targetClass)
+        {
+            if (IsLeadership) return true;
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade) &&
+                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            if (CurrentUserId <= 0) return false;
+
+            return await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
         }
 
         /// <summary>
@@ -70,11 +108,27 @@ namespace ManagerStudentCaltholic.Controllers
                     ViewBag.SelectedGrade = managedGrade;
                     ViewBag.IsGradeLocked = true; // Cờ báo cho Razor View khóa dropdown chọn khối
                 }
+                else
+                {
+                    ViewBag.SelectedGrade = "ALL";
+                }
             }
-            else if (!string.IsNullOrEmpty(gradeLevel))
+            else if (!string.IsNullOrEmpty(gradeLevel) && gradeLevel != "ALL")
             {
-                query = query.Where(c => c.GradeLevel == gradeLevel);
-                ViewBag.SelectedGrade = gradeLevel;
+                if (GradeLevel.IsProbationaryGrade(gradeLevel))
+                {
+                    query = query.Where(c => c.GradeLevel == GradeLevel.DuBi || c.GradeLevel == GradeLevel.DuBiCode);
+                    ViewBag.SelectedGrade = GradeLevel.DuBi;
+                }
+                else
+                {
+                    query = query.Where(c => c.GradeLevel == gradeLevel);
+                    ViewBag.SelectedGrade = gradeLevel;
+                }
+            }
+            else
+            {
+                ViewBag.SelectedGrade = "ALL";
             }
 
             var classes = await query
@@ -85,7 +139,6 @@ namespace ManagerStudentCaltholic.Controllers
 
             ViewBag.AcademicYears = new SelectList(academicYears, "Id", "Name", selectedYearId);
             ViewBag.SelectedYearId = selectedYearId;
-            ViewBag.SelectedGrade = gradeLevel ?? "ALL";
 
             return View(classes);
         }
@@ -143,13 +196,23 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
+            if (GradeLevel.IsProbationaryGrade(classRoom.GradeLevel))
+            {
+                classRoom.GradeLevel = GradeLevel.DuBi;
+            }
+            classRoom.Session = GradeLevel.ResolveSession(classRoom.GradeLevel);
+            if (string.IsNullOrWhiteSpace(classRoom.Shift))
+            {
+                classRoom.Shift = classRoom.Session == GradeLevel.SessionAfternoon ? "Chiều CN" : "Sáng CN";
+            }
+
             _context.Classes.Add(classRoom);
             await _context.SaveChangesAsync();
 
             // 2. Tự động đồng bộ sang bảng ClassSchedules để sơ đồ mặt bằng hiển thị ngay
             if (classRoom.ClassRoomLocationId.HasValue)
             {
-                bool isMorning = classRoom.GradeLevel == "Khai Tâm" || classRoom.GradeLevel == "Rước Lễ";
+                bool isMorning = GradeLevel.IsMorningSession(classRoom.Session, classRoom.GradeLevel);
                 var schedule = new ClassSchedule
                 {
                     ClassRoomId = classRoom.Id,
@@ -165,6 +228,71 @@ namespace ManagerStudentCaltholic.Controllers
 
             TempData["SuccessMessage"] = $"Tạo lớp '{classRoom.Name}' thành công!";
             return RedirectToAction(nameof(Index), new { academicYearId = classRoom.AcademicYearId });
+        }
+
+        /// <summary>
+        /// TASK-03.1 (Phase 6): Khởi tạo nhanh 4 lớp chuẩn Khối Dự Bị (Dự Bị 1..4) mặc định Session = Afternoon
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> QuickCreateProbationaryClasses(int academicYearId)
+        {
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!GradeLevel.IsProbationaryGrade(managedGrade))
+                {
+                    TempData["ErrorMessage"] = $"Bạn chỉ có quyền khởi tạo lớp thuộc khối '{managedGrade}'!";
+                    return RedirectToAction(nameof(Index), new { academicYearId });
+                }
+            }
+
+            var targetYear = academicYearId > 0
+                ? await _context.AcademicYears.FirstOrDefaultAsync(y => y.Id == academicYearId)
+                : await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (targetYear == null)
+            {
+                TempData["ErrorMessage"] = "Không tìm thấy niên khóa hợp lệ để khởi tạo 4 lớp Dự Bị.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var existingNames = await _context.Classes
+                .Where(c => c.AcademicYearId == targetYear.Id)
+                .Select(c => c.Name)
+                .ToListAsync();
+
+            var existingSet = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+            var createdNames = new List<string>();
+
+            foreach (var className in GradeLevel.DefaultProbationaryClassNames)
+            {
+                if (existingSet.Contains(className))
+                    continue;
+
+                _context.Classes.Add(new ClassRoom
+                {
+                    Name = className,
+                    GradeLevel = GradeLevel.DuBi,
+                    Session = GradeLevel.SessionAfternoon,
+                    Shift = "Chiều CN",
+                    AcademicYearId = targetYear.Id
+                });
+                createdNames.Add(className);
+            }
+
+            if (createdNames.Any())
+            {
+                await _context.SaveChangesAsync();
+                TempData["SuccessMessage"] = $"Đã khởi tạo nhanh {createdNames.Count} lớp Khối Dự Bị (Ca Chiều): {string.Join(", ", createdNames)}!";
+            }
+            else
+            {
+                TempData["SuccessMessage"] = $"Niên khóa {targetYear.Name} đã có đủ 4 lớp chuẩn Khối Dự Bị (Dự Bị 1..4).";
+            }
+
+            return RedirectToAction(nameof(Index), new { academicYearId = targetYear.Id, gradeLevel = GradeLevel.DuBi });
         }
         /// <summary>
         /// 3. POST: /Classes/Delete/{id} (Xóa lớp học)
@@ -291,12 +419,22 @@ namespace ManagerStudentCaltholic.Controllers
                 }
 
                 // =========================================================================
-                // 4. LOGIC MỚI: QUY ĐỊNH PHÂN CÔNG TỐI ĐA 2 LỚP (1 KHỐI SÁNG & 1 KHỐI CHIỀU)
+                // 4. LOGIC PHÂN CÔNG CA HỌC (SESSION) & CHẶN DỰ BỊ DẠY CA CHIỀU (TASK-03.2)
                 // =========================================================================
-                // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
-                // Khối Chiều: Bao Đồng
-                bool isTargetMorning = targetClass.GradeLevel != "Bao Đồng"; // Khai Tâm, Rước Lễ, Thêm Sức
-                bool isTargetAfternoon = targetClass.GradeLevel == "Bao Đồng";
+                // Ca Sáng (Morning): Khai Tâm, Rước Lễ, Thêm Sức
+                // Ca Chiều (Afternoon): Bao Đồng, Dự Bị
+                bool isTargetAfternoon = GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel);
+                bool isTargetMorning = !isTargetAfternoon;
+
+                // TASK-03.2: Chặn tuyệt đối tài khoản GLV Dự Bị đứng lớp dạy các lớp thuộc Ca Chiều (Bao Đồng, Dự Bị)
+                if (user.Role == UserRole.ProbationaryTeacher && isTargetAfternoon)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = $"Chặn phân công: Tài khoản '{user.Username}' có vai trò GLV Dự Bị (ProbationaryTeacher), chỉ được phép giảng dạy/trợ tá các lớp Ca Sáng (Khai Tâm, Rước Lễ, Thêm Sức) và không được đứng lớp Ca Chiều ({targetClass.GradeLevel})!"
+                    });
+                }
 
                 // Lấy toàn bộ các lớp mà GLV này đang dạy trong cùng niên khóa
                 var existingAssignments = await _context.ClassTeachers
@@ -305,7 +443,18 @@ namespace ManagerStudentCaltholic.Controllers
                                 (ct.UserId == user.Id || ct.TeacherName == user.Username))
                     .ToListAsync();
 
-                // 4.1. Kiểm tra nếu đã dạy đủ 2 lớp trong niên khóa
+                // 4.1. GLV Dự Bị chỉ được trợ giảng tối đa 1 lớp Ca Sáng
+                if (user.Role == UserRole.ProbationaryTeacher && existingAssignments.Count >= 1)
+                {
+                    var assignedClassNames = string.Join(", ", existingAssignments.Select(a => $"{a.ClassRoom.Name} ({a.ClassRoom.GradeLevel})"));
+                    return Json(new
+                    {
+                        success = false,
+                        message = $"GLV Dự Bị '{user.Username}' đang trợ giảng lớp Ca Sáng ({assignedClassNames}). Chỉ được phân công tối đa 1 lớp Ca Sáng!"
+                    });
+                }
+
+                // 4.2. Kiểm tra nếu đã dạy đủ 2 lớp trong niên khóa
                 if (existingAssignments.Count >= 2)
                 {
                     var assignedClassNames = string.Join(", ", existingAssignments.Select(a => $"{a.ClassRoom.Name} ({a.ClassRoom.GradeLevel})"));
@@ -316,30 +465,30 @@ namespace ManagerStudentCaltholic.Controllers
                     });
                 }
 
-                // 4.2. Kiểm tra nếu đã dạy 1 lớp thuộc Khối Sáng
+                // 4.3. Kiểm tra nếu đã dạy 1 lớp thuộc Ca Sáng
                 if (isTargetMorning)
                 {
-                    var morningClass = existingAssignments.FirstOrDefault(a => a.ClassRoom.GradeLevel != "Bao Đồng");
+                    var morningClass = existingAssignments.FirstOrDefault(a => !GradeLevel.IsAfternoonSession(a.ClassRoom.Session, a.ClassRoom.GradeLevel));
                     if (morningClass != null)
                     {
                         return Json(new
                         {
                             success = false,
-                            message = $"Giáo lý viên đã phụ trách lớp Khối Sáng: '{morningClass.ClassRoom.Name} ({morningClass.ClassRoom.GradeLevel})'. Mỗi GLV chỉ được dạy tối đa 1 lớp Khối Sáng (Khai Tâm, Rước Lễ, Thêm Sức)!"
+                            message = $"Giáo lý viên đã phụ trách lớp Ca Sáng: '{morningClass.ClassRoom.Name} ({morningClass.ClassRoom.GradeLevel})'. Mỗi GLV chỉ được dạy tối đa 1 lớp Ca Sáng (Khai Tâm, Rước Lễ, Thêm Sức)!"
                         });
                     }
                 }
 
-                // 4.3. Kiểm tra nếu đã dạy 1 lớp thuộc Khối Chiều (Bao Đồng)
+                // 4.4. Kiểm tra nếu đã dạy 1 lớp thuộc Ca Chiều (Bao Đồng, Dự Bị)
                 if (isTargetAfternoon)
                 {
-                    var afternoonClass = existingAssignments.FirstOrDefault(a => a.ClassRoom.GradeLevel == "Bao Đồng");
+                    var afternoonClass = existingAssignments.FirstOrDefault(a => GradeLevel.IsAfternoonSession(a.ClassRoom.Session, a.ClassRoom.GradeLevel));
                     if (afternoonClass != null)
                     {
                         return Json(new
                         {
                             success = false,
-                            message = $"Giáo lý viên đã phụ trách lớp Khối Chiều: '{afternoonClass.ClassRoom.Name} (Bao Đồng)'. Mỗi GLV chỉ được dạy tối đa 1 lớp Khối Chiều!"
+                            message = $"Giáo lý viên đã phụ trách lớp Ca Chiều: '{afternoonClass.ClassRoom.Name} ({afternoonClass.ClassRoom.GradeLevel})'. Mỗi GLV chỉ được dạy tối đa 1 lớp Ca Chiều!"
                         });
                     }
                 }
@@ -431,33 +580,13 @@ namespace ManagerStudentCaltholic.Controllers
         {
             try
             {
-                var targetClass = await _context.Classes.FindAsync(id);
+                var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
                 if (targetClass == null) return NotFound();
 
-                // SEC-NEW-05 FIX: Kiểm tra phạm vi quyền hạn theo Khối / Lớp
-                bool isLeadership = User.IsInRole(UserRole.Admin) ||
-                                    User.IsInRole(UserRole.SpiritualDirector) ||
-                                    User.IsInRole(UserRole.ExecutiveBoard);
-
-                if (!isLeadership)
+                // Kiểm tra phạm vi quyền hạn theo Khối / Lớp / Ca học
+                if (!await CanAccessClassRosterAsync(targetClass))
                 {
-                    if (User.IsInRole(UserRole.BranchHead))
-                    {
-                        var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                        if (string.IsNullOrWhiteSpace(managedGrade) ||
-                            !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return Forbid();
-                        }
-                    }
-                    else
-                    {
-                        var uidStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                        long.TryParse(uidStr, out var currentUserId);
-                        var isAssigned = await _context.ClassTeachers
-                            .AnyAsync(ct => ct.ClassRoomId == id && ct.UserId == currentUserId);
-                        if (!isAssigned) return Forbid();
-                    }
+                    return Forbid();
                 }
 
                 var bytes = await _excelService.ExportClassListToExcelAsync(id);
@@ -496,18 +625,19 @@ namespace ManagerStudentCaltholic.Controllers
                     if (targetClass != null)
                     {
                         yearId = targetClass.AcademicYearId;
-                        // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
-                        // Khối Chiều: Bao Đồng
-                        isTargetMorning = targetClass.GradeLevel != "Bao Đồng";
-                        isTargetAfternoon = targetClass.GradeLevel == "Bao Đồng";
+                        // Ca Sáng (Morning): Khai Tâm, Rước Lễ, Thêm Sức
+                        // Ca Chiều (Afternoon): Bao Đồng, Dự Bị
+                        isTargetAfternoon = GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel);
+                        isTargetMorning = !isTargetAfternoon;
                     }
                 }
 
-                // 3. Lấy toàn bộ tài khoản Users hợp lệ (loại trừ Admin & Cha Tuyên Úy)
+                // 3. Lấy toàn bộ tài khoản Users hợp lệ (loại trừ Admin, Cha Tuyên Úy, Phụ huynh)
                 var users = await _context.Users
                     .Where(u => u.IsActive &&
                                 u.Role != UserRole.Admin &&
-                                u.Role != UserRole.SpiritualDirector)
+                                u.Role != UserRole.SpiritualDirector &&
+                                u.Role != UserRole.Parent)
                     .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
                     .Select(u => new
                     {
@@ -540,26 +670,38 @@ namespace ManagerStudentCaltholic.Controllers
                     assignmentsByUser.TryGetValue(u.Id, out var userClasses);
                     userClasses ??= new List<ClassTeacher>();
 
+                    // TASK-03.2: Chặn tuyệt đối tài khoản GLV Dự Bị hiển thị trong dropdown lớp Ca Chiều (Bao Đồng, Dự Bị)
+                    if (isTargetAfternoon && u.Role == UserRole.ProbationaryTeacher)
+                    {
+                        continue;
+                    }
+
+                    // GLV Dự Bị chỉ dạy tối đa 1 lớp Ca Sáng
+                    if (u.Role == UserRole.ProbationaryTeacher && userClasses.Count >= 1)
+                    {
+                        continue;
+                    }
+
                     // Nếu đã đủ 2 lớp -> Ẩn hoàn toàn khỏi danh sách
                     if (userClasses.Count >= 2)
                     {
                         continue;
                     }
 
-                    // Nếu đang mở lớp KHỐI SÁNG: Ẩn những GLV đã dạy 1 lớp Khối Sáng (Khai Tâm, Rước Lễ, Thêm Sức)
+                    // Nếu đang mở lớp CA SÁNG: Ẩn những GLV đã dạy 1 lớp Ca Sáng (Khai Tâm, Rước Lễ, Thêm Sức)
                     if (isTargetMorning)
                     {
-                        bool hasMorning = userClasses.Any(c => c.ClassRoom.GradeLevel != "Bao Đồng");
+                        bool hasMorning = userClasses.Any(c => !GradeLevel.IsAfternoonSession(c.ClassRoom.Session, c.ClassRoom.GradeLevel));
                         if (hasMorning)
                         {
                             continue; // Ẩn đi
                         }
                     }
 
-                    // Nếu đang mở lớp KHỐI CHIỀU: Ẩn những GLV đã dạy 1 lớp Khối Chiều (Bao Đồng)
+                    // Nếu đang mở lớp CA CHIỀU: Ẩn những GLV đã dạy 1 lớp Ca Chiều (Bao Đồng, Dự Bị)
                     if (isTargetAfternoon)
                     {
-                        bool hasAfternoon = userClasses.Any(c => c.ClassRoom.GradeLevel == "Bao Đồng");
+                        bool hasAfternoon = userClasses.Any(c => GradeLevel.IsAfternoonSession(c.ClassRoom.Session, c.ClassRoom.GradeLevel));
                         if (hasAfternoon)
                         {
                             continue; // Ẩn đi
@@ -571,7 +713,7 @@ namespace ManagerStudentCaltholic.Controllers
                     if (userClasses.Count == 1)
                     {
                         var existingClass = userClasses.First();
-                        statusNote = existingClass.ClassRoom.GradeLevel == "Bao Đồng"
+                        statusNote = GradeLevel.IsAfternoonSession(existingClass.ClassRoom.Session, existingClass.ClassRoom.GradeLevel)
                             ? " (Đã dạy Chiều: " + existingClass.ClassRoom.Name + ")"
                             : " (Đã dạy Sáng: " + existingClass.ClassRoom.Name + ")";
                     }
@@ -607,9 +749,9 @@ namespace ManagerStudentCaltholic.Controllers
             try
             {
                 // 1. Xác định ca của khối được chọn:
-                // Khối Sáng: Khai Tâm, Rước Lễ, Thêm Sức
-                // Khối Chiều: Bao Đồng
-                bool isMorning = gradeLevel == "Khai Tâm" || gradeLevel == "Rước Lễ" || gradeLevel == "Thêm Sức";
+                // Khối Sáng (Morning): Khai Tâm, Rước Lễ, Thêm Sức
+                // Khối Chiều (Afternoon): Bao Đồng, Dự Bị
+                bool isMorning = GradeLevel.IsMorningGrade(gradeLevel);
 
                 // 2. Lấy toàn bộ phòng học (bỏ qua phòng HĐGX và Nhà Sinh Hoạt Chung)
                 var allRooms = await _context.ClassRoomLocations
@@ -627,8 +769,14 @@ namespace ManagerStudentCaltholic.Controllers
                 var occupiedRoomIds = await _context.Classes
                     .Where(c => c.AcademicYearId == academicYearId && c.ClassRoomLocationId.HasValue)
                     .Where(c => isMorning
-                        ? (c.GradeLevel == "Khai Tâm" || c.GradeLevel == "Rước Lễ" || c.GradeLevel == "Thêm Sức")
-                        : (c.GradeLevel == "Bao Đồng"))
+                        ? (c.Session != GradeLevel.SessionAfternoon &&
+                           c.GradeLevel != GradeLevel.BaoDong &&
+                           c.GradeLevel != GradeLevel.DuBi &&
+                           c.GradeLevel != GradeLevel.DuBiCode)
+                        : (c.Session == GradeLevel.SessionAfternoon ||
+                           c.GradeLevel == GradeLevel.BaoDong ||
+                           c.GradeLevel == GradeLevel.DuBi ||
+                           c.GradeLevel == GradeLevel.DuBiCode))
                     .Select(c => c.ClassRoomLocationId!.Value)
                     .Distinct()
                     .ToListAsync();
@@ -655,8 +803,82 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(AssignTeacher));
+                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(GetAvailableRooms));
                 return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu. Vui lòng thử lại sau." });
+            }
+        }
+
+        /// <summary>
+        /// GET: /Classes/GetClassStudents?classId=...
+        /// Lấy danh sách thiếu nhi của lớp học theo quyền truy cập của user hiện tại.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetClassStudents(int classId)
+        {
+            try
+            {
+                if (classId <= 0)
+                {
+                    return Json(new { success = false, message = "Mã lớp học không hợp lệ." });
+                }
+
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == classId);
+
+                if (targetClass == null)
+                {
+                    return Json(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
+                }
+
+                if (!await CanAccessClassRosterAsync(targetClass))
+                {
+                    return Json(new { success = false, message = "Bạn không có quyền xem danh sách thiếu nhi của lớp này." });
+                }
+
+                bool isAfternoon = GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel);
+
+                var students = await _context.Enrollments
+                    .AsNoTracking()
+                    .Include(e => e.Student)
+                    .Where(e => e.ClassRoomId == classId && e.Student != null && !e.Student.IsDeleted)
+                    .OrderBy(e => e.Student.LastName)
+                    .ThenBy(e => e.Student.FirstName)
+                    .ThenBy(e => e.Student.StudentCode)
+                    .Select(e => new
+                    {
+                        id = e.Student.Id,
+                        studentCode = e.Student.StudentCode,
+                        christianName = e.Student.ChristianName,
+                        fullName = (e.Student.FirstName + " " + e.Student.LastName).Trim(),
+                        gender = e.Student.Gender,
+                        dateOfBirth = e.Student.DateOfBirth.ToString("dd/MM/yyyy"),
+                        parentPhone = e.Student.ParentPhone,
+                        isActive = e.Student.IsActive
+                    })
+                    .ToListAsync();
+
+                return Json(new
+                {
+                    success = true,
+                    data = new
+                    {
+                        classId = targetClass.Id,
+                        className = targetClass.Name,
+                        gradeLevel = targetClass.GradeLevel,
+                        sessionDisplay = isAfternoon ? "Ca Chiều" : "Ca Sáng",
+                        roomName = string.IsNullOrWhiteSpace(targetClass.RoomName) ? "Chưa bố trí" : targetClass.RoomName,
+                        academicYearName = targetClass.AcademicYear?.Name ?? string.Empty,
+                        totalStudents = students.Count,
+                        students
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi hệ thống khi lấy danh sách thiếu nhi lớp ID {ClassId}", classId);
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi tải danh sách lớp." });
             }
         }
     }

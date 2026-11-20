@@ -10,21 +10,39 @@
     var isLeadership = User.IsInRole(UserRole.Admin) ||
                        User.IsInRole(UserRole.SpiritualDirector) ||
                        User.IsInRole(UserRole.ExecutiveBoard);
+    var managedGradeClaim = User.FindFirst("ManagedGradeLevel")?.Value;
+    var canQuickCreateProbationary = User.IsInRole(UserRole.Admin) ||
+                                     User.IsInRole(UserRole.ExecutiveBoard) ||
+                                     (User.IsInRole(UserRole.BranchHead) && GradeLevel.IsProbationaryGrade(managedGradeClaim));
 }
 
 <div class="container-fluid py-4">
     <!-- Header Section -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom gap-2">
         <div>
             <h3 class="fw-bold text-primary mb-1">
                 <i class="bi bi-mortarboard-fill me-2"></i>Danh Sách Lớp Học Giáo Lý
             </h3>
-            <p class="text-muted mb-0">Thiết lập các lớp học theo từng khối ngành thuộc niên khóa vận hành</p>
+            <p class="text-muted mb-0">Thiết lập các lớp học theo từng khối ngành &amp; ca học (Ca Sáng / Ca Chiều) thuộc niên khóa vận hành</p>
         </div>
-        <div>
-            <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createClassModal">
-                <i class="bi bi-plus-circle me-1"></i> Thêm Lớp Mới
-            </button>
+        <div class="d-flex flex-wrap gap-2">
+            @if (canQuickCreateProbationary)
+            {
+                <form asp-controller="Classes" asp-action="QuickCreateProbationaryClasses" method="post" class="d-inline"
+                      onsubmit="return confirm('Khởi tạo nhanh 4 lớp chuẩn Khối Dự Bị (Dự Bị 1, 2, 3, 4 - Ca Chiều) cho niên khóa đang chọn?');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="academicYearId" value="@selectedYearId" />
+                    <button type="submit" class="btn btn-outline-primary px-3 shadow-sm">
+                        <i class="bi bi-lightning-charge-fill me-1"></i> Tạo Nhanh 4 Lớp Dự Bị (Ca Chiều)
+                    </button>
+                </form>
+            }
+            @if (User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || User.IsInRole(UserRole.BranchHead))
+            {
+                <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createClassModal">
+                    <i class="bi bi-plus-circle me-1"></i> Thêm Lớp Mới
+                </button>
+            }
         </div>
     </div>
 
@@ -61,10 +79,11 @@
                         <span class="input-group-text bg-light"><i class="bi bi-filter"></i></span>
                         <select name="gradeLevel" class="form-select fw-semibold" onchange="this.form.submit()">
                             <option value="ALL" selected="@(selectedGrade == "ALL")">-- Tất cả các khối ngành --</option>
-                            <option value="Khai Tâm" selected="@(selectedGrade == "Khai Tâm")">Khối Khai Tâm (Lễ sáng 6h30 / Học 9h00)</option>
-                            <option value="Rước Lễ" selected="@(selectedGrade == "Rước Lễ")">Khối Rước Lễ (Lễ sáng 6h30 / Học 9h00)</option>
-                            <option value="Thêm Sức" selected="@(selectedGrade == "Thêm Sức")">Khối Thêm Sức (Lễ sáng 6h30 / Học 9h00)</option>
-                            <option value="Bao Đồng" selected="@(selectedGrade == "Bao Đồng")">Khối Bao Đồng (Lễ sáng 6h30 / Học 15h00)</option>
+                            <option value="Khai Tâm" selected="@(selectedGrade == "Khai Tâm")">Khối Khai Tâm (Ca Sáng • Lễ 6h30 / Học 9h00)</option>
+                            <option value="Rước Lễ" selected="@(selectedGrade == "Rước Lễ")">Khối Rước Lễ (Ca Sáng • Lễ 6h30 / Học 9h00)</option>
+                            <option value="Thêm Sức" selected="@(selectedGrade == "Thêm Sức")">Khối Thêm Sức (Ca Sáng • Lễ 6h30 / Học 9h00)</option>
+                            <option value="Bao Đồng" selected="@(selectedGrade == "Bao Đồng")">Khối Bao Đồng (Ca Chiều • Lễ 6h30 / Học 15h00)</option>
+                            <option value="Dự Bị" selected="@(selectedGrade == "Dự Bị" || selectedGrade == "DU_BI")">Khối Dự Bị (Ca Chiều • Cố định Dự Bị 1..4)</option>
                         </select>
                     </div>
                 </div>
@@ -83,42 +102,68 @@
         {
             @foreach (var c in Model)
             {
+                bool isAfternoonClass = GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel);
+                bool isBranchHeadOfThisClass = User.IsInRole(UserRole.BranchHead) &&
+                                               !string.IsNullOrWhiteSpace(managedGradeClaim) &&
+                                               string.Equals(c.GradeLevel, managedGradeClaim, StringComparison.OrdinalIgnoreCase);
+                bool isTeacherOfThisClass = currentUserId > 0 &&
+                                            c.ClassTeachers != null &&
+                                            c.ClassTeachers.Any(ct => ct.UserId == currentUserId) &&
+                                            (!User.IsInRole(UserRole.ProbationaryTeacher) || !isAfternoonClass);
+                bool canViewClassRoster = isLeadership || isBranchHeadOfThisClass || isTeacherOfThisClass;
+                bool canManageEnrollment = User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard);
+                bool canAssignTeachers = User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard) || isBranchHeadOfThisClass;
+                int studentCount = c.Enrollments?.Count ?? 0;
+
                 <div class="col-12 col-md-6 col-lg-4 col-xl-3">
                     <div class="card h-100 border-0 shadow-sm rounded-3 class-card">
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-start mb-2">
-                                @if (c.GradeLevel == "Khai Tâm")
-                                {
-                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1 rounded-pill">Khai Tâm</span>
-                                }
-                                else if (c.GradeLevel == "Rước Lễ")
-                                {
-                                    <span class="badge bg-info-subtle text-primary border border-info-subtle px-2 py-1 rounded-pill">Rước Lễ</span>
-                                }
-                                else if (c.GradeLevel == "Thêm Sức")
-                                {
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">Thêm Sức</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Bao Đồng</span>
-                                }
+                                <div class="d-flex flex-wrap align-items-center gap-1">
+                                    @if (c.GradeLevel == "Khai Tâm")
+                                    {
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1 rounded-pill">Khai Tâm</span>
+                                    }
+                                    else if (c.GradeLevel == "Rước Lễ")
+                                    {
+                                        <span class="badge bg-info-subtle text-primary border border-info-subtle px-2 py-1 rounded-pill">Rước Lễ</span>
+                                    }
+                                    else if (c.GradeLevel == "Thêm Sức")
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">Thêm Sức</span>
+                                    }
+                                    else if (GradeLevel.IsProbationaryGrade(c.GradeLevel))
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill">Dự Bị</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">Bao Đồng</span>
+                                    }
 
-                                <div class="dropdown">
-                                    <button class="btn btn-link text-secondary p-0" type="button" data-bs-toggle="dropdown">
-                                        <i class="bi bi-three-dots-vertical fs-5"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                        <li>
-                                            <form asp-action="Delete" asp-route-id="@c.Id" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa lớp @c.Name không?');">
-                                                @Html.AntiForgeryToken()
-                                                <button type="submit" class="dropdown-item text-danger">
-                                                    <i class="bi bi-trash3 me-2"></i> Xóa Lớp Học
-                                                </button>
-                                            </form>
-                                        </li>
-                                    </ul>
+                                    <span class="badge @(isAfternoonClass ? "bg-dark-subtle text-dark" : "bg-light text-secondary border") px-2 py-1 rounded-pill" style="font-size: 0.7rem;">
+                                        @(isAfternoonClass ? "Ca Chiều" : "Ca Sáng")
+                                    </span>
                                 </div>
+
+                                @if (canManageEnrollment)
+                                {
+                                    <div class="dropdown">
+                                        <button class="btn btn-link text-secondary p-0" type="button" data-bs-toggle="dropdown">
+                                            <i class="bi bi-three-dots-vertical fs-5"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                            <li>
+                                                <form asp-action="Delete" asp-route-id="@c.Id" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa lớp @c.Name không?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="dropdown-item text-danger">
+                                                        <i class="bi bi-trash3 me-2"></i> Xóa Lớp Học
+                                                    </button>
+                                                </form>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                }
                             </div>
 
                             <h4 class="card-title fw-bold text-dark mb-1">@c.Name</h4>
@@ -129,7 +174,7 @@
                         </div>
 
                         <!-- Danh sách GLV phụ trách -->
-                        <div class="mb-3">
+                        <div class="px-4 mb-3">
                             <div class="small fw-semibold text-secondary mb-1">
                                 <i class="bi bi-person-badge me-1"></i>Phụ trách:
                             </div>
@@ -150,43 +195,60 @@
                             }
                         </div>
 
-                        <div class="d-flex justify-content-between align-items-center py-2 px-3 bg-light rounded-2 mb-3">
+                        <div class="d-flex justify-content-between align-items-center py-2 px-3 mx-4 bg-light rounded-2 mb-3">
                             <span class="text-secondary small">Sĩ số lớp:</span>
-                            <span class="fw-bold fs-5 text-primary">@c.Enrollments.Count <small class="fs-6 fw-normal text-muted">em</small></span>
+                            <span class="fw-bold fs-5 text-primary">@studentCount <small class="fs-6 fw-normal text-muted">em</small></span>
                         </div>
 
                         <div class="card-footer bg-white border-0 pt-0 pb-3 px-4 d-grid gap-2">
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <a asp-controller="Enrollments" asp-action="Manage" asp-route-classId="@c.Id" class="btn btn-outline-success btn-sm w-100 rounded-pill">
-                                        <i class="bi bi-person-lines-fill me-1"></i> Xếp Lớp
-                                    </a>
-                                </div>
-                                <div class="col-6">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 rounded-pill" onclick="openAssignModal(@c.Id, '@c.Name')">
-                                        <i class="bi bi-person-badge me-1"></i> GLV
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <a asp-action="ExportExcel" asp-route-id="@c.Id" class="btn btn-outline-warning btn-sm w-100 rounded-pill">
-                                        <i class="bi bi-file-earmark-excel me-2"></i> Xuất Danh Sách
-                                    </a>
-                                </div>
-                                <div class="col-6">
-                                    <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@c.Id" target="_blank" class="btn btn-outline-info btn-sm w-100 rounded-pill">
-                                        <i class="bi bi-qr-code me-2"></i> In Thẻ QR
-                                    </a>
-                                </div>
-                            </div>
-                            @{
-                                // Kiểm tra xem GLV hiện tại có phụ trách lớp này không
-                                var isTeacherOfThisClass = c.ClassTeachers != null && c.ClassTeachers.Any(ct => ct.UserId == currentUserId);
+                            @if (canViewClassRoster)
+                            {
+                                <button type="button"
+                                        class="btn btn-primary btn-sm w-100 rounded-pill fw-semibold shadow-sm"
+                                        data-class-name="@c.Name"
+                                        onclick="openClassRosterModal(@c.Id, this.getAttribute('data-class-name'))">
+                                    <i class="bi bi-people-fill me-1"></i> Xem Danh Sách Lớp (@studentCount em)
+                                </button>
                             }
 
-                            @if (isLeadership || isTeacherOfThisClass)
+                            @if (canManageEnrollment || canAssignTeachers)
                             {
+                                <div class="row g-2">
+                                    @if (canManageEnrollment)
+                                    {
+                                        <div class="@(canAssignTeachers ? "col-6" : "col-12")">
+                                            <a asp-controller="Enrollments" asp-action="Manage" asp-route-classId="@c.Id" class="btn btn-outline-success btn-sm w-100 rounded-pill">
+                                                <i class="bi bi-person-lines-fill me-1"></i> Xếp Lớp
+                                            </a>
+                                        </div>
+                                    }
+                                    @if (canAssignTeachers)
+                                    {
+                                        <div class="@(canManageEnrollment ? "col-6" : "col-12")">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm w-100 rounded-pill"
+                                                    data-class-name="@c.Name"
+                                                    onclick="openAssignModal(@c.Id, this.getAttribute('data-class-name'))">
+                                                <i class="bi bi-person-badge me-1"></i> GLV
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+
+                            @if (canViewClassRoster)
+                            {
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <a asp-action="ExportExcel" asp-route-id="@c.Id" class="btn btn-outline-warning btn-sm w-100 rounded-pill">
+                                            <i class="bi bi-file-earmark-excel me-1"></i> Xuất DS
+                                        </a>
+                                    </div>
+                                    <div class="col-6">
+                                        <a asp-controller="Students" asp-action="PrintBadges" asp-route-classId="@c.Id" target="_blank" class="btn btn-outline-info btn-sm w-100 rounded-pill">
+                                            <i class="bi bi-qr-code me-1"></i> In Thẻ QR
+                                        </a>
+                                    </div>
+                                </div>
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-info btn-sm w-100 rounded-pill">
@@ -200,19 +262,10 @@
                                     </div>
                                 </div>
                             }
-                            else
+                            else if (!canManageEnrollment && !canAssignTeachers)
                             {
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <a href="/Attendance/Index?classId=@c.Id" class="btn btn-outline-danger btn-sm w-100 rounded-pill disabled" title="Bạn không được phân công dạy lớp này">
-                                            <i class="bi bi-card-checklist me-1"></i> Điểm Danh
-                                        </a>
-                                    </div>
-                                    <div class="col-6">
-                                        <a href="/Grades/Index?classId=@c.Id" class="btn btn btn-outline-danger btn-sm w-100 rounded-pill disabled" title="Bạn không được phân công dạy lớp này">
-                                            <i class="bi bi-table me-1 text-warning"></i> Sổ Điểm
-                                        </a>
-                                    </div>
+                                <div class="text-center text-muted small py-2 bg-light rounded-pill" title="Bạn chỉ có quyền xem danh sách các lớp được phân công">
+                                    <i class="bi bi-lock me-1"></i>Chỉ xem danh sách lớp phụ trách
                                 </div>
                             }
                         </div>
@@ -254,10 +307,11 @@
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Khối / Ngành <span class="text-danger">*</span></label>
                     <select id="modalGradeLevelSelect" name="GradeLevel" class="form-select" required onchange="loadAvailableRoomsForModal()">
-                        <option value="Khai Tâm">Khối Khai Tâm (Học sáng 9h00)</option>
-                        <option value="Rước Lễ">Khối Rước Lễ (Học sáng 9h00)</option>
-                        <option value="Thêm Sức">Khối Thêm Sức (Học sáng 9h00)</option>
-                        <option value="Bao Đồng">Khối Bao Đồng (Học chiều 15h00)</option>
+                        <option value="Khai Tâm">Khối Khai Tâm (Ca Sáng • Học sáng 9h00)</option>
+                        <option value="Rước Lễ">Khối Rước Lễ (Ca Sáng • Học sáng 9h00)</option>
+                        <option value="Thêm Sức">Khối Thêm Sức (Ca Sáng • Học sáng 9h00)</option>
+                        <option value="Bao Đồng">Khối Bao Đồng (Ca Chiều • Học chiều 15h00)</option>
+                        <option value="Dự Bị">Khối Dự Bị (Ca Chiều • Học chiều 15h00)</option>
                     </select>
                 </div>
 
@@ -319,7 +373,7 @@
                         <option value="">-- Đang nạp danh sách tài khoản... --</option>
                     </select>
                     <div class="form-text small text-muted">
-                        <i class="bi bi-info-circle me-1 text-primary"></i>Quy định: Mỗi GLV chỉ được dạy <strong>tối đa 2 lớp</strong> (1 lớp Khối Sáng: Khai Tâm/Rước Lễ/Thêm Sức và 1 lớp Khối Chiều: Bao Đồng).
+                        <i class="bi bi-info-circle me-1 text-primary"></i>Quy định: GLV chính thức tối đa <strong>2 lớp</strong> (1 Ca Sáng + 1 Ca Chiều). <strong>Dự Bị</strong> chỉ được phân công trợ giảng <strong>Ca Sáng</strong> (Khai Tâm/Rước Lễ/Thêm Sức) và tự động ẩn khỏi lớp Ca Chiều (Bao Đồng/Dự Bị).
                     </div>
                 </div>
 
@@ -335,6 +389,78 @@
                 <button type="button" class="btn btn-primary w-100 fw-bold rounded-pill py-2 shadow-sm" onclick="submitAssignTeacher()">
                     <i class="bi bi-check2-circle me-1"></i> Xác Nhận Phân Công
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- Modal Xem Danh Sách Thiếu Nhi Theo Lớp (Theo Phân Quyền)       -->
+<!-- ============================================================== -->
+<div class="modal fade" id="classStudentsRosterModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3">
+                <div>
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="bi bi-people-fill me-2"></i>Danh Sách Lớp: <span id="rosterModalClassName" class="text-warning"></span>
+                    </h5>
+                    <small id="rosterModalMeta" class="text-white-50"></small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body p-3 p-md-4">
+                <div class="row g-2 align-items-center mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+                            <input type="text" id="classRosterSearchInput" class="form-control"
+                                   placeholder="Lọc nhanh theo Mã QR, Tên Thánh, Họ tên, SĐT..."
+                                   oninput="filterClassRosterRows(this.value)" />
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-2" id="rosterTotalBadge">
+                            0 thiếu nhi
+                        </span>
+                    </div>
+                </div>
+
+                <div id="classRosterError" class="alert alert-danger border-0 rounded-3 small d-none"></div>
+
+                <div id="classRosterLoading" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="small text-muted mt-2 mb-0">Đang tải danh sách thiếu nhi của lớp...</p>
+                </div>
+
+                <div class="table-responsive border rounded-3" id="classRosterTableWrapper">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-center" style="width: 50px;">#</th>
+                                <th>Mã QR</th>
+                                <th>Tên Thánh &amp; Họ Tên</th>
+                                <th>Giới Tính</th>
+                                <th>Ngày Sinh</th>
+                                <th>SĐT Phụ Huynh</th>
+                                <th class="text-center">Trạng Thái</th>
+                                <th class="text-end pe-3">Hồ Sơ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classRosterTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light d-flex flex-wrap justify-content-between gap-2">
+                <div class="d-flex flex-wrap gap-2">
+                    <a id="rosterOpenStudentsPageLink" href="/Students/Index" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Mở Trang Hồ Sơ Lớp
+                    </a>
+                    <a id="rosterExportExcelLink" href="#" class="btn btn-outline-warning btn-sm rounded-pill px-3">
+                        <i class="bi bi-file-earmark-excel me-1"></i> Xuất Excel
+                    </a>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" data-bs-dismiss="modal">Đóng</button>
             </div>
         </div>
     </div>
@@ -393,7 +519,9 @@
                 const opt = document.createElement('option');
                 opt.value = t.id;
                 const phone = t.phoneNumber ? ` - SĐT: ${t.phoneNumber}` : '';
-                const role = t.role === 'BranchHead' ? ' [Trưởng khối]' : '';
+                const role = t.role === 'BranchHead'
+                    ? ' [Trưởng khối]'
+                    : (t.role === 'ProbationaryTeacher' ? ' [Dự Bị - Ca Sáng]' : '');
                 const note = t.statusNote || '';
                 opt.text = `${t.fullName} (${t.username})${role}${note}${phone}`;
                 selectEl.appendChild(opt);
@@ -555,6 +683,108 @@
             }
         }
 
+        function escapeHtmlRoster(text) {
+            if (text === null || text === undefined) return '';
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function openClassRosterModal(classId, className) {
+            const modalEl = document.getElementById('classStudentsRosterModal');
+            if (!modalEl) return;
+
+            document.getElementById('rosterModalClassName').innerText = className || `#${classId}`;
+            document.getElementById('rosterModalMeta').innerText = '';
+            document.getElementById('rosterTotalBadge').innerText = 'Đang tải...';
+            document.getElementById('classRosterSearchInput').value = '';
+            document.getElementById('classRosterError').classList.add('d-none');
+            document.getElementById('classRosterTableBody').innerHTML = '';
+            document.getElementById('classRosterTableWrapper').classList.add('d-none');
+            document.getElementById('classRosterLoading').classList.remove('d-none');
+
+            document.getElementById('rosterOpenStudentsPageLink').href = `/Students/Index?classId=${classId}`;
+            document.getElementById('rosterExportExcelLink').href = `/Classes/ExportExcel/${classId}`;
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+            try {
+                const res = await fetch(`/Classes/GetClassStudents?classId=${classId}`);
+                const json = await res.json();
+
+                document.getElementById('classRosterLoading').classList.add('d-none');
+
+                if (!json.success) {
+                    const errBox = document.getElementById('classRosterError');
+                    errBox.innerText = json.message || 'Bạn không có quyền xem danh sách lớp này.';
+                    errBox.classList.remove('d-none');
+                    document.getElementById('rosterTotalBadge').innerText = 'Không thể truy cập';
+                    return;
+                }
+
+                const info = json.data;
+                document.getElementById('rosterModalClassName').innerText = info.className || className;
+                document.getElementById('rosterModalMeta').innerText =
+                    `Khối: ${info.gradeLevel} • ${info.sessionDisplay} • Phòng: ${info.roomName} • Niên khóa: ${info.academicYearName}`;
+                document.getElementById('rosterTotalBadge').innerText = `${info.totalStudents} thiếu nhi`;
+
+                const tbody = document.getElementById('classRosterTableBody');
+                document.getElementById('classRosterTableWrapper').classList.remove('d-none');
+
+                if (!info.students || info.students.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted fst-italic">Lớp này hiện chưa có thiếu nhi nào được xếp vào danh sách.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = info.students.map((s, idx) => `
+                    <tr>
+                        <td class="text-center text-muted small">${idx + 1}</td>
+                        <td><span class="badge bg-light text-dark border font-monospace">${escapeHtmlRoster(s.studentCode)}</span></td>
+                        <td>
+                            <div class="fw-semibold text-dark">${escapeHtmlRoster(s.christianName)} ${escapeHtmlRoster(s.fullName)}</div>
+                        </td>
+                        <td>
+                            <span class="badge ${s.gender === 'Nam' ? 'bg-info-subtle text-primary' : 'bg-danger-subtle text-danger'} rounded-pill">
+                                ${escapeHtmlRoster(s.gender)}
+                            </span>
+                        </td>
+                        <td class="small">${escapeHtmlRoster(s.dateOfBirth)}</td>
+                        <td class="small">
+                            ${s.parentPhone
+                                ? `<a href="tel:${escapeHtmlRoster(s.parentPhone)}" class="text-decoration-none"><i class="bi bi-telephone me-1"></i>${escapeHtmlRoster(s.parentPhone)}</a>`
+                                : '<span class="text-muted fst-italic">Chưa có</span>'}
+                        </td>
+                        <td class="text-center">
+                            ${s.isActive
+                                ? '<span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">Đang học</span>'
+                                : '<span class="badge bg-secondary-subtle text-secondary rounded-pill">Tạm nghỉ</span>'}
+                        </td>
+                        <td class="text-end pe-3">
+                            <a href="/Students/Details/${s.id}" class="btn btn-outline-primary btn-sm rounded-pill px-2">
+                                <i class="bi bi-person-vcard me-1"></i>Chi tiết
+                            </a>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                document.getElementById('classRosterLoading').classList.add('d-none');
+                const errBox = document.getElementById('classRosterError');
+                errBox.innerText = 'Lỗi kết nối khi tải danh sách thiếu nhi của lớp.';
+                errBox.classList.remove('d-none');
+            }
+        }
+
+        function filterClassRosterRows(keyword) {
+            const kw = (keyword || '').trim().toLowerCase();
+            document.querySelectorAll('#classRosterTableBody tr').forEach(tr => {
+                const text = tr.innerText.toLowerCase();
+                tr.style.display = (!kw || text.includes(kw)) ? '' : 'none';
+            });
+        }
+
         // Tự động nạp danh sách phòng trống ngay khi modal mở ra
         document.addEventListener('DOMContentLoaded', function () {
             const createClassModal = document.getElementById('createClassModal');
@@ -562,6 +792,12 @@
                 createClassModal.addEventListener('show.bs.modal', function () {
                     loadAvailableRoomsForModal();
                 });
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const openRosterClassId = parseInt(params.get('openRosterClassId'));
+            if (openRosterClassId > 0) {
+                openClassRosterModal(openRosterClassId, '');
             }
         });
     </script>

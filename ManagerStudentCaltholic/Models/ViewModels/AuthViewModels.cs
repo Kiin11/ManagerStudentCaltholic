@@ -46,6 +46,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         private string? _email;
         private string? _phoneNumber;
         private string? _managedGradeLevel;
+        private string? _oldStudentCode;
 
         [Required(ErrorMessage = "Tên đăng nhập không được rỗng")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username từ 3 đến 50 ký tự")]
@@ -94,6 +95,13 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         {
             get => _managedGradeLevel;
             set => _managedGradeLevel = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        [StringLength(50, ErrorMessage = "Mã học sinh cũ không quá 50 ký tự")]
+        public string? OldStudentCode
+        {
+            get => _oldStudentCode;
+            set => _oldStudentCode = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
     }
 

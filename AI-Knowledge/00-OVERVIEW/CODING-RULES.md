@@ -21,3 +21,10 @@ Dựa trên việc phân tích mã nguồn thực tế, các quy tắc và conve
 ## 4. Response Format
 - **Ajax / API endpoints:** Chuẩn hóa cấu trúc trả về JSON dạng: `{ success: boolean, message: string, data: object }`. (VD: `UsersController.BatchCreateTeachers`).
 - **View Data Routing:** Thường sử dụng `TempData["SuccessMessage"]` và `TempData["ErrorMessage"]` để đẩy thông báo lên UI sau các hành động redirect.
+
+## 5. Quy chuẩn SQL Scripts trong thư mục `script/` (PostgreSQL / pgAdmin)
+- **Quy tắc đặt tên file:** Khi bổ sung script mới vào thư mục `script/`, tên file bắt buộc tuân thủ cấu trúc `{yyyyMMdd}_{TenBang_Hoac_ChucNang}.sql` (trong đó `{yyyyMMdd}` là ngày tạo script `datecreated`, theo sau là tên bảng hoặc tên chức năng; ví dụ: `20261120_Users_Classes_Students_Phase6.sql`).
+- **Tương thích trực tiếp với pgAdmin (PostgreSQL):**
+  - Toàn bộ script phải chạy trực tiếp được trong **pgAdmin Query Tool** trên hệ quản trị CSDL PostgreSQL.
+  - Tuyệt đối không sử dụng các lệnh meta-command chỉ dành riêng cho `psql` CLI (như `\c`, `\i`, `\set`, `\echo`, `\copy`).
+  - Khuyến nghị viết script theo hướng an toàn / idempotent (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, hoặc khối `DO $$ BEGIN ... END $$;`) và đặt tên bảng/cột phân biệt hoa thường trong dấu ngoặc kép `"..."` theo chuẩn EF Core Npgsql.

@@ -24,7 +24,7 @@ namespace ManagerStudentCaltholic.Models.Entities
         [Required, MaxLength(10)]
         public string LastName { get; set; } = string.Empty;
 
-        // Vai trò: Admin, BranchHead, Teacher, Parent
+        // Vai trò: Admin, SpiritualDirector, ExecutiveBoard, BranchHead, Teacher, ProbationaryTeacher, Parent
         [Required, MaxLength(30)]
         public string Role { get; set; } = UserRole.Teacher;
 
@@ -43,6 +43,12 @@ namespace ManagerStudentCaltholic.Models.Entities
         [MaxLength(50)]
         public string? ChristianName { get; set; } // Tên Thánh (ví dụ: Giuse, Maria...)
         public DateTime? DateOfBirth { get; set; } // Ngày sinh
+        public DateTime? FeastDay { get; set; }             // Ngày kính Thánh Bổn mạng
+        public DateTime? BaptismDate { get; set; }          // Ngày Rửa tội
+        public DateTime? FirstCommunionDate { get; set; }   // Ngày Rước lễ lần đầu
+        public DateTime? ConfirmationDate { get; set; }     // Ngày Thêm sức
+        public DateTime? BaoDongPromiseDate { get; set; }   // Ngày Tuyên hứa Dự Bị / Bao Đồng
+        public DateTime? CatechistPromiseDate { get; set; } // Ngày Tuyên hứa Giáo lý viên (>= 18 tuổi)
 
         [MaxLength(200)]
         public string? Address { get; set; } // Giáo họ / Địa chỉ cư ngụ
@@ -66,5 +72,11 @@ namespace ManagerStudentCaltholic.Models.Entities
         /// </summary>
         public long? StudentId { get; set; }
         public Student? Student { get; set; }
+
+        /// <summary>
+        /// TASK-01.1 (Phase 6): Khóa ngoại 1-1 liên kết tài khoản GLV Dự Bị (ProbationaryTeacher) với hồ sơ Thiếu nhi gốc
+        /// </summary>
+        public long? LinkedStudentId { get; set; }
+        public Student? LinkedStudent { get; set; }
     }
 }

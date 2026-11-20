@@ -5,6 +5,8 @@ namespace ManagerStudentCaltholic.Models.Entities
 {
     public class ClassRoom : ISoftDelete
     {
+        private string _gradeLevel = string.Empty;
+
         public int Id { get; set; }
 
         [Required]
@@ -13,13 +15,29 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [Required]
         [MaxLength(50)]
-        public string GradeLevel { get; set; } = string.Empty;
+        public string GradeLevel
+        {
+            get => _gradeLevel;
+            set
+            {
+                _gradeLevel = value ?? string.Empty;
+                Session = Models.Entities.GradeLevel.ResolveSession(_gradeLevel);
+            }
+        }
 
         [MaxLength(50)]
         public string? RoomName { get; set; }
 
         [MaxLength(20)]
         public string? Shift { get; set; }
+
+        /// <summary>
+        /// TASK-01.2 (Phase 6): Ca sinh hoạt của lớp (Morning / Afternoon).
+        /// Tự động ánh xạ: Khai Tâm, Rước Lễ, Thêm Sức = Morning; Bao Đồng, Dự Bị = Afternoon.
+        /// </summary>
+        [Required]
+        [MaxLength(20)]
+        public string Session { get; set; } = Models.Entities.GradeLevel.SessionMorning;
 
         public int AcademicYearId { get; set; }
         public AcademicYear AcademicYear { get; set; } = null!;

@@ -23,8 +23,12 @@ namespace ManagerStudentCaltholic.Models.Entities
         public string Gender { get; set; } = "Nam";
 
         public DateTime DateOfBirth { get; set; }
-        public DateTime? BaptismDate { get; set; }          // Ngày Rửa tội
-        public DateTime? ConfirmationDate { get; set; } // Ngày Thêm sức
+        public DateTime? FeastDay { get; set; }             // Ngày kính Thánh Bổn mạng
+        public DateTime? BaptismDate { get; set; }          // Mốc 1: Ngày Rửa tội
+        public DateTime? FirstCommunionDate { get; set; }   // Mốc 2: Ngày Xưng tội & Rước lễ lần đầu
+        public DateTime? ConfirmationDate { get; set; }     // Mốc 3: Ngày Thêm sức
+        public DateTime? BaoDongPromiseDate { get; set; }   // Mốc 4: Ngày lãnh nhận Tuyên hứa Bao Đồng
+        public DateTime? CatechistPromiseDate { get; set; } // Mốc 5: Ngày Hoàn thành Dự Bị & Tuyên hứa GLV (>= 18 tuổi)
 
         [MaxLength(15)]
         public string? ParentPhone { get; set; }

@@ -190,6 +190,7 @@ HTTP Request ──> Views/Shared/_Layout.cshtml
 ```text
 ManagerStudentCaltholic/
 ├── AI-Knowledge/                 # Kho tri thức kiến trúc, DB schema, JSONL code indexes & đặc tả feature
+├── script/                       # Các file SQL script chạy trực tiếp trên pgAdmin cho PostgreSQL ({yyyyMMdd}_{TenBang_ChucNang}.sql)
 └── ManagerStudentCaltholic/      # Web Application Project (.NET 8 MVC)
     ├── Controllers/              # MVC Controllers (HomeController, AttendanceController, GradesController...)
     ├── Data/                     # ParishDbContext (40+ DbSets, Fluent API, Indexes, Seed Data)
@@ -212,7 +213,7 @@ ManagerStudentCaltholic/
 
 ## 7. Development & Deployment Workflows
 
-### 7.1. Quản lý Migration (EF Core)
+### 7.1. Quản lý Migration (EF Core) & SQL Scripts (`script/`)
 ```powershell
 # Tạo migration mới khi thay đổi Entity hoặc ParishDbContext
 dotnet ef migrations add <TenMigration> --project ManagerStudentCaltholic
@@ -223,6 +224,9 @@ dotnet ef database update --project ManagerStudentCaltholic
 # Hoặc chỉ định rõ connection string:
 dotnet ef database update --project ManagerStudentCaltholic --connection "<connection_string>"
 ```
+- **Quy chuẩn file script mới trong `script/`:**
+  - **Cấu trúc đặt tên:** `{yyyyMMdd}_{TenBang_Hoac_ChucNang}.sql` (trong đó `{yyyyMMdd}` là `datecreated`, theo sau là tên bảng hoặc chức năng; ví dụ: `20261120_Users_Classes_Students_Phase6.sql`).
+  - **Tiêu chuẩn thực thi:** Script phải viết bằng SQL / PL/pgSQL chuẩn PostgreSQL, **chạy trực tiếp được trên pgAdmin Query Tool** (không dùng meta-command riêng của `psql` CLI như `\c`, `\i`, `\set`, `\echo`), ưu tiên viết idempotent (`IF NOT EXISTS`, `DO $$ BEGIN ... END $$;`).
 
 ### 7.2. Build và Run Local
 > **Lưu ý:** Nếu ứng dụng đang chạy ở tiến trình khác (ví dụ khóa file `ManagerStudentCaltholic.dll`), hãy dừng tiến trình đang chạy trước khi `dotnet build` hoặc dùng `--no-build` khi phù hợp.
@@ -262,3 +266,6 @@ docker compose up -d --build
    - Source code luôn là **nguồn sự thật duy nhất (Single Source of Truth)**.
    - Khi thêm/sửa Entity, Service, Controller, Route hoặc luồng nghiệp vụ, cần cập nhật chính xác các file tương ứng trong `AI-Knowledge/` (`00-OVERVIEW/`, `02-DATABASE/`, `03-CODE-INDEX/*.jsonl`, `05-FEATURES/`, `06-UPDATE-LOG/`), không tự suy diễn query/route không có thật và gắn nhãn `NEEDS_VERIFICATION` cho mọi thông tin chưa đủ căn cứ xác minh.
    - Không bao giờ đưa mật khẩu thật, connection string chứa secret, hoặc JWT secret key vào tài liệu `AI-Knowledge/` hay `GEMINI.md`.
+6. **Quy chuẩn Tạo Script SQL trong thư mục `script/`:**
+   - Mọi file script bổ sung mới trong thư mục `script/` bắt buộc tuân thủ cấu trúc tên `{yyyyMMdd}_{TenBang_Hoac_ChucNang}.sql` (ví dụ: `20261120_Users_Classes_Students_Phase6.sql`).
+   - Script phải tương thích 100% và chạy trực tiếp được trên **pgAdmin** cho **PostgreSQL** (không sử dụng các lệnh meta-command của `psql` CLI như `\c`, `\i`, `\set`, `\copy`; viết an toàn/idempotent bằng `IF NOT EXISTS` hoặc `DO $$ BEGIN ... END $$;` và đặt tên định danh EF Core trong ngoặc kép `"..."`).
