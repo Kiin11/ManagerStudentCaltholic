@@ -2,13 +2,18 @@
 @using ManagerStudentCaltholic.Models.Entities
 @{
     bool isCompactMobile = ViewData["IsCompactMobile"] as bool? ?? false;
-    string cardPad = isCompactMobile ? "p-3" : "p-4";
+    bool isLeftColumn = ViewData["IsLeftColumn"] as bool? ?? false;
+    string renderMode = (ViewData["RenderMode"] as string) ?? "ALL";
+    bool showMilestones = renderMode == "ALL" || renderMode == "MILESTONES_ONLY";
+    bool showTimeline = renderMode == "ALL" || renderMode == "TIMELINE_ONLY";
+    string cardPad = isCompactMobile ? "p-3" : (isLeftColumn ? "p-3" : "p-4");
+    string blockColClass = isLeftColumn ? "col-12" : "col-12 col-md-6";
 }
 
 <!-- ========================================================================= -->
 <!-- 1. CHUỖI 5 CỘT MỐC ĐỨC TIN & TUYÊN HỨA (TASK-04.3)                        -->
 <!-- ========================================================================= -->
-@if (Model.LinkedStudentId.HasValue || Model.FaithMilestones.Any())
+@if (showMilestones && (Model.LinkedStudentId.HasValue || Model.FaithMilestones.Any()))
 {
     <div class="card border-0 shadow-sm rounded-4 mb-4">
         <div class="card-header bg-white border-0 pt-3 px-4 pb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -97,15 +102,17 @@
 }
 
 <!-- ========================================================================= -->
-<!-- 2. TIMELINE SONG SONG LỚP HỌC & LỚP DẠY ĐA NIÊN KHÓA (TASK-04.2)         -->
+<!-- 2. QUÁ TRÌNH HỌC TẬP & GIẢNG DẠY ĐA NIÊN KHÓA (TASK-04.2)                 -->
 <!-- ========================================================================= -->
+@if (showTimeline)
+{
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-header bg-white border-0 pt-3 px-4 pb-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div>
             <h6 class="fw-bold text-dark mb-0">
-                <i class="bi bi-columns-gap text-primary me-2"></i>Timeline Lịch Sử Kép (Lớp Học &amp; Lớp Dạy)
+                <i class="bi bi-columns-gap text-primary me-2"></i>Quá Trình Học Tập &amp; Giảng Dạy
             </h6>
-            <small class="text-muted">Hiển thị song song 2 vế theo từng niên khóa: Vế 1 (Lớp đang học) &amp; Vế 2 (Lớp đang dạy)</small>
+            <small class="text-muted">Lớp đang học / đang dạy và lớp đã học / đã dạy qua các niên khóa</small>
         </div>
         <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
             @Model.DualTimeline.Count niên khóa
@@ -118,6 +125,9 @@
                 @foreach (var year in Model.DualTimeline)
                 {
                     bool isDualParallel = year.LearningClasses.Any() && year.TeachingClasses.Any();
+                    string learnLabel = year.IsCurrentYear ? "Lớp Đang Học" : "Lớp Đã Học";
+                    string teachLabel = year.IsCurrentYear ? "Lớp Đang Dạy" : "Lớp Đã Dạy";
+
                     <div class="border rounded-4 overflow-hidden @(year.IsCurrentYear ? "border-primary" : "border-light-subtle")">
                         <div class="px-3 py-2 d-flex flex-wrap justify-content-between align-items-center gap-2 @(year.IsCurrentYear ? "bg-primary-subtle" : "bg-light")">
                             <div class="fw-bold text-dark">
@@ -136,11 +146,11 @@
                         </div>
                         <div class="p-3 bg-white">
                             <div class="row g-3">
-                                <!-- VẾ 1: LỚP ĐANG HỌC -->
-                                <div class="col-12 col-md-6">
+                                <!-- LỚP ĐANG HỌC / ĐÃ HỌC -->
+                                <div class="@blockColClass">
                                     <div class="h-100 rounded-3 p-3 border bg-info-subtle bg-opacity-10">
                                         <div class="small fw-bold text-uppercase text-info-emphasis mb-2">
-                                            <i class="bi bi-backpack-fill me-1"></i>Vế 1: Lớp Đang Học (Học viên)
+                                            <i class="bi bi-backpack-fill me-1"></i>@learnLabel
                                         </div>
                                         @if (year.LearningClasses.Any())
                                         {
@@ -180,11 +190,11 @@
                                     </div>
                                 </div>
 
-                                <!-- VẾ 2: LỚP ĐANG DẠY -->
-                                <div class="col-12 col-md-6">
+                                <!-- LỚP ĐANG DẠY / ĐÃ DẠY -->
+                                <div class="@blockColClass">
                                     <div class="h-100 rounded-3 p-3 border bg-success-subtle bg-opacity-10">
                                         <div class="small fw-bold text-uppercase text-success-emphasis mb-2">
-                                            <i class="bi bi-easel2-fill me-1"></i>Vế 2: Lớp Đang Dạy (GLV / Trợ tá)
+                                            <i class="bi bi-easel2-fill me-1"></i>@teachLabel
                                         </div>
                                         @if (year.TeachingClasses.Any())
                                         {
@@ -244,7 +254,7 @@
                                         else
                                         {
                                             <div class="text-muted small fst-italic py-2">
-                                                Chưa tham gia giảng dạy trong niên khóa này.
+                                                @(year.IsCurrentYear ? "Chưa được phân công giảng dạy trong niên khóa này." : "Không ghi nhận lớp giảng dạy trong niên khóa này.")
                                             </div>
                                         }
                                     </div>
@@ -263,3 +273,4 @@
         }
     </div>
 </div>
+}
