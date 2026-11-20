@@ -78,6 +78,21 @@ namespace ManagerStudentCaltholic.Services
                         Notes = "Chưa cập nhật Số sổ bộ & Linh mục ban Bí tích"
                     });
                 }
+                else if (student != null && def.Type == (int)SacramentTypeEnum.FirstCommunion && student.FirstCommunionDate.HasValue)
+                {
+                    timeline.Add(new SacramentRecordItemDto
+                    {
+                        Id = 0,
+                        StudentId = studentId,
+                        SacramentType = def.Type,
+                        SacramentName = def.Name,
+                        IsCompleted = true,
+                        ReceivedDate = student.FirstCommunionDate.Value.ToString("yyyy-MM-dd"),
+                        ReceivedDateDisplay = student.FirstCommunionDate.Value.ToString("dd/MM/yyyy"),
+                        ParishName = "Giáo xứ Phú Trung (Kế thừa hồ sơ gốc)",
+                        Notes = "Chưa cập nhật Số sổ bộ & Linh mục ban Bí tích"
+                    });
+                }
                 else if (student != null && def.Type == (int)SacramentTypeEnum.Confirmation && student.ConfirmationDate.HasValue)
                 {
                     // Fallback hiển thị ngày Thêm sức từ bảng Students nếu chưa nhập Sổ bộ chi tiết
@@ -92,6 +107,21 @@ namespace ManagerStudentCaltholic.Services
                         ReceivedDateDisplay = student.ConfirmationDate.Value.ToString("dd/MM/yyyy"),
                         ParishName = "Giáo xứ Phú Trung (Kế thừa hồ sơ gốc)",
                         Notes = "Chưa cập nhật Số sổ bộ & Linh mục ban Bí tích"
+                    });
+                }
+                else if (student != null && def.Type == (int)SacramentTypeEnum.ProfessionOfFaith && student.BaoDongPromiseDate.HasValue)
+                {
+                    timeline.Add(new SacramentRecordItemDto
+                    {
+                        Id = 0,
+                        StudentId = studentId,
+                        SacramentType = def.Type,
+                        SacramentName = def.Name,
+                        IsCompleted = true,
+                        ReceivedDate = student.BaoDongPromiseDate.Value.ToString("yyyy-MM-dd"),
+                        ReceivedDateDisplay = student.BaoDongPromiseDate.Value.ToString("dd/MM/yyyy"),
+                        ParishName = "Giáo xứ Phú Trung (Kế thừa hồ sơ gốc)",
+                        Notes = "Chưa cập nhật Số sổ bộ & Linh mục chủ sự"
                     });
                 }
                 else
@@ -124,7 +154,7 @@ namespace ManagerStudentCaltholic.Services
             // ParishDbContext.SaveChangesAsync tự động chuyển Remove thành Soft Delete (IsDeleted = true)
             _context.StudentSacramentRecords.Remove(record);
 
-            // Đồng bộ xóa ngày tương ứng trên bảng Students nếu xóa Bí tích Rửa tội hoặc Thêm sức
+            // Đồng bộ xóa ngày tương ứng trên bảng Students (cả 4 mốc Bí tích / Tuyên hứa Bao Đồng)
             var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId);
             if (student != null)
             {
@@ -132,9 +162,17 @@ namespace ManagerStudentCaltholic.Services
                 {
                     student.BaptismDate = null;
                 }
+                else if (sacType == (int)SacramentTypeEnum.FirstCommunion)
+                {
+                    student.FirstCommunionDate = null;
+                }
                 else if (sacType == (int)SacramentTypeEnum.Confirmation)
                 {
                     student.ConfirmationDate = null;
+                }
+                else if (sacType == (int)SacramentTypeEnum.ProfessionOfFaith)
+                {
+                    student.BaoDongPromiseDate = null;
                 }
             }
 
@@ -212,7 +250,7 @@ namespace ManagerStudentCaltholic.Services
                 existing.DeletedAt = null;
             }
 
-            // Đồng bộ ngày Rửa Tội (1) và Thêm Sức (3) ngược về bảng Students
+            // Đồng bộ 4 mốc đầu (Rửa Tội, Rước Lễ, Thêm Sức, Tuyên Hứa Bao Đồng) ngược về bảng Students
             var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == dto.StudentId);
             if (student != null)
             {
@@ -220,9 +258,17 @@ namespace ManagerStudentCaltholic.Services
                 {
                     student.BaptismDate = receivedUtc;
                 }
+                else if (dto.SacramentType == (int)SacramentTypeEnum.FirstCommunion)
+                {
+                    student.FirstCommunionDate = receivedUtc;
+                }
                 else if (dto.SacramentType == (int)SacramentTypeEnum.Confirmation)
                 {
                     student.ConfirmationDate = receivedUtc;
+                }
+                else if (dto.SacramentType == (int)SacramentTypeEnum.ProfessionOfFaith)
+                {
+                    student.BaoDongPromiseDate = receivedUtc;
                 }
             }
 

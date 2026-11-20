@@ -133,10 +133,13 @@
                         <span class="badge @(Model.Role == UserRole.Admin ? "bg-danger" :
                                              Model.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                              Model.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-2 py-1">
+                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                             Model.Role == UserRole.ProbationaryTeacher ? "text-white" : "bg-secondary") rounded-pill px-2 py-1"
+                              style="@(Model.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                             @(Model.Role == UserRole.Admin ? "Quản trị viên" : Model.Role == UserRole.SpiritualDirector ? "Cha" :
                               Model.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                              Model.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                              Model.Role == UserRole.BranchHead ? "Trưởng khối" :
+                              Model.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                         </span>
                         @if (!string.IsNullOrEmpty(Model.ManagedGradeLevel))
                         {
@@ -153,6 +156,9 @@
         <div class="mobile-profile-nav mb-3" role="tablist">
             <button type="button" class="mobile-profile-nav-pill active" onclick="switchMobileProfileSection('sec-classes', this)">
                 <i class="bi bi-mortarboard-fill"></i> Lớp đang dạy (@Model.CurrentClasses.Count)
+            </button>
+            <button type="button" class="mobile-profile-nav-pill" onclick="switchMobileProfileSection('sec-dual-timeline', this)">
+                <i class="bi bi-columns-gap"></i> 5 Mốc &amp; Lịch sử Kép
             </button>
             <button type="button" class="mobile-profile-nav-pill" onclick="switchMobileProfileSection('sec-info', this)">
                 <i class="bi bi-person-lines-fill"></i> Thông tin cá nhân
@@ -214,6 +220,11 @@
                     </div>
                 }
             </div>
+        </div>
+
+        <!-- 1B. TIMELINE LỊCH SỬ KÉP & 5 CỘT MỐC ĐỨC TIN (MOBILE) -->
+        <div id="sec-dual-timeline" class="mb-3">
+            @await Html.PartialAsync("_ProfileDualTimelineAndMilestones", Model, new ViewDataDictionary(ViewData) { ["IsCompactMobile"] = true })
         </div>
 
         <!-- 2. FORM CẬP NHẬT THÔNG TIN CÁ NHÂN -->
@@ -405,10 +416,13 @@ else
                         <span class="badge @(Model.Role == UserRole.Admin ? "bg-danger" :
                                              Model.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                              Model.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
+                                             Model.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                             Model.Role == UserRole.ProbationaryTeacher ? "text-white" : "bg-secondary") rounded-pill px-3 py-1"
+                              style="@(Model.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                             @(Model.Role == UserRole.Admin ? "Quản trị viên" : Model.Role == UserRole.SpiritualDirector ? "Cha" :
                               Model.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                              Model.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                              Model.Role == UserRole.BranchHead ? "Trưởng khối" :
+                              Model.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                         </span>
                         @if (!string.IsNullOrEmpty(Model.ManagedGradeLevel))
                         {
@@ -536,6 +550,9 @@ else
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 }
+
+                <!-- TASK-04.2 & TASK-04.3 (Phase 6): 5 Cột mốc Đức tin & Timeline Lịch sử Kép -->
+                @await Html.PartialAsync("_ProfileDualTimelineAndMilestones", Model)
 
                 <!-- Form Cập Nhật Hồ Sơ -->
                 <div class="card border-0 shadow-sm rounded-4 mb-4">

@@ -1,6 +1,6 @@
 # FEATURE SPECIFICATION: PHÂN TÁCH VAI TRÒ DỰ BỊ & KHỐI CHIỀU — CHUẨN HÓA 5 CỘT MỐC ĐỨC TIN (`FEAT-P6-01`)
 
-> **Trạng thái:** `IN PROGRESS (TASK-01 & TASK-02 COMPLETED — 7/14 Sub-tasks, 4.00/10.50 Man-days)` *(Cần user chạy script SQL trên pgAdmin; chờ triển khai `TASK-03` & `TASK-04`)*  
+> **Trạng thái:** `COMPLETED (14/14 Sub-tasks — 10.50/10.50 Man-days — 100.0%)`  
 > **Nguồn đặc tả:** Google Spreadsheet Phase 6 (`1q04ZBxPKqJu8r2XFFdQwm2NAHkOPiEUSjbw4catSIUo` — Sheets: `Danh Sach Task`, `Tong Quan & Quy Tac`)  
 > **Quy mô:** `14 Sub-tasks` (`TASK-01.1` ➔ `TASK-04.3`) • Tổng ngày công ước tính: `10.50 Man-days`  
 > **Module liên quan:** `UserAccount`, `Security`, `Classes`, `Students`, `Attendance`, `Grades`, `Sacraments`  
@@ -22,9 +22,9 @@ Trong mô hình Xứ Đoàn Thiếu Nhi Thánh Thể trước Phase 6, hệ th�
 |---|---|---|---|---|---|---|---|
 | 1 | `TASK-01`: Database & Migration | 4 | 2.00 | 0 | 0 | 4 | **100.0%** |
 | 2 | `TASK-02`: Authorization & Policy | 3 | 2.00 | 0 | 0 | 3 | **100.0%** |
-| 3 | `TASK-03`: Quản lý Lớp Chiều & Tuyển hứa | 4 | 3.50 | 4 | 0 | 0 | 0.0% |
-| 4 | `TASK-04`: Giao diện Profile Lịch sử Kép | 3 | 3.00 | 3 | 0 | 0 | 0.0% |
-| **TỔNG CỘNG** | **4 Nhóm Task** | **14** | **10.50** | **7** | **0** | **7** | **50.0%** |
+| 3 | `TASK-03`: Quản lý Lớp Chiều & Tuyển hứa | 4 | 3.50 | 0 | 0 | 4 | **100.0%** |
+| 4 | `TASK-04`: Giao diện Profile Lịch sử Kép | 3 | 3.00 | 0 | 0 | 3 | **100.0%** |
+| **TỔNG CỘNG** | **4 Nhóm Task** | **14** | **10.50** | **0** | **0** | **14** | **100.0%** |
 
 ---
 
@@ -185,6 +185,6 @@ flowchart TD
 
 ## 7. Ghi chú Kiểm định & Đồng bộ `AI-Knowledge`
 
-- **Trạng thái hiện tại:** Đã hoàn thành lập trình và kiểm chứng biên dịch (`0 Error(s)`) cho **TASK-01 (`TASK-01.1` ➔ `TASK-01.4`)** và **TASK-02 (`TASK-02.1` ➔ `TASK-02.3`)**; đã đồng bộ trạng thái `Đã xong` trên Google Sheet và cập nhật `AI-Knowledge/02-DATABASE/` (`DATABASE-OVERVIEW.md`, `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`).
-- **SQL Script PostgreSQL (pgAdmin):** Đã tạo script idempotent tại `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql` để người dùng thực thi trực tiếp trên pgAdmin Query Tool.
-- **Phạm vi còn lại:** `TASK-03` (`TASK-03.1` ➔ `TASK-03.4`) và `TASK-04` (`TASK-04.1` ➔ `TASK-04.3`) vẫn đang chờ triển khai (`Chưa làm`). Sau khi hoàn tất `TASK-03` và `TASK-04`, sẽ cập nhật toàn bộ `AI-Knowledge/03-CODE-INDEX/*.jsonl`, `AI-Knowledge/00-OVERVIEW/` và `KNOWLEDGE-BASELINE.json`.
+- **Trạng thái hiện tại:** Đã hoàn thành lập trình và kiểm chứng biên dịch (`0 Warning(s)`, `0 Error(s)`) cho toàn bộ **14/14 sub-tasks** (`TASK-01.1` ➔ `TASK-04.3`) của Phase 6 (`100.0%` trên Google Sheet).
+- **SQL Script PostgreSQL (pgAdmin):** Người dùng đã xác nhận thực thi script `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql` trên PostgreSQL.
+- **Tài liệu đã đồng bộ:** Đã cập nhật `AI-Knowledge/02-DATABASE/` (`DATABASE-OVERVIEW.md`, `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`), `AI-Knowledge/00-OVERVIEW/CODING-RULES.md`, `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`, và `AI-Knowledge/06-UPDATE-LOG/` (`PENDING-UPDATES.md`, `UPDATE-LOG.md`). Khi chốt commit lên Git, có thể chạy đồng bộ mở rộng cho `03-CODE-INDEX/*.jsonl`, `00-OVERVIEW/` và `KNOWLEDGE-BASELINE.json`.

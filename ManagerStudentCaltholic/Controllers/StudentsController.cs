@@ -1,4 +1,6 @@
 ﻿using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
@@ -17,19 +19,25 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ILogger<StudentsController> _logger;
         private readonly IStudentExcelService _excelService;
         private readonly IQrCodeService _qrService;
+        private readonly IPasswordHasherService _passwordHasher;
+        private readonly IProfileHistoryService _profileHistoryService;
 
         public StudentsController(
             ParishDbContext context,
             IStudentCodeGenerator codeGenerator,
             ILogger<StudentsController> logger,
             IStudentExcelService excelService,
-            IQrCodeService qrCodeService)
+            IQrCodeService qrCodeService,
+            IPasswordHasherService passwordHasher,
+            IProfileHistoryService profileHistoryService)
         {
             _context = context;
             _codeGenerator = codeGenerator;
             _logger = logger;
             _excelService = excelService;
             _qrService = qrCodeService;
+            _passwordHasher = passwordHasher;
+            _profileHistoryService = profileHistoryService;
         }
 
         private long CurrentUserId =>
@@ -46,6 +54,12 @@ namespace ManagerStudentCaltholic.Controllers
         private async Task<bool> CanAccessClassAsync(ClassRoom targetClass)
         {
             if (IsLeadership) return true;
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
 
             if (User.IsInRole(UserRole.BranchHead))
             {
@@ -83,9 +97,20 @@ namespace ManagerStudentCaltholic.Controllers
                                    e.ClassRoom.GradeLevel == managedGrade);
             }
 
-            // Nếu là Teacher: Chỉ được truy cập học sinh thuộc lớp mình dạy
-            var assignedClassIds = await _context.ClassTeachers
-                .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId))
+            // Nếu là Teacher / ProbationaryTeacher: Chỉ được truy cập học sinh thuộc lớp mình dạy (Dự Bị chỉ Ca Sáng)
+            var assignedQuery = _context.ClassTeachers
+                .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId));
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                assignedQuery = assignedQuery.Where(ct =>
+                    ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                    ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+            }
+
+            var assignedClassIds = await assignedQuery
                 .Select(ct => ct.ClassRoomId)
                 .ToListAsync();
 
@@ -102,7 +127,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             IQueryable<Student> query = _context.Students.AsNoTracking();
 
-            // SEC-NEW-04 FIX: Phân tách phạm vi hiển thị (Fail-Closed cho BranchHead và Teacher)
+            // SEC-NEW-04 FIX: Phân tách phạm vi hiển thị (Fail-Closed cho BranchHead, Teacher, ProbationaryTeacher)
             if (!IsLeadership)
             {
                 if (User.IsInRole(UserRole.BranchHead))
@@ -124,10 +149,21 @@ namespace ManagerStudentCaltholic.Controllers
                         query = query.Where(s => studentIdsInGrade.Contains(s.Id));
                     }
                 }
-                else if (User.IsInRole(UserRole.Teacher))
+                else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
                 {
-                    var assignedClassIds = await _context.ClassTeachers
-                        .Where(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId)
+                    var teacherClassQuery = _context.ClassTeachers
+                        .Where(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId);
+
+                    if (User.IsInRole(UserRole.ProbationaryTeacher))
+                    {
+                        teacherClassQuery = teacherClassQuery.Where(ct =>
+                            ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                            ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                            ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                            ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                    }
+
+                    var assignedClassIds = await teacherClassQuery
                         .Select(ct => ct.ClassRoomId)
                         .ToListAsync();
 
@@ -179,13 +215,55 @@ namespace ManagerStudentCaltholic.Controllers
                 .ThenBy(c => c.Name)
                 .ToListAsync();                           
 
+            // TASK-03.3 & TASK-03.4: Nạp lớp hiện tại và tài khoản Dự Bị/GLV liên kết cho các thiếu nhi hiển thị
+            var pageStudentIds = students.Select(s => s.Id).ToList();
+            var studentClassMap = new Dictionary<long, ClassRoom>();
+            var studentUserMap = new Dictionary<long, User>();
+
+            if (pageStudentIds.Any())
+            {
+                var currentEnrollments = await _context.Enrollments
+                    .Include(e => e.ClassRoom)
+                    .AsNoTracking()
+                    .Where(e => pageStudentIds.Contains(e.StudentId) &&
+                                (yearId == 0 || e.ClassRoom.AcademicYearId == yearId))
+                    .OrderByDescending(e => e.Id)
+                    .ToListAsync();
+
+                foreach (var en in currentEnrollments)
+                {
+                    if (!studentClassMap.ContainsKey(en.StudentId) && en.ClassRoom != null)
+                    {
+                        studentClassMap[en.StudentId] = en.ClassRoom;
+                    }
+                }
+
+                var linkedUsers = await _context.Users
+                    .AsNoTracking()
+                    .Where(u => (u.LinkedStudentId.HasValue && pageStudentIds.Contains(u.LinkedStudentId.Value)) ||
+                                (u.StudentId.HasValue && pageStudentIds.Contains(u.StudentId.Value)))
+                    .ToListAsync();
+
+                foreach (var lu in linkedUsers)
+                {
+                    long? sid = lu.LinkedStudentId ?? lu.StudentId;
+                    if (sid.HasValue && !studentUserMap.ContainsKey(sid.Value))
+                    {
+                        studentUserMap[sid.Value] = lu;
+                    }
+                }
+            }
+
             ViewBag.SearchKeyword = searchKeyword;
             ViewBag.Gender = gender ?? "ALL";
             ViewBag.IsActive = isActive;
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalCount = totalCount;
+            ViewBag.Classes = activeClasses;
             ViewBag.ActiveClasses = activeClasses;
+            ViewBag.StudentCurrentClassMap = studentClassMap;
+            ViewBag.StudentLinkedUserMap = studentUserMap;
 
             return View(students);
         }
@@ -198,6 +276,14 @@ namespace ManagerStudentCaltholic.Controllers
             if (!ModelState.IsValid)
             {
                 TempData["ErrorMessage"] = "Thông tin hồ sơ không hợp lệ, vui lòng kiểm tra lại.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (model.CatechistPromiseDate.HasValue &&
+                model.CatechistPromiseDate.Value.Date < model.DateOfBirth.Date.AddYears(18))
+            {
+                int age = StudentViewModel.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
+                TempData["ErrorMessage"] = $"Không thể lưu: Học viên mới {age} tuổi tại ngày Tuyên hứa GLV ({model.CatechistPromiseDate.Value:dd/MM/yyyy}), bắt buộc phải đủ 18 tuổi trở lên.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -227,7 +313,10 @@ namespace ManagerStudentCaltholic.Controllers
                     Gender = model.Gender,
                     DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc),
                     BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value.Date, DateTimeKind.Utc) : null,
+                    FirstCommunionDate = model.FirstCommunionDate.HasValue ? DateTime.SpecifyKind(model.FirstCommunionDate.Value.Date, DateTimeKind.Utc) : null,
                     ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value.Date, DateTimeKind.Utc) : null,
+                    BaoDongPromiseDate = model.BaoDongPromiseDate.HasValue ? DateTime.SpecifyKind(model.BaoDongPromiseDate.Value.Date, DateTimeKind.Utc) : null,
+                    CatechistPromiseDate = model.CatechistPromiseDate.HasValue ? DateTime.SpecifyKind(model.CatechistPromiseDate.Value.Date, DateTimeKind.Utc) : null,
                     ParentPhone = model.ParentPhone?.Trim(),
                     IsActive = true
                 };
@@ -281,6 +370,20 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid();
             }
 
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
+
+            var latestEnrollment = await _context.Enrollments
+                .Include(e => e.ClassRoom)
+                .AsNoTracking()
+                .Where(e => e.StudentId == id && (yearId == 0 || e.ClassRoom.AcademicYearId == yearId))
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            var linkedUser = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.LinkedStudentId == id || u.StudentId == id);
+
             return Json(new
             {
                 id = student.Id,
@@ -291,9 +394,22 @@ namespace ManagerStudentCaltholic.Controllers
                 gender = student.Gender,
                 dateOfBirth = student.DateOfBirth.ToString("yyyy-MM-dd"),
                 baptismDate = student.BaptismDate?.ToString("yyyy-MM-dd"),
+                firstCommunionDate = student.FirstCommunionDate?.ToString("yyyy-MM-dd"),
                 confirmationDate = student.ConfirmationDate?.ToString("yyyy-MM-dd"),
+                baoDongPromiseDate = student.BaoDongPromiseDate?.ToString("yyyy-MM-dd"),
+                catechistPromiseDate = student.CatechistPromiseDate?.ToString("yyyy-MM-dd"),
                 parentPhone = student.ParentPhone,
-                isActive = student.IsActive
+                isActive = student.IsActive,
+                currentClassName = latestEnrollment?.ClassRoom?.Name,
+                currentGradeLevel = latestEnrollment?.ClassRoom?.GradeLevel,
+                isInProbationaryGrade = GradeLevel.IsProbationaryGrade(latestEnrollment?.ClassRoom?.GradeLevel),
+                linkedUser = linkedUser == null ? null : new
+                {
+                    userId = linkedUser.Id,
+                    username = linkedUser.Username,
+                    role = linkedUser.Role,
+                    isActive = linkedUser.IsActive
+                }
             });
         }
 
@@ -307,6 +423,14 @@ namespace ManagerStudentCaltholic.Controllers
         {
             if (ModelState.IsValid)
             {
+                if (model.CatechistPromiseDate.HasValue &&
+                    model.CatechistPromiseDate.Value.Date < model.DateOfBirth.Date.AddYears(18))
+                {
+                    int age = StudentViewModel.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
+                    TempData["ErrorMessage"] = $"Không thể lưu: Học viên mới {age} tuổi tại ngày Tuyên hứa GLV ({model.CatechistPromiseDate.Value:dd/MM/yyyy}), bắt buộc phải đủ 18 tuổi trở lên.";
+                    return RedirectToAction(nameof(Index));
+                }
+
                 var target = await _context.Students.FindAsync(model.Id);
                 if (target == null) return NotFound();
 
@@ -321,7 +445,10 @@ namespace ManagerStudentCaltholic.Controllers
                 target.Gender = model.Gender;
                 target.DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth, DateTimeKind.Utc);
                 target.BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value, DateTimeKind.Utc) : null;
+                target.FirstCommunionDate = model.FirstCommunionDate.HasValue ? DateTime.SpecifyKind(model.FirstCommunionDate.Value, DateTimeKind.Utc) : null;
                 target.ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value, DateTimeKind.Utc) : null;
+                target.BaoDongPromiseDate = model.BaoDongPromiseDate.HasValue ? DateTime.SpecifyKind(model.BaoDongPromiseDate.Value, DateTimeKind.Utc) : null;
+                target.CatechistPromiseDate = model.CatechistPromiseDate.HasValue ? DateTime.SpecifyKind(model.CatechistPromiseDate.Value, DateTimeKind.Utc) : null;
                 target.ParentPhone = model.ParentPhone?.Trim();
                 target.IsActive = model.IsActive;
 
@@ -491,6 +618,305 @@ namespace ManagerStudentCaltholic.Controllers
                 normalizedCode,
                 message = isUnique ? $"Mã '{normalizedCode}' hợp lệ và có thể sử dụng." : conflictMessage
             });
+        }
+
+        /// <summary>
+        /// TASK-04.2 (Phase 6): Trang chi tiết hồ sơ Thiếu nhi kèm 5 Cột mốc Đức tin & Timeline song song Học/Dạy
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> Details(long id)
+        {
+            if (id <= 0) return NotFound();
+
+            if (!await CanAccessStudentAsync(id))
+            {
+                return Forbid();
+            }
+
+            var viewModel = await _profileHistoryService.BuildStudentProfileAsync(id);
+            if (viewModel == null)
+            {
+                return NotFound("Không tìm thấy hồ sơ thiếu nhi.");
+            }
+
+            return View(viewModel);
+        }
+
+        /// <summary>
+        /// TASK-03.3 (Phase 6): Cấp tài khoản GLV Dự Bị (ProbationaryTeacher) trực tiếp từ hồ sơ Thiếu nhi đã xếp Khối Dự Bị
+        /// </summary>
+        [HttpPost]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ProvisionProbationaryAccount([FromBody] ProvisionProbationaryUserRequestDto request)
+        {
+            if (request == null || request.StudentId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu yêu cầu cấp tài khoản Dự Bị không hợp lệ." });
+            }
+
+            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == request.StudentId);
+            if (student == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy hồ sơ thiếu nhi." });
+            }
+
+            // Kiểm tra tránh tạo trùng tài khoản cho cùng 1 học viên (1-1 qua LinkedStudentId hoặc StudentId)
+            var existingUser = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.LinkedStudentId == student.Id ||
+                                          (u.StudentId == student.Id && (u.Role == UserRole.ProbationaryTeacher || u.Role == UserRole.Teacher)));
+            if (existingUser != null)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = $"Thiếu nhi '{student.ChristianName} {student.FirstName} {student.LastName}' đã có tài khoản liên kết '{existingUser.Username}' (Vai trò: {existingUser.Role}). Không thể cấp trùng!"
+                });
+            }
+
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
+            var yearId = currentYear?.Id ?? 0;
+
+            bool isEnrolledInProbationary = await _context.Enrollments
+                .Include(e => e.ClassRoom)
+                .AnyAsync(e => e.StudentId == student.Id &&
+                               (yearId == 0 || e.ClassRoom.AcademicYearId == yearId) &&
+                               (e.ClassRoom.GradeLevel == GradeLevel.DuBi || e.ClassRoom.GradeLevel == GradeLevel.DuBiCode));
+
+            if (!isEnrolledInProbationary)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Chỉ được cấp tài khoản GLV Dự Bị cho học viên đã được xếp vào lớp thuộc Khối Dự Bị (Dự Bị 1..4)."
+                });
+            }
+
+            string baseUsername;
+            if (!string.IsNullOrWhiteSpace(request.CustomUsername))
+            {
+                baseUsername = request.CustomUsername.Trim().ToLowerInvariant();
+                if (baseUsername.Length < 3 || baseUsername.Length > 50)
+                {
+                    return Json(new { success = false, message = "Tên đăng nhập phải từ 3 đến 50 ký tự." });
+                }
+
+                bool customExists = await _context.Users.AnyAsync(u => u.Username.ToLower() == baseUsername);
+                if (customExists)
+                {
+                    return Json(new { success = false, message = $"Tên đăng nhập '{baseUsername}' đã tồn tại trong hệ thống." });
+                }
+            }
+            else
+            {
+                var cleanCode = Regex.Replace(student.StudentCode.Trim().ToLowerInvariant(), @"[^a-z0-9_]", "");
+                if (string.IsNullOrEmpty(cleanCode))
+                {
+                    cleanCode = student.Id.ToString();
+                }
+
+                baseUsername = $"db_{cleanCode}";
+                if (baseUsername.Length > 45) baseUsername = baseUsername[..45];
+
+                var candidate = baseUsername;
+                int suffix = 1;
+                while (await _context.Users.AnyAsync(u => u.Username.ToLower() == candidate))
+                {
+                    candidate = $"{baseUsername}_{suffix++}";
+                }
+                baseUsername = candidate;
+            }
+
+            string initialPassword = string.IsNullOrWhiteSpace(request.InitialPassword)
+                ? GenerateSecureInitialPassword()
+                : request.InitialPassword.Trim();
+
+            if (initialPassword.Length < 6)
+            {
+                return Json(new { success = false, message = "Mật khẩu khởi tạo phải có tối thiểu 6 ký tự." });
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            User? createdUser = null;
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                createdUser = new User
+                {
+                    Username = baseUsername,
+                    PasswordHash = _passwordHasher.HashPassword(initialPassword),
+                    ChristianName = student.ChristianName,
+                    FirstName = student.FirstName,
+                    LastName = student.LastName,
+                    DateOfBirth = student.DateOfBirth,
+                    PhoneNumber = student.ParentPhone,
+                    Role = UserRole.ProbationaryTeacher,
+                    LinkedStudentId = student.Id,
+                    StudentId = student.Id,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Users.Add(createdUser);
+                await _context.SaveChangesAsync();
+
+                _context.UserRoleHistories.Add(new UserRoleHistory
+                {
+                    UserId = createdUser.Id,
+                    OldRole = "Student",
+                    NewRole = UserRole.ProbationaryTeacher,
+                    AcademicYearId = currentYear?.Id,
+                    ChangedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
+                    ChangedAt = DateTime.UtcNow,
+                    Reason = $"Cấp tài khoản GLV Dự Bị từ hồ sơ thiếu nhi {student.StudentCode}"
+                });
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
+
+            _logger.LogInformation("Đã cấp tài khoản Dự Bị '{Username}' (ID: {UserId}) cho Student ID {StudentId} bởi User {Operator}",
+                createdUser!.Username, createdUser.Id, student.Id, User.Identity?.Name);
+
+            return Json(new
+            {
+                success = true,
+                message = $"Đã cấp tài khoản GLV Dự Bị '{createdUser.Username}' thành công!",
+                data = new
+                {
+                    userId = createdUser.Id,
+                    username = createdUser.Username,
+                    initialPassword,
+                    role = createdUser.Role
+                }
+            });
+        }
+
+        /// <summary>
+        /// TASK-03.4 (Phase 6): Cập nhật Ngày Hoàn thành Dự Bị & Tuyên hứa GLV (bắt buộc >= 18 tuổi) và nâng cấp Role lên Teacher
+        /// </summary>
+        [HttpPost]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard}")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveCatechistPromiseAndUpgrade([FromBody] CatechistPromiseUpgradeRequestDto request)
+        {
+            if (request == null || request.StudentId <= 0)
+            {
+                return Json(new { success = false, message = "Dữ liệu cập nhật Tuyên hứa GLV không hợp lệ." });
+            }
+
+            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == request.StudentId);
+            if (student == null)
+            {
+                return Json(new { success = false, message = "Không tìm thấy hồ sơ thiếu nhi." });
+            }
+
+            var promiseUtc = DateTime.SpecifyKind(request.CatechistPromiseDate.Date, DateTimeKind.Utc);
+            int ageAtPromise = StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, promiseUtc);
+
+            // Ràng buộc cứng tối thiểu 18 tuổi tại ngày Tuyên hứa GLV
+            if (promiseUtc.Date < student.DateOfBirth.Date.AddYears(18))
+            {
+                return Json(new
+                {
+                    success = false,
+                    isUnderAge = true,
+                    ageAtPromise,
+                    message = $"CHẶN LƯU: Học viên mới {ageAtPromise} tuổi tại ngày {promiseUtc:dd/MM/yyyy} (Ngày sinh: {student.DateOfBirth:dd/MM/yyyy}). Quy định bắt buộc phải đủ 18 tuổi trở lên mới được ghi nhận Hoàn thành Dự Bị & Tuyên hứa GLV!"
+                });
+            }
+
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
+            bool roleUpgraded = false;
+            string? finalRole = null;
+            string? linkedUsername = null;
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                student.CatechistPromiseDate = promiseUtc;
+                if (request.BaoDongPromiseDate.HasValue)
+                {
+                    student.BaoDongPromiseDate = DateTime.SpecifyKind(request.BaoDongPromiseDate.Value.Date, DateTimeKind.Utc);
+                }
+
+                var linkedUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.LinkedStudentId == student.Id || u.StudentId == student.Id);
+
+                if (linkedUser != null)
+                {
+                    linkedUsername = linkedUser.Username;
+                    finalRole = linkedUser.Role;
+
+                    if (request.UpgradeRoleToTeacher && linkedUser.Role == UserRole.ProbationaryTeacher)
+                    {
+                        linkedUser.Role = UserRole.Teacher;
+                        finalRole = UserRole.Teacher;
+                        roleUpgraded = true;
+
+                        _context.UserRoleHistories.Add(new UserRoleHistory
+                        {
+                            UserId = linkedUser.Id,
+                            OldRole = UserRole.ProbationaryTeacher,
+                            NewRole = UserRole.Teacher,
+                            AcademicYearId = currentYear?.Id,
+                            ChangedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
+                            ChangedAt = DateTime.UtcNow,
+                            Reason = $"Hoàn thành Dự Bị & Tuyên hứa GLV ngày {promiseUtc:dd/MM/yyyy} (đủ {ageAtPromise} tuổi)"
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            });
+
+            string msg = roleUpgraded
+                ? $"Đã lưu Ngày Tuyên hứa GLV ({promiseUtc:dd/MM/yyyy}, {ageAtPromise} tuổi) và nâng cấp tài khoản '{linkedUsername}' lên Giáo lý viên chính thức (Teacher)!"
+                : $"Đã lưu Ngày Tuyên hứa GLV ({promiseUtc:dd/MM/yyyy}, {ageAtPromise} tuổi) thành công!";
+
+            return Json(new
+            {
+                success = true,
+                ageAtPromise,
+                roleUpgraded,
+                linkedUsername,
+                newRole = finalRole,
+                message = msg
+            });
+        }
+
+        private static string GenerateSecureInitialPassword()
+        {
+            const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+            const string lower = "abcdefghijkmnopqrstuvwxyz";
+            const string digits = "23456789";
+            const string special = "@#$!%*?&";
+            const string allChars = upper + lower + digits + special;
+
+            Span<char> password = stackalloc char[10];
+            password[0] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
+            password[1] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
+            password[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
+            password[3] = special[RandomNumberGenerator.GetInt32(special.Length)];
+
+            for (int i = 4; i < password.Length; i++)
+            {
+                password[i] = allChars[RandomNumberGenerator.GetInt32(allChars.Length)];
+            }
+
+            for (int i = password.Length - 1; i > 0; i--)
+            {
+                int j = RandomNumberGenerator.GetInt32(i + 1);
+                (password[i], password[j]) = (password[j], password[i]);
+            }
+
+            return new string(password);
         }
     }
 }

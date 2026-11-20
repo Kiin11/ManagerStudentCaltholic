@@ -2,6 +2,9 @@
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
+    /// <summary>
+    /// ViewModel Profile tổng hợp (hỗ trợ cả Lịch sử Kép Học & Dạy và 5 Cột mốc Đức tin - TASK-04.1)
+    /// </summary>
     public class UserProfileViewModel
     {
         public long Id { get; set; }
@@ -49,6 +52,25 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public List<TeachingHistoryByYearDto> TeachingHistory { get; set; } = new();
 
         public string? ManagedGradeLevel { get; set; }
+
+        // TASK-04.1 / TASK-04.2 / TASK-04.3 (Phase 6): Hồ sơ Thiếu nhi liên kết, Timeline kép & 5 Cột mốc Đức tin
+        public long? LinkedStudentId { get; set; }
+        public string? LinkedStudentCode { get; set; }
+        public DateTime? StudentDateOfBirth { get; set; }
+        public string? StudentGender { get; set; }
+        public string? ParentPhone { get; set; }
+        public bool IsStudentActive { get; set; } = true;
+        public List<ProfileDualYearTimelineDto> DualTimeline { get; set; } = new();
+        public List<FaithMilestoneViewModel> FaithMilestones { get; set; } = new();
+        public bool IsUnder18CatechistWarning { get; set; }
+        public string? CatechistWarningMessage { get; set; }
+    }
+
+    /// <summary>
+    /// Alias tương thích với tên gọi ProfileHistoryViewModel trong đặc tả TASK-04.1
+    /// </summary>
+    public class ProfileHistoryViewModel : UserProfileViewModel
+    {
     }
 
     public class AssignedClassItemDto
@@ -56,6 +78,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ClassId { get; set; }
         public string ClassName { get; set; } = string.Empty;
         public string GradeLevel { get; set; } = string.Empty;
+        public string Session { get; set; } = "Morning";
+        public string SessionDisplay { get; set; } = "Ca Sáng";
         public int AcademicYearId { get; set; }
         public string AcademicYearName { get; set; } = string.Empty;
         public bool IsCurrentYear { get; set; }
@@ -72,6 +96,56 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string AcademicYearName { get; set; } = string.Empty;
         public DateTime StartDate { get; set; }
         public List<AssignedClassItemDto> Classes { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Vế 1 trong Timeline kép: Lớp đang học qua từng niên khóa (Khai Tâm -> Bao Đồng -> Dự Bị)
+    /// </summary>
+    public class StudentLearningHistoryItemDto
+    {
+        public long EnrollmentId { get; set; }
+        public int ClassId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
+        public string GradeLevel { get; set; } = string.Empty;
+        public string Session { get; set; } = "Morning";
+        public string SessionDisplay { get; set; } = "Ca Sáng";
+        public int AcademicYearId { get; set; }
+        public string AcademicYearName { get; set; } = string.Empty;
+        public bool IsCurrentYear { get; set; }
+        public decimal? Semester1Average { get; set; }
+        public decimal? Semester2Average { get; set; }
+        public decimal? YearAverage { get; set; }
+        public string AcademicRank { get; set; } = "Chưa xếp loại";
+        public bool? IsPassed { get; set; }
+    }
+
+    /// <summary>
+    /// Thẻ niên khóa chứa song song 2 vế: Lớp đang học (Vế 1) & Lớp đang dạy (Vế 2)
+    /// </summary>
+    public class ProfileDualYearTimelineDto
+    {
+        public int AcademicYearId { get; set; }
+        public string AcademicYearName { get; set; } = string.Empty;
+        public DateTime StartDate { get; set; }
+        public bool IsCurrentYear { get; set; }
+        public List<StudentLearningHistoryItemDto> LearningClasses { get; set; } = new();
+        public List<AssignedClassItemDto> TeachingClasses { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Mô hình hiển thị 1 trong 5 Cột mốc Đức tin & Tuyên hứa
+    /// </summary>
+    public class FaithMilestoneViewModel
+    {
+        public int StepNumber { get; set; }
+        public string MilestoneName { get; set; } = string.Empty;
+        public string FieldName { get; set; } = string.Empty;
+        public DateTime? EventDate { get; set; }
+        public int? AgeAtMilestone { get; set; }
+        public bool IsCompleted { get; set; }
+        public bool IsWarning { get; set; }
+        public string? WarningMessage { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 
     // DTO Đổi mật khẩu

@@ -41,8 +41,20 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public DateTime? BaptismDate { get; set; }
 
         [DataType(DataType.Date)]
+        [Display(Name = "Ngày Xưng Tội & Rước Lễ Lần Đầu")]
+        public DateTime? FirstCommunionDate { get; set; }
+
+        [DataType(DataType.Date)]
         [Display(Name = "Ngày Thêm Sức")]
         public DateTime? ConfirmationDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Tuyên Hứa Bao Đồng")]
+        public DateTime? BaoDongPromiseDate { get; set; }
+
+        [DataType(DataType.Date)]
+        [Display(Name = "Ngày Hoàn Thành Dự Bị & Tuyên Hứa GLV")]
+        public DateTime? CatechistPromiseDate { get; set; }
 
         [RegularExpression(@"^(0[3|5|7|8|9])+([0-9]{8})$", ErrorMessage = "Số điện thoại không hợp lệ (VD: 0912345678)")]
         [Display(Name = "SĐT Phụ Huynh")]
@@ -53,5 +65,51 @@ namespace ManagerStudentCaltholic.Models.ViewModels
 
         // Bổ sung vào class StudentViewModel:
         public int? InitialClassId { get; set; }
+
+        /// <summary>
+        /// Tính số tuổi chính xác tại một mốc thời gian bất kỳ (TASK-03.4 / TASK-04.3)
+        /// </summary>
+        public static int CalculateAgeAtDate(DateTime dateOfBirth, DateTime targetDate)
+        {
+            var dob = dateOfBirth.Date;
+            var target = targetDate.Date;
+            int age = target.Year - dob.Year;
+            if (dob > target.AddYears(-age))
+            {
+                age--;
+            }
+            return age;
+        }
+    }
+
+    /// <summary>
+    /// DTO cấp tài khoản GLV Dự Bị từ hồ sơ Thiếu nhi (TASK-03.3)
+    /// </summary>
+    public class ProvisionProbationaryUserRequestDto
+    {
+        [Required]
+        public long StudentId { get; set; }
+
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Tên đăng nhập từ 3 đến 50 ký tự")]
+        public string? CustomUsername { get; set; }
+
+        [StringLength(100)]
+        public string? InitialPassword { get; set; }
+    }
+
+    /// <summary>
+    /// DTO cập nhật ngày Tuyên hứa GLV (>= 18 tuổi) & Nâng cấp Role từ ProbationaryTeacher -> Teacher (TASK-03.4)
+    /// </summary>
+    public class CatechistPromiseUpgradeRequestDto
+    {
+        [Required]
+        public long StudentId { get; set; }
+
+        public DateTime? BaoDongPromiseDate { get; set; }
+
+        [Required(ErrorMessage = "Vui lòng nhập Ngày Hoàn thành Dự Bị & Tuyên hứa GLV")]
+        public DateTime CatechistPromiseDate { get; set; }
+
+        public bool UpgradeRoleToTeacher { get; set; } = false;
     }
 }

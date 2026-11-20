@@ -20,13 +20,20 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IPasswordHasherService _passwordHasher;
         private readonly ITokenService _tokenService;
         private readonly ILogger<AccountController> _logger;
+        private readonly IProfileHistoryService _profileHistoryService;
 
-        public AccountController(ParishDbContext context, IPasswordHasherService passwordHasher, ITokenService tokenService, ILogger<AccountController> logger)
+        public AccountController(
+            ParishDbContext context,
+            IPasswordHasherService passwordHasher,
+            ITokenService tokenService,
+            ILogger<AccountController> logger,
+            IProfileHistoryService profileHistoryService)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _tokenService = tokenService;
             _logger = logger;
+            _profileHistoryService = profileHistoryService;
         }
         /// <summary>
         /// 1. GET: /Account/Login
@@ -316,73 +323,9 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            var user = await _context.Users
-                .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == targetUserId && u.IsActive);
-
-            if (user == null) return NotFound("Không tìm thấy thông tin tài khoản.");
-
-            // SEC-05 FIX: Chỉ lấy phân công giảng dạy khớp chính xác với khóa ngoại UserId của tài khoản
-            // Tuyệt đối không nối OR theo TeacherName hay PhoneNumber để chống mạo danh / trùng tên
-            var allAssignments = await _context.ClassTeachers
-                .Include(ct => ct.ClassRoom)
-                    .ThenInclude(c => c.AcademicYear)
-                .Include(ct => ct.ClassRoom)
-                    .ThenInclude(c => c.Enrollments)
-                .Where(ct => ct.UserId == user.Id)
-                .OrderByDescending(ct => ct.ClassRoom.AcademicYear.StartDate)
-                .ThenBy(ct => ct.ClassRoom.Name)
-                .Select(ct => new AssignedClassItemDto
-                {
-                    ClassId = ct.ClassRoomId,
-                    ClassName = ct.ClassRoom.Name,
-                    GradeLevel = ct.ClassRoom.GradeLevel,
-                    AcademicYearId = ct.ClassRoom.AcademicYearId,
-                    AcademicYearName = ct.ClassRoom.AcademicYear.Name,
-                    IsCurrentYear = ct.ClassRoom.AcademicYear.IsCurrent,
-                    RoleInClass = ct.RoleInClass,
-                    RoleName = ct.RoleInClass == "HEAD" ? "Chủ nhiệm" :
-                               ct.RoleInClass == "MEMBER" ? "Giáo Lý Viên" : "Dự bị",
-                    RoomNumber = ct.ClassRoom.RoomName,
-                    TotalStudents = ct.ClassRoom.Enrollments.Count,
-                    AssignedAt = ct.AssignedAt
-                })
-                .AsNoTracking()
-                .ToListAsync();
-
-            // 1. Phân tách lớp đang dạy trong niên khóa hiện tại
-            var currentClasses = allAssignments.Where(c => c.IsCurrentYear).ToList();
-
-            // 2. Gom nhóm lịch sử các niên khóa cũ
-            var pastHistory = allAssignments
-                .Where(c => !c.IsCurrentYear)
-                .GroupBy(c => new { c.AcademicYearId, c.AcademicYearName })
-                .Select(g => new TeachingHistoryByYearDto
-                {
-                    AcademicYearId = g.Key.AcademicYearId,
-                    AcademicYearName = g.Key.AcademicYearName,
-                    Classes = g.ToList()
-                })
-                .ToList();
-
-            var viewModel = new UserProfileViewModel
-            {
-                Id = user.Id,
-                Username = user.Username,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                ChristianName = user.ChristianName,
-                DateOfBirth = user.DateOfBirth,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Address = user.Address,
-                AvatarUrl = user.AvatarUrl,
-                Role = user.Role,
-                ManagedGradeLevel = user.ManagedGradeLevel,
-                LastLoginAt = user.LastLoginAt,
-                CurrentClasses = currentClasses,
-                TeachingHistory = pastHistory
-            };
+            // TASK-04.1 (Phase 6): Tổng hợp Profile Lịch sử Kép (Lớp học + Lớp dạy đa niên khóa) & 5 Cột mốc Đức tin
+            var viewModel = await _profileHistoryService.BuildUserProfileAsync(targetUserId);
+            if (viewModel == null) return NotFound("Không tìm thấy thông tin tài khoản.");
 
             ViewBag.IsViewingOther = isViewingOther;
             ViewBag.TargetUserId = targetUserId;

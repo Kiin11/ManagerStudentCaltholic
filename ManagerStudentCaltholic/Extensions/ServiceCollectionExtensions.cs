@@ -116,6 +116,8 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IDeviceStudentRecognitionService, DeviceStudentRecognitionService>();
             // FEAT-P5-01: Service Truy vấn 360 độ Thiếu nhi Nội bộ
             services.AddScoped<IStaffStudentLookupService, StaffStudentLookupService>();
+            // TASK-04.1 (Phase 6): Service tổng hợp Profile Lịch sử Kép & 5 Cột mốc Đức tin
+            services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
 
             return services;
         }

@@ -68,6 +68,7 @@
                         <!option value="@UserRole.ExecutiveBoard" @(ViewBag.SelectedRole == UserRole.ExecutiveBoard ? "selected" : "")>Ban Điều Hành</!option>
                         <!option value="@UserRole.BranchHead" @(ViewBag.SelectedRole == UserRole.BranchHead ? "selected" : "")>Trưởng Khối</!option>
                         <!option value="@UserRole.Teacher" @(ViewBag.SelectedRole == UserRole.Teacher ? "selected" : "")>Giáo Lý Viên</!option>
+                        <!option value="@UserRole.ProbationaryTeacher" @(ViewBag.SelectedRole == UserRole.ProbationaryTeacher ? "selected" : "")>Dự Bị</!option>
                     </select>
                     <div class="input-group">
                         <input type="text" name="search" class="form-control" placeholder="Tìm tên hoặc username..." value="@ViewBag.SearchKeyword" />
@@ -139,10 +140,13 @@
                             <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                  u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                  u.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                                 u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-2 py-1">
+                                                 u.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                                 u.Role == UserRole.ProbationaryTeacher ? "bg-purple text-white" : "bg-secondary") rounded-pill px-2 py-1"
+                                  style="@(u.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                                 @(u.Role == UserRole.Admin ? "Quản trị viên" : u.Role == UserRole.SpiritualDirector ? "Cha" :
                                   u.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                                  u.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                                  u.Role == UserRole.BranchHead ? "Trưởng khối" :
+                                  u.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                             </span>
                             @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
                             {
@@ -228,6 +232,7 @@ else
                                 <!option value="@UserRole.ExecutiveBoard" @(ViewBag.SelectedRole == UserRole.ExecutiveBoard ? "selected" : "")>Ban Điều Hành</!option>
                                 <!option value="@UserRole.BranchHead" @(ViewBag.SelectedRole == UserRole.BranchHead ? "selected" : "")>Trưởng Khối</!option>
                                 <!option value="@UserRole.Teacher" @(ViewBag.SelectedRole == UserRole.Teacher ? "selected" : "")>Giáo Lý Viên</!option>
+                                <!option value="@UserRole.ProbationaryTeacher" @(ViewBag.SelectedRole == UserRole.ProbationaryTeacher ? "selected" : "")>Dự Bị</!option>
                             </select>
                             <input type="text" name="search" class="form-control" placeholder="Tìm tên/username..." value="@ViewBag.SearchKeyword" />
                             <button type="submit" class="btn btn-outline-primary"><i class="bi bi-search"></i></button>
@@ -287,10 +292,13 @@ else
                                         <span class="badge @(u.Role == UserRole.Admin ? "bg-danger" :
                                                                                                        u.Role == UserRole.SpiritualDirector ? "bg-info text-dark" :
                                                                                                        u.Role == UserRole.ExecutiveBoard ? "bg-primary" :
-                                                                                                       u.Role == UserRole.BranchHead ? "bg-warning text-dark" : "bg-secondary") rounded-pill px-3 py-1">
+                                                                                                       u.Role == UserRole.BranchHead ? "bg-warning text-dark" :
+                                                                                                       u.Role == UserRole.ProbationaryTeacher ? "text-white" : "bg-secondary") rounded-pill px-3 py-1"
+                                              style="@(u.Role == UserRole.ProbationaryTeacher ? "background-color: #6f42c1;" : "")">
                                             @(u.Role == UserRole.Admin ? "Quản trị viên" : u.Role == UserRole.SpiritualDirector ? "Cha" :
                                                                             u.Role == UserRole.ExecutiveBoard ? "Ban Điều Hành" :
-                                                                            u.Role == UserRole.BranchHead ? "Trưởng khối" : "Giáo lý viên / Dự bị")
+                                                                            u.Role == UserRole.BranchHead ? "Trưởng khối" :
+                                                                            u.Role == UserRole.ProbationaryTeacher ? "Dự Bị" : "Giáo lý viên")
                                         </span>
                                         @if (!string.IsNullOrEmpty(u.ManagedGradeLevel))
                                         {
@@ -378,6 +386,7 @@ else
                             <label class="form-label small fw-bold">Vai trò</label>
                             <select id="newRole" class="form-select" onchange="toggleManagedGradeField()">
                                 <option value="@UserRole.Teacher">Giáo Lý Viên</option>
+                                <option value="@UserRole.ProbationaryTeacher">Dự Bị</option>
                                 <option value="@UserRole.BranchHead">Trưởng Khối</option>
                                 <option value="@UserRole.ExecutiveBoard">Ban Điều Hành</option>
                                 @if (User.IsInRole(UserRole.Admin))
@@ -394,6 +403,7 @@ else
                                 <option value="Rước Lễ">Khối Rước Lễ</option>
                                 <option value="Thêm Sức">Khối Thêm Sức</option>
                                 <option value="Bao Đồng">Khối Bao Đồng</option>
+                                <option value="Dự Bị">Khối Dự Bị</option>
                             </select>
                         </div>
                     </div>

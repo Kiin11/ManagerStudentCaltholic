@@ -25,6 +25,7 @@ namespace ManagerStudentCaltholic.Controllers
             UserRole.ExecutiveBoard,
             UserRole.BranchHead,
             UserRole.Teacher,
+            UserRole.ProbationaryTeacher,
             UserRole.Parent
         };
 
@@ -702,10 +703,11 @@ namespace ManagerStudentCaltholic.Controllers
             if (User.IsInRole(UserRole.Admin))
                 return true;
 
-            // Ban Điều Hành (ExecutiveBoard) chỉ được phép quản lý Trưởng khối (BranchHead), Giáo lý viên (Teacher) và Phụ huynh (Parent)
+            // Ban Điều Hành (ExecutiveBoard) chỉ được phép quản lý Trưởng khối (BranchHead), Giáo lý viên (Teacher / ProbationaryTeacher) và Phụ huynh (Parent)
             // Không được phép tạo/sửa/khóa Admin, Cha Tuyên Úy (SpiritualDirector) hoặc thành viên Ban Điều Hành khác
             return targetRole == UserRole.BranchHead ||
                    targetRole == UserRole.Teacher ||
+                   targetRole == UserRole.ProbationaryTeacher ||
                    targetRole == UserRole.Parent;
         }
 
