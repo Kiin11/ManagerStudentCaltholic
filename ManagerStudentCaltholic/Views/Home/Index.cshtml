@@ -1,4 +1,5 @@
 @model ManagerStudentCaltholic.Models.ViewModels.MasterWorkspaceViewModel
+@using ManagerStudentCaltholic.Models.Entities
 @{
     var activeMaster = Model.Masters.FirstOrDefault(m => m.MasterCode == Model.ActiveMasterCode)
                        ?? Model.Masters.FirstOrDefault();
@@ -220,6 +221,24 @@
                            class="btn btn-outline-light btn-sm rounded-pill px-3 fw-semibold"
                            title="Cấu hình ẩn/hiện các nút chức năng theo vai trò">
                             <i class="bi bi-sliders2-vertical me-1"></i> Phân quyền nút
+                        </a>
+                    }
+
+                    @{
+                        var managedGradeClaim = User.FindFirst("ManagedGradeLevel")?.Value;
+                        bool canViewAuthorizedClasses = Model.IsAuthenticated && (
+                            User.IsInRole(UserRole.Admin) ||
+                            User.IsInRole(UserRole.SpiritualDirector) ||
+                            User.IsInRole(UserRole.ExecutiveBoard) ||
+                            (User.IsInRole(UserRole.BranchHead) && (!string.IsNullOrWhiteSpace(managedGradeClaim) || Model.AssignedClassNames.Any())) ||
+                            ((User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher)) && Model.AssignedClassNames.Any()));
+                    }
+                    @if (canViewAuthorizedClasses)
+                    {
+                        <a asp-controller="Students" asp-action="Index"
+                           class="btn btn-light text-primary btn-sm rounded-pill px-3 fw-bold shadow-sm"
+                           title="Xem danh sách thiếu nhi của các lớp thuộc quyền phụ trách">
+                            <i class="bi bi-people-fill me-1"></i> Xem Danh Sách Lớp
                         </a>
                     }
 

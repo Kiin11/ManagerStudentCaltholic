@@ -119,62 +119,102 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Index(string? searchKeyword, string? gender, bool? isActive, int page = 1)
+        public async Task<IActionResult> Index(string? searchKeyword, string? gender, bool? isActive, int? classId, int page = 1)
         {
             const int pageSize = 15;
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             var yearId = currentYear?.Id ?? 0;
+
+            var activeClasses = await _context.Classes
+                .AsNoTracking()
+                .Where(c => yearId == 0 || c.AcademicYearId == yearId)
+                .OrderBy(c => c.GradeLevel)
+                .ThenBy(c => c.Name)
+                .ToListAsync();
+
+            List<ClassRoom> authorizedClasses;
+            if (IsLeadership)
+            {
+                authorizedClasses = activeClasses;
+            }
+            else if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                var assignedClassIds = await _context.ClassTeachers
+                    .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId))
+                    .Select(ct => ct.ClassRoomId)
+                    .ToListAsync();
+
+                authorizedClasses = activeClasses
+                    .Where(c => (!string.IsNullOrWhiteSpace(managedGrade) &&
+                                 string.Equals(c.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase)) ||
+                                assignedClassIds.Contains(c.Id))
+                    .ToList();
+            }
+            else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                var teacherClassQuery = _context.ClassTeachers
+                    .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId));
+
+                if (User.IsInRole(UserRole.ProbationaryTeacher))
+                {
+                    teacherClassQuery = teacherClassQuery.Where(ct =>
+                        ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                        ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                        ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                        ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                }
+
+                var assignedClassIds = await teacherClassQuery
+                    .Select(ct => ct.ClassRoomId)
+                    .ToListAsync();
+
+                authorizedClasses = activeClasses
+                    .Where(c => assignedClassIds.Contains(c.Id))
+                    .ToList();
+            }
+            else
+            {
+                authorizedClasses = new List<ClassRoom>();
+            }
+
+            if (classId.HasValue && classId.Value > 0 && !authorizedClasses.Any(c => c.Id == classId.Value))
+            {
+                TempData["ErrorMessage"] = "Bạn không có quyền xem danh sách thiếu nhi của lớp này.";
+                return RedirectToAction(nameof(Index));
+            }
 
             IQueryable<Student> query = _context.Students.AsNoTracking();
 
             // SEC-NEW-04 FIX: Phân tách phạm vi hiển thị (Fail-Closed cho BranchHead, Teacher, ProbationaryTeacher)
             if (!IsLeadership)
             {
-                if (User.IsInRole(UserRole.BranchHead))
+                var authorizedClassIds = authorizedClasses.Select(c => c.Id).ToList();
+                if (!authorizedClassIds.Any())
                 {
-                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                    if (string.IsNullOrWhiteSpace(managedGrade))
-                    {
-                        query = query.Where(_ => false);
-                    }
-                    else
-                    {
-                        var studentIdsInGrade = await _context.Enrollments
-                            .Include(e => e.ClassRoom)
-                            .Where(e => e.ClassRoom.AcademicYearId == yearId && e.ClassRoom.GradeLevel == managedGrade)
-                            .Select(e => e.StudentId)
-                            .Distinct()
-                            .ToListAsync();
-
-                        query = query.Where(s => studentIdsInGrade.Contains(s.Id));
-                    }
+                    query = query.Where(_ => false);
                 }
-                else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
+                else
                 {
-                    var teacherClassQuery = _context.ClassTeachers
-                        .Where(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId);
-
-                    if (User.IsInRole(UserRole.ProbationaryTeacher))
-                    {
-                        teacherClassQuery = teacherClassQuery.Where(ct =>
-                            ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
-                            ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
-                            ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
-                            ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
-                    }
-
-                    var assignedClassIds = await teacherClassQuery
-                        .Select(ct => ct.ClassRoomId)
-                        .ToListAsync();
-
-                    var studentIdsInClasses = await _context.Enrollments
-                        .Where(e => assignedClassIds.Contains(e.ClassRoomId))
+                    var studentIdsInAuthorizedClasses = await _context.Enrollments
+                        .Where(e => authorizedClassIds.Contains(e.ClassRoomId))
                         .Select(e => e.StudentId)
                         .Distinct()
                         .ToListAsync();
 
-                    query = query.Where(s => studentIdsInClasses.Contains(s.Id));
+                    query = query.Where(s => studentIdsInAuthorizedClasses.Contains(s.Id));
                 }
+            }
+
+            if (classId.HasValue && classId.Value > 0)
+            {
+                var studentIdsInSelectedClass = await _context.Enrollments
+                    .Where(e => e.ClassRoomId == classId.Value)
+                    .Select(e => e.StudentId)
+                    .Distinct()
+                    .ToListAsync();
+
+                query = query.Where(s => studentIdsInSelectedClass.Contains(s.Id));
             }
 
             if (!string.IsNullOrWhiteSpace(searchKeyword))
@@ -208,12 +248,6 @@ namespace ManagerStudentCaltholic.Controllers
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
-            var activeClasses = await _context.Classes
-                .AsNoTracking()
-                .Where(c => c.AcademicYearId == yearId)
-                .OrderBy(c => c.GradeLevel)
-                .ThenBy(c => c.Name)
-                .ToListAsync();                           
 
             // TASK-03.3 & TASK-03.4: Nạp lớp hiện tại và tài khoản Dự Bị/GLV liên kết cho các thiếu nhi hiển thị
             var pageStudentIds = students.Select(s => s.Id).ToList();
@@ -257,11 +291,13 @@ namespace ManagerStudentCaltholic.Controllers
             ViewBag.SearchKeyword = searchKeyword;
             ViewBag.Gender = gender ?? "ALL";
             ViewBag.IsActive = isActive;
+            ViewBag.SelectedClassId = classId;
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalCount = totalCount;
             ViewBag.Classes = activeClasses;
             ViewBag.ActiveClasses = activeClasses;
+            ViewBag.AuthorizedClasses = authorizedClasses;
             ViewBag.StudentCurrentClassMap = studentClassMap;
             ViewBag.StudentLinkedUserMap = studentUserMap;
 

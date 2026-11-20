@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml.Office2016.Excel;
+﻿using System.Security.Claims;
+using DocumentFormat.OpenXml.Office2016.Excel;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
@@ -24,6 +25,43 @@ namespace ManagerStudentCaltholic.Controllers
             _context = context;
             _logger = logger;
             _excelService = excelService;
+        }
+
+        private long CurrentUserId =>
+            long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
+
+        private bool IsLeadership =>
+            User.IsInRole(UserRole.Admin) ||
+            User.IsInRole(UserRole.SpiritualDirector) ||
+            User.IsInRole(UserRole.ExecutiveBoard);
+
+        /// <summary>
+        /// Kiểm tra quyền xem danh sách thiếu nhi / xuất dữ liệu của một Lớp học theo vai trò user.
+        /// </summary>
+        private async Task<bool> CanAccessClassRosterAsync(ClassRoom targetClass)
+        {
+            if (IsLeadership) return true;
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
+
+            if (User.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (!string.IsNullOrWhiteSpace(managedGrade) &&
+                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            if (CurrentUserId <= 0) return false;
+
+            return await _context.ClassTeachers
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
         }
 
         /// <summary>
@@ -542,33 +580,13 @@ namespace ManagerStudentCaltholic.Controllers
         {
             try
             {
-                var targetClass = await _context.Classes.FindAsync(id);
+                var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
                 if (targetClass == null) return NotFound();
 
-                // SEC-NEW-05 FIX: Kiểm tra phạm vi quyền hạn theo Khối / Lớp
-                bool isLeadership = User.IsInRole(UserRole.Admin) ||
-                                    User.IsInRole(UserRole.SpiritualDirector) ||
-                                    User.IsInRole(UserRole.ExecutiveBoard);
-
-                if (!isLeadership)
+                // Kiểm tra phạm vi quyền hạn theo Khối / Lớp / Ca học
+                if (!await CanAccessClassRosterAsync(targetClass))
                 {
-                    if (User.IsInRole(UserRole.BranchHead))
-                    {
-                        var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                        if (string.IsNullOrWhiteSpace(managedGrade) ||
-                            !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return Forbid();
-                        }
-                    }
-                    else
-                    {
-                        var uidStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                        long.TryParse(uidStr, out var currentUserId);
-                        var isAssigned = await _context.ClassTeachers
-                            .AnyAsync(ct => ct.ClassRoomId == id && ct.UserId == currentUserId);
-                        if (!isAssigned) return Forbid();
-                    }
+                    return Forbid();
                 }
 
                 var bytes = await _excelService.ExportClassListToExcelAsync(id);
@@ -785,8 +803,82 @@ namespace ManagerStudentCaltholic.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(AssignTeacher));
+                _logger.LogError(ex, "Lỗi hệ thống tại ClassesController.{Action}", nameof(GetAvailableRooms));
                 return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi xử lý yêu cầu. Vui lòng thử lại sau." });
+            }
+        }
+
+        /// <summary>
+        /// GET: /Classes/GetClassStudents?classId=...
+        /// Lấy danh sách thiếu nhi của lớp học theo quyền truy cập của user hiện tại.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetClassStudents(int classId)
+        {
+            try
+            {
+                if (classId <= 0)
+                {
+                    return Json(new { success = false, message = "Mã lớp học không hợp lệ." });
+                }
+
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == classId);
+
+                if (targetClass == null)
+                {
+                    return Json(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
+                }
+
+                if (!await CanAccessClassRosterAsync(targetClass))
+                {
+                    return Json(new { success = false, message = "Bạn không có quyền xem danh sách thiếu nhi của lớp này." });
+                }
+
+                bool isAfternoon = GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel);
+
+                var students = await _context.Enrollments
+                    .AsNoTracking()
+                    .Include(e => e.Student)
+                    .Where(e => e.ClassRoomId == classId && e.Student != null && !e.Student.IsDeleted)
+                    .OrderBy(e => e.Student.LastName)
+                    .ThenBy(e => e.Student.FirstName)
+                    .ThenBy(e => e.Student.StudentCode)
+                    .Select(e => new
+                    {
+                        id = e.Student.Id,
+                        studentCode = e.Student.StudentCode,
+                        christianName = e.Student.ChristianName,
+                        fullName = (e.Student.FirstName + " " + e.Student.LastName).Trim(),
+                        gender = e.Student.Gender,
+                        dateOfBirth = e.Student.DateOfBirth.ToString("dd/MM/yyyy"),
+                        parentPhone = e.Student.ParentPhone,
+                        isActive = e.Student.IsActive
+                    })
+                    .ToListAsync();
+
+                return Json(new
+                {
+                    success = true,
+                    data = new
+                    {
+                        classId = targetClass.Id,
+                        className = targetClass.Name,
+                        gradeLevel = targetClass.GradeLevel,
+                        sessionDisplay = isAfternoon ? "Ca Chiều" : "Ca Sáng",
+                        roomName = string.IsNullOrWhiteSpace(targetClass.RoomName) ? "Chưa bố trí" : targetClass.RoomName,
+                        academicYearName = targetClass.AcademicYear?.Name ?? string.Empty,
+                        totalStudents = students.Count,
+                        students
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi hệ thống khi lấy danh sách thiếu nhi lớp ID {ClassId}", classId);
+                return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống khi tải danh sách lớp." });
             }
         }
     }

@@ -200,9 +200,30 @@
                                                             <span class="text-muted">Sĩ số: @tc.TotalStudents em</span>
                                                             @if (tc.IsCurrentYear)
                                                             {
-                                                                <a href="/Attendance/Index?classId=@tc.ClassId" class="btn btn-outline-primary btn-sm rounded-pill py-0 px-2" style="font-size: 0.72rem;">
-                                                                    Điểm danh
-                                                                </a>
+                                                                bool isViewerLeadership = User.IsInRole(UserRole.Admin) ||
+                                                                                          User.IsInRole(UserRole.SpiritualDirector) ||
+                                                                                          User.IsInRole(UserRole.ExecutiveBoard);
+                                                                bool isViewerBranchHeadForClass = User.IsInRole(UserRole.BranchHead) &&
+                                                                    !string.IsNullOrWhiteSpace(User.FindFirst("ManagedGradeLevel")?.Value) &&
+                                                                    string.Equals(tc.GradeLevel, User.FindFirst("ManagedGradeLevel")?.Value, StringComparison.OrdinalIgnoreCase);
+                                                                long.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var viewerUserId);
+                                                                bool isOwnProfile = viewerUserId > 0 && Model.Id == viewerUserId;
+                                                                bool isProbationaryBlocked = User.IsInRole(UserRole.ProbationaryTeacher) &&
+                                                                    GradeLevel.IsAfternoonSession(tc.Session, tc.GradeLevel);
+                                                                bool canViewRosterForClass = !isProbationaryBlocked &&
+                                                                    (isViewerLeadership || isViewerBranchHeadForClass || isOwnProfile);
+
+                                                                <div class="d-inline-flex flex-wrap gap-1">
+                                                                    @if (canViewRosterForClass)
+                                                                    {
+                                                                        <a href="/Students/Index?classId=@tc.ClassId" class="btn btn-primary btn-sm rounded-pill py-0 px-2" style="font-size: 0.72rem;">
+                                                                            <i class="bi bi-people-fill me-1"></i>Xem DS Lớp
+                                                                        </a>
+                                                                    }
+                                                                    <a href="/Attendance/Index?classId=@tc.ClassId" class="btn btn-outline-primary btn-sm rounded-pill py-0 px-2" style="font-size: 0.72rem;">
+                                                                        Điểm danh
+                                                                    </a>
+                                                                </div>
                                                             }
                                                         </div>
                                                     </div>
