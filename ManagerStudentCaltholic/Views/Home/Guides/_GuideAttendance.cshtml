@@ -49,7 +49,7 @@
                     </div>
                     <h6 class="fw-bold text-dark mb-2">Sổ Điểm Danh Lớp & Duyệt Báo Sai Sót</h6>
                     <p class="small text-secondary mb-2">
-                        GLV kiểm tra lại danh sách lớp trên Redis tốc độ cao, tích chọn nhanh và bấm <strong>Lưu Điểm Danh</strong>.
+                        GLV kiểm tra lại danh sách lớp trên Redis tốc độ cao, tích chọn từng thiếu nhi để hệ thống tự động lưu tức thì.
                     </p>
                     <div class="small text-muted bg-white p-2 rounded-3 border mb-3">
                         <i class="bi bi-flag-fill text-danger me-1"></i>Bấm nút <strong>Duyệt Báo Sai Sót PH</strong> ngay trên sổ lớp để xử lý khiếu nại điểm danh của phụ huynh.
@@ -109,7 +109,7 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small">
             <div>
                 <strong class="text-primary"><i class="bi bi-lightning-charge-fill me-1"></i>Cơ chế đồng bộ Redis High-Throughput:</strong>
-                Mọi lượt quét QR và lưu sổ lớp được ghi tức thì trên bộ nhớ đệm Redis (0ms độ trễ) và tự động đồng bộ hàng loạt xuống PostgreSQL mỗi 10 phút/lần qua Hangfire.
+                Mọi lượt quét QR và lưu sổ lớp được ghi tức thì trên bộ nhớ đệm Redis (0ms độ trễ) và tự động đồng bộ hàng loạt xuống PostgreSQL mỗi 2 phút/lần qua Hangfire.
             </div>
             <a href="/Attendance/Statistics" class="fw-bold text-decoration-none">Xem Thống kê cả năm <i class="bi bi-arrow-right"></i></a>
         </div>

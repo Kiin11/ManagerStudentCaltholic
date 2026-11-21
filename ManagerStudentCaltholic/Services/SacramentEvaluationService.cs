@@ -207,7 +207,6 @@ namespace ManagerStudentCaltholic.Services
 
                 var clsPresent = stuAtts.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present);
                 var clsLate = stuAtts.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
-                var makeUps = stuAtts.Count(a => a.IsMakeUp);
 
                 double massRate = stuAtts.Any()
                     ? Math.Min(100.0, Math.Round(((sunPresent + sunLate * 0.8) / stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday)) * 100.0, 1))
@@ -293,7 +292,6 @@ namespace ManagerStudentCaltholic.Services
                     MassAttendanceRate = massRate,
                     ClassAttendanceRate = classRate,
                     CombinedAttendanceRate = combinedRate,
-                    TotalMakeUpCount = makeUps,
                     AcademicRank = academicRank,
                     AlreadyReceivedSacrament = alreadyReceived,
                     ExistingReceivedDateStr = existingSacRecord?.ReceivedDate.ToString("dd/MM/yyyy")

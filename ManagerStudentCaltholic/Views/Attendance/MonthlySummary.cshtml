@@ -80,12 +80,6 @@
         color: #b91c1c;
         border: 1px solid #fca5a5;
     }
-
-    .status-makeup {
-        background-color: #ffedd5;
-        color: #c2410c;
-        border: 1px dashed #fb923c;
-    }
 </style>
 
 <div class="container-fluid py-4">
@@ -146,7 +140,6 @@
         <span class="small"><span class="badge-status status-late me-1">T</span> Đi trễ</span>
         <span class="small"><span class="badge-status status-absent-p me-1">P</span> Vắng phép</span>
         <span class="small"><span class="badge-status status-absent-u me-1">K</span> Vắng không phép</span>
-        <span class="small"><span class="badge-status status-makeup me-1">⟲</span> Điểm danh bù</span>
     </div>
 
     <!-- Bảng Ma Trận Điểm Danh Tháng -->
@@ -240,18 +233,18 @@
                                     {
                                         <!-- CN: CỘT 1 - LỄ -->
                                         <td class="border-start">
-                                            @RenderStatusBadge(dayStat.MassSunStatus, dayStat.MassSunCheckInTime, dayStat.IsMassSunMakeUp)
+                                            @RenderStatusBadge(dayStat.MassSunStatus, dayStat.MassSunCheckInTime)
                                         </td>
                                         <!-- CN: CỘT 2 - HỌC -->
                                         <td class="border-end">
-                                            @RenderStatusBadge(dayStat.ClassStatus, dayStat.ClassCheckInTime, dayStat.IsClassMakeUp)
+                                            @RenderStatusBadge(dayStat.ClassStatus, dayStat.ClassCheckInTime)
                                         </td>
                                     }
                                     else
                                     {
                                         <!-- T5: CHỈ CÓ 1 CỘT LỄ -->
                                         <td class="border-start border-end">
-                                            @RenderStatusBadge(dayStat.MassThuStatus, dayStat.MassThuCheckInTime, dayStat.IsMassThuMakeUp)
+                                            @RenderStatusBadge(dayStat.MassThuStatus, dayStat.MassThuCheckInTime)
                                         </td>
                                     }
                                 }
@@ -289,13 +282,8 @@
 </div>
 
 @functions {
-    public static Microsoft.AspNetCore.Html.IHtmlContent RenderStatusBadge(string status, TimeSpan? checkInTime, bool isMakeUp)
+    public static Microsoft.AspNetCore.Html.IHtmlContent RenderStatusBadge(string status, TimeSpan? checkInTime)
     {
-        if (isMakeUp)
-        {
-            return new Microsoft.AspNetCore.Html.HtmlString("<span class='badge-status status-makeup' title='Điểm danh bù'>⟲</span>");
-        }
-
         switch (status)
         {
             case "LINED_UP":

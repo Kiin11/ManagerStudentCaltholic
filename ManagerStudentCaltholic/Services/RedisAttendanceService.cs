@@ -397,8 +397,19 @@ namespace ManagerStudentCaltholic.Services
             var dateUtc = DateTime.SpecifyKind(request.AttendanceDate.Date, DateTimeKind.Utc);
             var sheetKey = RedisAttendanceKeys.ClassSheet(request.ClassId, dateUtc);
 
+            var updateTarget = (request.UpdateTarget ?? "ALL").Trim().ToUpperInvariant();
+            if (updateTarget != "CLASS" && updateTarget != "MASS" && updateTarget != "NOTE")
+            {
+                updateTarget = "ALL";
+            }
+
+            bool updateMass = updateTarget == "MASS" || updateTarget == "ALL";
+            bool updateClass = updateTarget == "CLASS" || updateTarget == "ALL";
+            bool updateNote = updateTarget == "NOTE" || updateTarget == "ALL";
+
             var normalizedMassStatus = NormalizeAttendanceStatus(request.AttendedMass, request.MassStatus, allowLinedUp: true);
             var normalizedClassStatus = NormalizeAttendanceStatus(request.ClassAttended, request.ClassStatus, allowLinedUp: false);
+            var normalizedNote = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
 
             var sheetVm = await GetOrLoadClassSheetAsync(request.ClassId, dateUtc);
             var targetRow = sheetVm.Students.FirstOrDefault(s => s.EnrollmentId == request.EnrollmentId);
@@ -407,24 +418,16 @@ namespace ManagerStudentCaltholic.Services
                 return (false, "Không tìm thấy học sinh trong danh sách lớp này.", null);
             }
 
-            targetRow.AttendedMass = request.AttendedMass;
-            targetRow.MassStatus = normalizedMassStatus;
-            if (!request.AttendedMass)
-            {
-                targetRow.MassCheckInTime = null;
-            }
-
-            targetRow.ClassAttended = request.ClassAttended;
-            targetRow.ClassStatus = normalizedClassStatus;
-            if (!request.ClassAttended)
-            {
-                targetRow.ClassCheckInTime = null;
-            }
-
-            targetRow.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
-
             var modifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "GLV";
             var clientIp = SafeTruncate(request.IpAddress, 45);
+
+            bool finalMassAtt = targetRow.AttendedMass;
+            string finalMassSt = targetRow.MassStatus;
+            TimeSpan? finalMassTime = targetRow.MassCheckInTime;
+            bool finalClassAtt = targetRow.ClassAttended;
+            string finalClassSt = targetRow.ClassStatus;
+            TimeSpan? finalClassTime = targetRow.ClassCheckInTime;
+            string? finalNote = targetRow.Note;
 
             // Write-Through tức thì cho duy nhất bản ghi của thiếu nhi này xuống PostgreSQL + Ghi Audit Log
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -442,29 +445,48 @@ namespace ManagerStudentCaltholic.Services
                 string oldClassSt = existing?.ClassStatus ?? AttendanceStatus.AbsentUnpermitted;
                 string? oldNote = existing?.Note;
 
+                // Bảo toàn dữ liệu hiện hành trên DB/Redis đối với các cột không nằm trong UpdateTarget
+                finalMassAtt = updateMass ? request.AttendedMass : (existing?.AttendedMass ?? targetRow.AttendedMass);
+                finalMassSt = updateMass ? normalizedMassStatus : (existing?.MassStatus ?? targetRow.MassStatus);
+                finalMassTime = updateMass
+                    ? (request.AttendedMass ? (existing?.MassCheckInTime ?? targetRow.MassCheckInTime) : null)
+                    : (existing != null ? existing.MassCheckInTime : targetRow.MassCheckInTime);
+
+                finalClassAtt = updateClass ? request.ClassAttended : (existing?.ClassAttended ?? targetRow.ClassAttended);
+                finalClassSt = updateClass ? normalizedClassStatus : (existing?.ClassStatus ?? targetRow.ClassStatus);
+                finalClassTime = updateClass
+                    ? (request.ClassAttended ? (existing?.ClassCheckInTime ?? targetRow.ClassCheckInTime) : null)
+                    : (existing != null ? existing.ClassCheckInTime : targetRow.ClassCheckInTime);
+
+                finalNote = updateNote ? normalizedNote : (existing != null ? existing.Note : targetRow.Note);
+
                 bool hasChanges = isNew || HasAttendanceStateChanged(
-                    oldMassAtt, oldMassSt, targetRow.AttendedMass, targetRow.MassStatus,
-                    oldClassAtt, oldClassSt, targetRow.ClassAttended, targetRow.ClassStatus,
-                    oldNote, targetRow.Note);
+                    oldMassAtt, oldMassSt, finalMassAtt, finalMassSt,
+                    oldClassAtt, oldClassSt, finalClassAtt, finalClassSt,
+                    oldNote, finalNote);
 
                 Attendance trackedRecord;
                 if (existing != null)
                 {
-                    existing.AttendedMass = targetRow.AttendedMass;
-                    existing.MassStatus = targetRow.MassStatus;
-                    if (!targetRow.AttendedMass)
+                    if (updateMass)
                     {
-                        existing.MassCheckInTime = null;
+                        existing.AttendedMass = finalMassAtt;
+                        existing.MassStatus = finalMassSt;
+                        existing.MassCheckInTime = finalMassTime;
                     }
 
-                    existing.ClassAttended = targetRow.ClassAttended;
-                    existing.ClassStatus = targetRow.ClassStatus;
-                    if (!targetRow.ClassAttended)
+                    if (updateClass)
                     {
-                        existing.ClassCheckInTime = null;
+                        existing.ClassAttended = finalClassAtt;
+                        existing.ClassStatus = finalClassSt;
+                        existing.ClassCheckInTime = finalClassTime;
                     }
 
-                    existing.Note = targetRow.Note;
+                    if (updateNote)
+                    {
+                        existing.Note = finalNote;
+                    }
+
                     trackedRecord = existing;
                 }
                 else
@@ -474,13 +496,13 @@ namespace ManagerStudentCaltholic.Services
                         EnrollmentId = request.EnrollmentId,
                         AttendanceDate = dateUtc,
                         DayOfWeek = dateUtc.DayOfWeek,
-                        AttendedMass = targetRow.AttendedMass,
-                        MassStatus = targetRow.MassStatus,
-                        MassCheckInTime = targetRow.MassCheckInTime,
-                        ClassAttended = targetRow.ClassAttended,
-                        ClassStatus = targetRow.ClassStatus,
-                        ClassCheckInTime = targetRow.ClassCheckInTime,
-                        Note = targetRow.Note,
+                        AttendedMass = finalMassAtt,
+                        MassStatus = finalMassSt,
+                        MassCheckInTime = finalMassTime,
+                        ClassAttended = finalClassAtt,
+                        ClassStatus = finalClassSt,
+                        ClassCheckInTime = finalClassTime,
+                        Note = finalNote,
                         CreatedAt = DateTime.UtcNow
                     };
                     _context.Attendances.Add(trackedRecord);
@@ -491,14 +513,14 @@ namespace ManagerStudentCaltholic.Services
                 if (hasChanges)
                 {
                     bool classChanged = isNew
-                        ? (targetRow.ClassAttended || targetRow.ClassStatus != AttendanceStatus.AbsentUnpermitted)
-                        : (oldClassAtt != targetRow.ClassAttended || !string.Equals(oldClassSt, targetRow.ClassStatus, StringComparison.OrdinalIgnoreCase));
+                        ? (finalClassAtt || finalClassSt != AttendanceStatus.AbsentUnpermitted)
+                        : (oldClassAtt != finalClassAtt || !string.Equals(oldClassSt, finalClassSt, StringComparison.OrdinalIgnoreCase));
                     bool massChanged = isNew
-                        ? (targetRow.AttendedMass || targetRow.MassStatus != AttendanceStatus.AbsentUnpermitted)
-                        : (oldMassAtt != targetRow.AttendedMass || !string.Equals(oldMassSt, targetRow.MassStatus, StringComparison.OrdinalIgnoreCase));
+                        ? (finalMassAtt || finalMassSt != AttendanceStatus.AbsentUnpermitted)
+                        : (oldMassAtt != finalMassAtt || !string.Equals(oldMassSt, finalMassSt, StringComparison.OrdinalIgnoreCase));
                     bool noteChanged = !string.Equals(
                         string.IsNullOrWhiteSpace(oldNote) ? null : oldNote.Trim(),
-                        targetRow.Note,
+                        finalNote,
                         StringComparison.Ordinal);
 
                     string actionType = (classChanged, massChanged, noteChanged) switch
@@ -512,16 +534,16 @@ namespace ManagerStudentCaltholic.Services
                     var reasonSummary = BuildAuditReasonSummary(
                         "Cập nhật trực tiếp",
                         isNew,
-                        oldMassAtt, oldMassSt, targetRow.AttendedMass, targetRow.MassStatus,
-                        oldClassAtt, oldClassSt, targetRow.ClassAttended, targetRow.ClassStatus,
-                        oldNote, targetRow.Note);
+                        oldMassAtt, oldMassSt, finalMassAtt, finalMassSt,
+                        oldClassAtt, oldClassSt, finalClassAtt, finalClassSt,
+                        oldNote, finalNote);
 
                     _context.AttendanceAuditLogs.Add(new AttendanceAuditLog
                     {
                         AttendanceId = trackedRecord.Id,
                         ActionType = actionType,
                         OldValues = FormatStateSnapshot(oldMassAtt, oldMassSt, oldClassAtt, oldClassSt, oldNote, isNewRecord: isNew),
-                        NewValues = FormatStateSnapshot(targetRow.AttendedMass, targetRow.MassStatus, targetRow.ClassAttended, targetRow.ClassStatus, targetRow.Note),
+                        NewValues = FormatStateSnapshot(finalMassAtt, finalMassSt, finalClassAtt, finalClassSt, finalNote),
                         ModifiedBy = modifiedBy,
                         Reason = reasonSummary,
                         IpAddress = clientIp,
@@ -531,12 +553,21 @@ namespace ManagerStudentCaltholic.Services
                     await _context.SaveChangesAsync();
 
                     _logger.LogInformation(
-                        "AUDIT {ActionType}: StudentCode={StudentCode}, Date={Date:yyyy-MM-dd}, By={User}, IP={IP}, Reason={Reason}",
-                        actionType, targetRow.StudentCode, dateUtc, modifiedBy, clientIp ?? "unknown", reasonSummary);
+                        "AUDIT {ActionType}: StudentCode={StudentCode}, Date={Date:yyyy-MM-dd}, Target={Target}, By={User}, IP={IP}, Reason={Reason}",
+                        actionType, targetRow.StudentCode, dateUtc, updateTarget, modifiedBy, clientIp ?? "unknown", reasonSummary);
                 }
 
                 await transaction.CommitAsync();
             });
+
+            // Đồng bộ trạng thái chuẩn cuối cùng về lại Redis ClassSheet
+            targetRow.AttendedMass = finalMassAtt;
+            targetRow.MassStatus = finalMassSt;
+            targetRow.MassCheckInTime = finalMassTime;
+            targetRow.ClassAttended = finalClassAtt;
+            targetRow.ClassStatus = finalClassSt;
+            targetRow.ClassCheckInTime = finalClassTime;
+            targetRow.Note = finalNote;
 
             var existingSheetPayload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
             var updatedPayload = new RedisClassAttendancePayload
@@ -568,7 +599,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request)
         {
             var cleanCode = request.StudentCode.Trim().ToUpperInvariant();
-            var scanTime = request.ScanTimestamp ?? DateTime.Now;
+            var scanTime = request.ScanTimestamp ?? DateTime.UtcNow.AddHours(7);
             var todayUtc = DateTime.SpecifyKind(scanTime.Date, DateTimeKind.Utc);
 
             var qrKey = RedisAttendanceKeys.QrStudentLookup(todayUtc, cleanCode);
@@ -684,7 +715,7 @@ namespace ManagerStudentCaltholic.Services
                 case "CATECHISM_CLASS":
                     isMass = false;
                     isClass = true;
-                    bool isMorning = lookupItem.GradeLevel != "Bao Đồng";
+                    bool isMorning = !GradeLevel.IsAfternoonGrade(lookupItem.GradeLevel);
                     if (isMorning)
                     {
                         status = timeOfDay < new TimeSpan(9, 30, 0) ? AttendanceStatus.Present : AttendanceStatus.Late;
@@ -1000,7 +1031,7 @@ namespace ManagerStudentCaltholic.Services
         }
 
         /// <summary>
-        /// 6. TASK-P3-12.4 / P2-LOG-16: Batch Upsert dữ liệu điểm danh còn cờ IsDirty từ Redis xuống PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng định kỳ mỗi 10 phút qua Hangfire).
+        /// 6. TASK-P3-12.4 / P2-LOG-16: Batch Upsert dữ liệu điểm danh còn cờ IsDirty từ Redis xuống PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng định kỳ mỗi 2 phút qua Hangfire).
         /// </summary>
         public async Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null)
         {
@@ -1475,7 +1506,7 @@ namespace ManagerStudentCaltholic.Services
             List<StudentAttendanceRowItem> students,
             string? lessonDocDescription = null)
         {
-            bool isMorning = cls.GradeLevel != "Bao Đồng";
+            bool isMorning = !GradeLevel.IsAfternoonSession(cls.Session, cls.GradeLevel);
             string roomName = schedule?.ClassRoomLocation?.RoomName
                               ?? (string.IsNullOrWhiteSpace(cls.RoomName) ? "Chưa bố trí phòng" : cls.RoomName);
             string timeSlot = schedule != null

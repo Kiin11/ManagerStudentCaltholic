@@ -493,7 +493,7 @@
                                         <i class="bi bi-bell-fill text-warning me-1"></i>Thánh Lễ:
                                     </div>
                                     <div class="text-end">
-                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime, log.IsMakeUp)
+                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime)
                                         @if (!string.IsNullOrEmpty(log.MassCorrectionStatus))
                                         {
                                             <span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size: 0.65rem;">
@@ -511,7 +511,7 @@
                                     <div class="text-end">
                                         @if (log.HasClassSession)
                                         {
-                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime, log.IsMakeUp)
+                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime)
                                             @if (!string.IsNullOrEmpty(log.ClassCorrectionStatus))
                                             {
                                                 <span class="badge bg-info-subtle text-info-emphasis border ms-1" style="font-size: 0.65rem;">
@@ -603,7 +603,7 @@
 
                                     <!-- Trạng thái Lễ -->
                                     <td>
-                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime, log.IsMakeUp)
+                                        @RenderLookupStatusBadge(log.MassStatus, log.MassCheckInTime)
                                         @if (!string.IsNullOrEmpty(log.MassCorrectionStatus))
                                         {
                                             <span class="badge bg-info-subtle text-info-emphasis border ms-1">
@@ -616,7 +616,7 @@
                                     <td>
                                         @if (log.HasClassSession)
                                         {
-                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime, log.IsMakeUp)
+                                            @RenderLookupStatusBadge(log.ClassStatus, log.ClassCheckInTime)
                                             @if (!string.IsNullOrEmpty(log.ClassCorrectionStatus))
                                             {
                                                 <span class="badge bg-info-subtle text-info-emphasis border ms-1">
@@ -983,13 +983,8 @@
 </div>
 
 @functions {
-    public static Microsoft.AspNetCore.Html.IHtmlContent RenderLookupStatusBadge(string status, string? checkInTime, bool isMakeUp)
+    public static Microsoft.AspNetCore.Html.IHtmlContent RenderLookupStatusBadge(string status, string? checkInTime)
     {
-        if (isMakeUp || status == "MAKE_UP")
-        {
-            return new Microsoft.AspNetCore.Html.HtmlString("<span class='badge bg-warning-subtle text-dark border border-warning'>⟲ Đã đi bù</span>");
-        }
-
         var timeNote = !string.IsNullOrEmpty(checkInTime) ? $" ({checkInTime})" : "";
         return status switch
         {

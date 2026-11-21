@@ -118,14 +118,14 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     var attList = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
 
-                    var massPresent = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && ((a.AttendedMass && (a.MassStatus == AttendanceStatus.Present || a.MassStatus == AttendanceStatus.LinedUp)) || a.IsMakeUp));
-                    var massLate = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && !a.IsMakeUp && a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
+                    var massPresent = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && a.AttendedMass && (a.MassStatus == AttendanceStatus.Present || a.MassStatus == AttendanceStatus.LinedUp));
+                    var massLate = attList.Count(a => a.DayOfWeek == DayOfWeek.Sunday && a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
                     var massRate = attendances.Any()
                         ? Math.Min(100.0, ((massPresent + massLate * 0.8) / totalSunMassSessions) * 100.0)
                         : 100.0;
 
-                    var classPresent = attList.Count(a => (a.ClassAttended && a.ClassStatus == AttendanceStatus.Present) || a.IsMakeUp);
-                    var classLate = attList.Count(a => !a.IsMakeUp && a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
+                    var classPresent = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present);
+                    var classLate = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
                     var classRate = attendances.Any()
                         ? Math.Min(100.0, ((classPresent + classLate * 0.8) / totalClassSessions) * 100.0)
                         : 100.0;

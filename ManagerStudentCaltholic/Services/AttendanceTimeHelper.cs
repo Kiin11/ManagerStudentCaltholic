@@ -1,4 +1,6 @@
-﻿namespace ManagerStudentCaltholic.Services
+﻿using ManagerStudentCaltholic.Models.Entities;
+
+namespace ManagerStudentCaltholic.Services
 {
     public static class AttendanceStatus
     {
@@ -39,11 +41,11 @@
                 return (true, false, AttendanceStatus.Late, time, "Đi Lễ: Trễ");
             }
 
-            // 3. Đi Học Khối Sáng (Khung giờ: 08:55 - 11:00)
+            // 3. Đi Học Giáo Lý (Chúa Nhật)
             if (dayOfWeek == DayOfWeek.Sunday)
             {
-                // Khối sáng (Khai tâm, Rước lễ): 09h00
-                if ((gradeLevel == "Khai Tâm" || gradeLevel == "Rước Lễ" || gradeLevel == "Thêm Sức") &&
+                // Khối sáng (Khai Tâm, Rước Lễ, Thêm Sức): 09h00
+                if (GradeLevel.IsMorningGrade(gradeLevel) &&
                     time >= new TimeSpan(8, 55, 0) && time <= new TimeSpan(11, 0, 0))
                 {
                     if (time < new TimeSpan(9, 30, 0))
@@ -53,8 +55,8 @@
                     return (false, true, AttendanceStatus.Late, time, "Đi học trễ");
                 }
 
-                // Khối chiều (Bao đồng): 15h00
-                if ((gradeLevel == "Bao Đồng") &&
+                // Khối chiều (Bao Đồng, Dự Bị): 15h00
+                if (GradeLevel.IsAfternoonGrade(gradeLevel) &&
                     time >= new TimeSpan(14, 30, 0) && time <= new TimeSpan(17, 10, 0))
                 {
                     if (time < new TimeSpan(15, 15, 0))

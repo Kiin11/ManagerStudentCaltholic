@@ -250,6 +250,7 @@ body.mobile-mode {
 .mobile-main-wrapper {
     padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--safe-inset-bottom) + 32px) !important;
     overflow-x: hidden;
+    overflow-x: clip;
 }
 
 /* =======================================================
@@ -376,11 +377,54 @@ body.mobile-mode .scroll-floating-controls {
 
 .mobile-att-col-left {
     border-right: 1.5px solid #cbd5e1;
-    background: rgba(239, 246, 255, 0.45);
+    background: rgba(240, 253, 244, 0.55);
 }
 
 .mobile-att-col-right {
-    background: rgba(240, 253, 244, 0.45);
+    background: rgba(239, 246, 255, 0.55);
+}
+
+/* Thanh tiêu đề cột cố định khi cuộn danh sách thẻ điểm danh trên Mobile */
+.mobile-att-sticky-header {
+    position: sticky;
+    top: calc(var(--mobile-header-height) + var(--safe-inset-top));
+    z-index: 1015;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: #ffffff;
+    border-top: 1px solid #cbd5e1;
+    border-bottom: 2px solid #cbd5e1;
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+}
+
+.mobile-att-sticky-header-single {
+    grid-template-columns: 1fr;
+}
+
+.mobile-att-sticky-col {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+
+.mobile-att-sticky-col-mass {
+    background: #f0fdf4;
+    color: #15803d;
+    border-right: 1.5px solid #cbd5e1;
+}
+
+.mobile-att-sticky-header-single .mobile-att-sticky-col-mass {
+    border-right: none;
+}
+
+.mobile-att-sticky-col-class {
+    background: #eff6ff;
+    color: #1d4ed8;
 }
 
 /* Hàng dưới Trường hợp 2 (Thứ 5 / Chỉ đi lễ): 1 ô 100% chiều ngang */

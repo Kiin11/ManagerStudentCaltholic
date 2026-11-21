@@ -17,8 +17,10 @@ namespace ManagerStudentCaltholic.Controllers
     public class AttendanceController : Controller
     {
         private readonly ParishDbContext _context;
-        private readonly ILogger<AttendanceController> _logger; 
-        private readonly IRedisAttendanceService _redisAttendance; private readonly IAttendanceDisputeService _disputeService;
+        private readonly ILogger<AttendanceController> _logger;
+        private readonly IRedisAttendanceService _redisAttendance;
+        private readonly IAttendanceDisputeService _disputeService;
+        private readonly ICacheService _cache;
 
         private long CurrentUserId =>
             long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
@@ -46,13 +48,18 @@ namespace ManagerStudentCaltholic.Controllers
 
         private string? CurrentClientIp => HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        public AttendanceController(ParishDbContext context, ILogger<AttendanceController> logger
-            , IRedisAttendanceService redisAttendance, IAttendanceDisputeService disputeService)
+        public AttendanceController(
+            ParishDbContext context,
+            ILogger<AttendanceController> logger,
+            IRedisAttendanceService redisAttendance,
+            IAttendanceDisputeService disputeService,
+            ICacheService cache)
         {
             _context = context;
             _logger = logger;
             _redisAttendance = redisAttendance;
             _disputeService = disputeService;
+            _cache = cache;
         }
 
         /// <summary>
@@ -64,7 +71,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(int? classId, DateTime? date)
         {
-            var inputDate = date ?? DateTime.Today;
+            var inputDate = date ?? DateTime.UtcNow.AddHours(7).Date;
             var targetDate = DateTime.SpecifyKind(inputDate.Date, DateTimeKind.Utc);
 
             // Lấy niên khóa đang chạy
@@ -240,18 +247,8 @@ namespace ManagerStudentCaltholic.Controllers
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             ViewBag.AcademicYearName = currentYear?.Name ?? "Chưa kích hoạt niên khóa";
 
-            // Gợi ý buổi quét phù hợp theo ngày giờ hiện tại
-            var now = DateTime.UtcNow.AddHours(7);
-            string recommendedMode = "SUNDAY_MASS";
-            if (now.DayOfWeek == DayOfWeek.Thursday)
-            {
-                recommendedMode = "THURSDAY_MASS";
-            }
-            else if (now.DayOfWeek == DayOfWeek.Sunday)
-            {
-                recommendedMode = now.TimeOfDay >= new TimeSpan(8, 30, 0) ? "CATECHISM_CLASS" : "SUNDAY_MASS";
-            }
-            ViewBag.RecommendedSessionMode = recommendedMode;
+            // Mặc định AUTO để tự động nhận diện Thánh Lễ / Giờ học Giáo lý theo đúng khung giờ quét
+            ViewBag.RecommendedSessionMode = "AUTO";
 
             return View();
         }
@@ -325,161 +322,6 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Lỗi hệ thống khi hoàn tác lượt quét QR." });
             }
         }
-
-        #region diem danh bù (TASK-408 & TASK-410)
-        /// <summary>
-        /// 1. GET: /Attendance/GetMissedDates?enrollmentId=... (Lấy danh sách các ngày vắng)
-        /// </summary>
-        /// <param name="enrollmentId"></param>
-        /// <returns></returns>
-        [HttpGet]
-        public async Task<IActionResult> GetMissedDates(long enrollmentId)
-        {
-            var enrollment = await _context.Enrollments
-        .AsNoTracking()
-        .FirstOrDefaultAsync(e => e.Id == enrollmentId);
-
-            if (enrollment == null)
-            {
-                return Json(new { success = false, message = "Không tìm thấy hồ sơ xếp lớp." });
-            }
-
-            // P2-SEC-01 FIX: Chặn xem ngày vắng của học sinh lớp khác
-            if (!await CanAccessClassAsync(enrollment.ClassRoomId))
-            {
-                return Forbid();
-            }
-
-            var missedRecords = await _context.Attendances
-                .Where(a => a.EnrollmentId == enrollmentId && !a.IsMakeUp
-                       && (a.MassStatus == AttendanceStatus.AbsentUnpermitted || a.MassStatus == AttendanceStatus.AbsentPermitted
-                           || a.ClassStatus == AttendanceStatus.AbsentUnpermitted || a.ClassStatus == AttendanceStatus.AbsentPermitted))
-                .OrderByDescending(a => a.AttendanceDate)
-                .AsNoTracking()
-                .Select(a => new MissedDateItemDto
-                {
-                    AttendanceId = a.Id,
-                    MissedDate = a.AttendanceDate,
-                    DayOfWeekName = a.AttendanceDate.ToString("dddd, dd/MM/yyyy"),
-                    MissedMass = a.MassStatus.StartsWith("ABSENT"),
-                    MissedClass = a.ClassStatus.StartsWith("ABSENT"),
-                    Reason = a.Note ?? ""
-                })
-                .ToListAsync();
-
-            return Json(new { success = true, data = missedRecords });
-        }
-
-        /// <summary>
-        /// POST: /Attendance/SubmitMakeUp (TASK-408 & TASK-410: Ghi nhận bù & Ghi Audit Log)
-        /// </summary>
-        /// <param name="dto"></param>
-        /// <returns></returns>
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SubmitMakeUp([FromBody] MakeUpAttendanceRequestDto dto)
-        {
-            if (dto == null || dto.EnrollmentId <= 0)
-            {
-                return Json(new { success = false, message = "Dữ liệu yêu cầu không hợp lệ!" });
-            }
-
-            var origDate = DateTime.SpecifyKind(dto.OriginalMissedDate.Date, DateTimeKind.Utc);
-            var makeUpDate = DateTime.SpecifyKind(dto.MakeUpDate.Date, DateTimeKind.Utc);
-
-            var enrollment = await _context.Enrollments
-                .Include(e => e.Student)
-                .Include(e => e.ClassRoom)
-                .FirstOrDefaultAsync(e => e.Id == dto.EnrollmentId);
-
-            if (enrollment == null)
-            {
-                return Json(new { success = false, message = "Không tìm thấy hồ sơ xếp lớp của thiếu nhi!" });
-            }
-
-            // P2-SEC-01 FIX: Chặn Giáo lý viên/Trưởng khối duyệt điểm danh bù cho học sinh lớp khác
-            if (!await CanAccessClassAsync(enrollment.ClassRoomId))
-            {
-                return Forbid();
-            }
-
-            var strategy = _context.Database.CreateExecutionStrategy();
-            try
-            {
-                await strategy.ExecuteAsync(async () =>
-                {
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    // Tìm bản ghi của ngày vắng ban đầu
-                    var origRecord = await _context.Attendances
-                        .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == origDate);
-
-                    var oldMassStatus = origRecord?.MassStatus ?? "NONE";
-                    var oldClassStatus = origRecord?.ClassStatus ?? "NONE";
-
-                    if (origRecord == null)
-                    {
-                        origRecord = new Attendance
-                        {
-                            EnrollmentId = dto.EnrollmentId,
-                            AttendanceDate = origDate,
-                            DayOfWeek = origDate.DayOfWeek,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        _context.Attendances.Add(origRecord);
-                    }
-
-                    // Cập nhật trạng thái ngày vắng thành đã bù
-                    origRecord.IsMakeUp = true;
-                    origRecord.OriginalMissedDate = origDate;
-                    origRecord.Note = $"[Điểm danh bù ngày {makeUpDate:dd/MM/yyyy}]: {dto.Reason}";
-
-                    if (dto.MakeUpMass)
-                    {
-                        origRecord.AttendedMass = true;
-                        origRecord.MassStatus = AttendanceStatus.Present;
-                    }
-
-                    if (dto.MakeUpClass)
-                    {
-                        origRecord.ClassAttended = true;
-                        origRecord.ClassStatus = AttendanceStatus.Present;
-                    }
-
-                    await _context.SaveChangesAsync();
-
-                    // TỰ ĐỘNG GHI AUDIT LOG VÀO BẢNG AttendanceAuditLogs (TASK-410)
-                    var auditLog = new AttendanceAuditLog
-                    {
-                        AttendanceId = origRecord.Id,
-                        ActionType = "MAKE_UP",
-                        OldValues = $"MassStatus: {oldMassStatus}, ClassStatus: {oldClassStatus}",
-                        NewValues = $"MassStatus: {origRecord.MassStatus}, ClassStatus: {origRecord.ClassStatus}, IsMakeUp: true, MakeUpDate: {makeUpDate:yyyy-MM-dd}",
-                        ModifiedBy = User.Identity?.Name ?? "GLV_IN_CHARGE",
-                        Reason = dto.Reason,
-                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.AttendanceAuditLogs.Add(auditLog);
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                });
-
-                return Json(new
-                {
-                    success = true,
-                    message = $"Đã ghi nhận điểm danh bù thành công cho em {enrollment.Student.ChristianName} {enrollment.Student.FirstName} {enrollment.Student.LastName}!"
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi khi xử lý điểm danh bù cho EnrollmentId: {Id}", dto.EnrollmentId);
-                return Json(new { success = false, message = "Lỗi hệ thống: " + ex.Message });
-            }
-        }
-
-        #endregion
 
         #region Thong ke
         /// <summary>
@@ -585,8 +427,6 @@ namespace ManagerStudentCaltholic.Controllers
                 var classAbsPermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Sunday);
                 var classAbsUnpermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday );
 
-                var makeUps = attList.Count(a => a.IsMakeUp);
-
                 // Tính % chuyên cần (Có mặt + 0.5 * Đi trễ)
                 var massRate = Math.Min(100, Math.Round(((massPresent + massLinedUp + massLate * 0.8) / (double)totalMassSessions) * 100, 1));
                 var massThuRate = distinctThuMassDates > 0
@@ -618,7 +458,6 @@ namespace ManagerStudentCaltholic.Controllers
                     ClassAbsentUnpermitted = classAbsUnpermitted,
                     ClassAttendanceRate = Math.Min(100, classRate),
 
-                    TotalMakeUpCount = makeUps,
                     // Quy chuẩn lãnh bí tích: Cả 2 tỷ lệ >= 80%
                     IsEligibleForSacrament = false // IsEligibleForSacrament = (massRate >= 80.0 && classRate >= 80.0)
                 };
@@ -694,11 +533,11 @@ namespace ManagerStudentCaltholic.Controllers
             worksheet.Cell("A1").Value = "BÁO CÁO CHUYÊN CẦN & XÉT ĐIỀU KIỆN LÃNH BÍ TÍCH";
             worksheet.Cell("A1").Style.Font.Bold = true;
             worksheet.Cell("A1").Style.Font.FontSize = 15;
-            worksheet.Range("A1:Q1").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Range("A1:P1").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) - Niên khóa: {targetClass.AcademicYear.Name} - Sĩ số: {enrollments.Count} em";
             worksheet.Cell("A2").Style.Font.Italic = true;
-            worksheet.Range("A2:Q2").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            worksheet.Range("A2:P2").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // 2. Dòng Header 1
             int hRow1 = 4;
@@ -725,11 +564,8 @@ namespace ManagerStudentCaltholic.Controllers
             worksheet.Cell(hRow1, 12).Value = $"CHUYÊN CẦN HỌC GIÁO LÝ ({totalClassSessions} buổi)";
             worksheet.Range(hRow1, 12, hRow1, 15).Merge().Style.Fill.BackgroundColor = XLColor.FromArgb(225, 238, 255);
 
-            worksheet.Cell(hRow1, 16).Value = "Số buổi bù";
+            worksheet.Cell(hRow1, 16).Value = "Xét Bí Tích";
             worksheet.Range(hRow1, 16, hRow2, 16).Merge();
-
-            worksheet.Cell(hRow1, 17).Value = "Xét Bí Tích";
-            worksheet.Range(hRow1, 17, hRow2, 17).Merge();
 
             // Dòng Header 2 (tiêu đề con)
             string[] subHeaders = { "Có mặt", "Trễ", "Vắng", "% Lễ", "Có mặt", "Trễ", "Vắng", "% Lễ", "Có mặt", "Trễ", "Vắng", "% Học" };
@@ -739,7 +575,7 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             // Format Headers
-            var headerRange = worksheet.Range(hRow1, 1, hRow2, 17);
+            var headerRange = worksheet.Range(hRow1, 1, hRow2, 16);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             headerRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
@@ -774,7 +610,6 @@ namespace ManagerStudentCaltholic.Controllers
                 var classAbsent = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentPermitted || a.ClassStatus == AttendanceStatus.AbsentUnpermitted);
                 var classRate = Math.Min(100.0, Math.Round(((classPresent + classLate * 0.8) / (double)totalClassSessions) * 100, 1));
 
-                var makeUps = attList.Count(a => a.IsMakeUp);
                 var isEligible = (sunRate >= 80.0 && classRate >= 80.0);
 
                 worksheet.Cell(currRow, 1).Value = stt++;
@@ -799,23 +634,22 @@ namespace ManagerStudentCaltholic.Controllers
                 worksheet.Cell(currRow, 14).Value = classAbsent;
                 worksheet.Cell(currRow, 15).Value = $"{classRate}%";
 
-                // Khác
-                worksheet.Cell(currRow, 16).Value = makeUps;
-                worksheet.Cell(currRow, 17).Value = isEligible ? "ĐỦ ĐIỀU KIỆN" : "CHƯA ĐỦ ĐK";
+                // Xét Bí Tích
+                worksheet.Cell(currRow, 16).Value = isEligible ? "ĐỦ ĐIỀU KIỆN" : "CHƯA ĐỦ ĐK";
 
                 // Style màu cho cột kết quả
                 if (isEligible)
                 {
-                    worksheet.Cell(currRow, 17).Style.Font.FontColor = XLColor.Green;
-                    worksheet.Cell(currRow, 17).Style.Font.Bold = true;
+                    worksheet.Cell(currRow, 16).Style.Font.FontColor = XLColor.Green;
+                    worksheet.Cell(currRow, 16).Style.Font.Bold = true;
                 }
                 else
                 {
-                    worksheet.Cell(currRow, 17).Style.Font.FontColor = XLColor.Red;
+                    worksheet.Cell(currRow, 16).Style.Font.FontColor = XLColor.Red;
                 }
 
                 // Căn lề
-                for (int c = 1; c <= 17; c++)
+                for (int c = 1; c <= 16; c++)
                 {
                     worksheet.Cell(currRow, c).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                     if (c != 3)
@@ -906,11 +740,9 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         StudentId = student.Id,
                         StudentName = studentFullName,
-                        ActionType = attendance.IsMakeUp ? "MakeupApproval" : "CheckIn",
-                        ActionLabel = GetAuditActionLabel(attendance.IsMakeUp ? "MakeupApproval" : "CheckIn"),
-                        Description = attendance.IsMakeUp
-                            ? "Duyệt điểm danh bù / Bổ sung chuyên cần"
-                            : (attendance.AttendedMass ? "Quét mã QR điểm danh đầu giờ Lễ" : "Khởi tạo trạng thái điểm danh"),
+                        ActionType = "CheckIn",
+                        ActionLabel = GetAuditActionLabel("CheckIn"),
+                        Description = attendance.AttendedMass ? "Quét mã QR điểm danh đầu giờ Lễ" : "Khởi tạo trạng thái điểm danh",
                         NewValues = RedisAttendanceService.FormatStateSnapshot(
                             attendance.AttendedMass, attendance.MassStatus,
                             attendance.ClassAttended, attendance.ClassStatus,
@@ -1091,7 +923,6 @@ namespace ManagerStudentCaltholic.Controllers
                             statusDto.HasClassRecord = true;
                             statusDto.ClassStatus = att.ClassStatus;
                             statusDto.ClassCheckInTime = att.ClassCheckInTime;
-                            statusDto.IsClassMakeUp = att.IsMakeUp;
 
                             statusDto.HasMassSunRecord = true;
                             statusDto.MassSunStatus = att.MassStatus;
@@ -1420,11 +1251,11 @@ namespace ManagerStudentCaltholic.Controllers
                     var att = attList.FirstOrDefault(a => a.AttendanceDate.Date == sess.Date.Date);
 
                     // Xử lý cột Lễ (T5 hoặc CN)
-                    string mCode = GetStatusCode(att?.MassStatus, att?.IsMakeUp ?? false);
+                    string mCode = GetStatusCode(att?.MassStatus);
                     worksheet.Cell(currRow, dataCol).Value = mCode;
                     FormatStatusCell(worksheet.Cell(currRow, dataCol), mCode);
 
-                    if (mCode == "✔") mPresent++;
+                    if (mCode == "✔" || mCode == "XH") mPresent++;
                     else if (mCode == "T") { mPresent++; mLate++; }
                     else mAbsent++;
 
@@ -1433,7 +1264,7 @@ namespace ManagerStudentCaltholic.Controllers
                     // Xử lý cột Học (Chỉ CN)
                     if (sess.DayOfWeek == DayOfWeek.Sunday)
                     {
-                        string cCode = GetStatusCode(att?.ClassStatus, att?.IsMakeUp ?? false);
+                        string cCode = GetStatusCode(att?.ClassStatus);
                         worksheet.Cell(currRow, dataCol).Value = cCode;
                         FormatStatusCell(worksheet.Cell(currRow, dataCol), cCode);
 
@@ -1476,9 +1307,8 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         // Hàm chuyển trạng thái thành ký hiệu viết tắt
-        private static string GetStatusCode(string? status, bool isMakeUp)
+        private static string GetStatusCode(string? status)
         {
-            if (isMakeUp) return "Bù";
             return status switch
             {
                 "LINED_UP" => "XH",
@@ -1497,8 +1327,8 @@ namespace ManagerStudentCaltholic.Controllers
                 case "XH":
                     cell.Style.Font.FontColor = XLColor.FromArgb(126, 34, 206);
                     cell.Style.Font.Bold = true;
-                        break;
-                    case "✔":
+                    break;
+                case "✔":
                     cell.Style.Font.FontColor = XLColor.FromArgb(21, 128, 61);
                     cell.Style.Font.Bold = true;
                     break;
@@ -1512,9 +1342,6 @@ namespace ManagerStudentCaltholic.Controllers
                 case "K":
                     cell.Style.Font.FontColor = XLColor.FromArgb(185, 28, 28);
                     cell.Style.Font.Bold = true;
-                    break;
-                case "Bù":
-                    cell.Style.Font.FontColor = XLColor.FromArgb(194, 65, 12);
                     break;
             }
         }
@@ -1696,6 +1523,8 @@ namespace ManagerStudentCaltholic.Controllers
 
             var syncedClientIds = new List<string>();
             int upsertedCount = 0;
+            var touchedPartitions = new HashSet<(int ClassId, DateTime DateUtc)>();
+            var touchedStudentIds = new HashSet<long>();
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -1703,6 +1532,11 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 await strategy.ExecuteAsync(async () =>
                 {
+                    syncedClientIds.Clear();
+                    upsertedCount = 0;
+                    touchedPartitions.Clear();
+                    touchedStudentIds.Clear();
+
                     await using var transaction = await _context.Database.BeginTransactionAsync();
 
                     // Sắp xếp theo thời gian thực tế phát sinh ở Client từ sớm đến muộn
@@ -1899,6 +1733,8 @@ namespace ManagerStudentCaltholic.Controllers
 
                         syncedClientIds.Add(item.ClientRecordId);
                         upsertedCount++;
+                        touchedPartitions.Add((targetEnrollment.ClassRoomId, attDate));
+                        touchedStudentIds.Add(targetEnrollment.StudentId);
                     }
 
                     await _context.SaveChangesAsync();
@@ -1935,6 +1771,16 @@ namespace ManagerStudentCaltholic.Controllers
 
                     await transaction.CommitAsync();
                 });
+
+                foreach (var (clsId, dtUtc) in touchedPartitions)
+                {
+                    await _cache.RemoveAsync(RedisAttendanceKeys.ClassSheet(clsId, dtUtc));
+                    await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(clsId, dtUtc));
+                }
+                foreach (var studentId in touchedStudentIds)
+                {
+                    await _cache.RemoveAsync($"staff_lookup:student_360:{studentId}");
+                }
 
                 _logger.LogInformation("AUDIT OFFLINE_SYNC: User={User} synced {Count} offline attendance records.",
                     User.Identity?.Name, upsertedCount);

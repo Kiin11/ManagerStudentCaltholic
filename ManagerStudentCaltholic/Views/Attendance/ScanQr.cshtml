@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = "Quét Mã QR Điểm Danh";
     bool isMobile = Context.Request.IsMobileDevice();
-    string recommendedMode = ViewBag.RecommendedSessionMode as string ?? "SUNDAY_MASS";
+    string recommendedMode = ViewBag.RecommendedSessionMode as string ?? "AUTO";
 }
 
 @Html.AntiForgeryToken()
@@ -41,6 +41,9 @@
 
                     <!-- Hàng 2: TASK-P5-04.2: Thanh Chuyển đổi Nhanh Buổi Quét (Session Quick-Switcher) -->
                     <div class="session-quick-switcher" role="group" aria-label="Chọn buổi quét">
+                        <button type="button" class="btn-session-mode @(recommendedMode == "AUTO" ? "active" : "")" data-mode="AUTO" onclick="setSessionMode('AUTO')">
+                            <i class="bi bi-magic me-1 text-info"></i><span>Tự Động</span>
+                        </button>
                         <button type="button" class="btn-session-mode @(recommendedMode == "SUNDAY_MASS" ? "active" : "")" data-mode="SUNDAY_MASS" onclick="setSessionMode('SUNDAY_MASS')">
                             <i class="bi bi-sun-fill me-1 text-warning"></i><span>Lễ Chúa Nhật</span>
                         </button>

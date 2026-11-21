@@ -50,6 +50,11 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public bool ClassAttended { get; set; }
         public string ClassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
 
+        /// <summary>
+        /// Phạm vi trường cần cập nhật tức thì ("CLASS", "MASS", "NOTE", hoặc "ALL") để tránh ghi đè chéo cột
+        /// </summary>
+        public string? UpdateTarget { get; set; }
+
         [StringLength(500)]
         public string? Note { get; set; }
 
@@ -173,37 +178,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string QrBase64 { get; set; } = string.Empty;
     }
 
-    #region Diem danh bù và thống kê chuyên cần
-    public class MakeUpAttendanceRequestDto
-    {
-        [Required]
-        public long EnrollmentId { get; set; }
-
-        [Required]
-        public DateTime OriginalMissedDate { get; set; } // Ngày thiếu nhi đã vắng trước đó
-
-        [Required]
-        public DateTime MakeUpDate { get; set; } // Ngày thực hiện trả bài/đi lễ bù
-
-        public bool MakeUpMass { get; set; }     // Bù Thánh Lễ
-        public bool MakeUpClass { get; set; }    // Bù Giờ Học Giáo Lý
-
-        [Required(ErrorMessage = "Vui lòng nhập lý do/hình thức bù")]
-        [StringLength(255)]
-        public string Reason { get; set; } = string.Empty; // VD: "Đi lễ bù sáng thứ 7", "Đã trả bài kinh cho GLV"
-    }
-
-    // DTO xem lịch sử các ngày vắng chưa bù của học sinh
-    public class MissedDateItemDto
-    {
-        public long AttendanceId { get; set; }
-        public DateTime MissedDate { get; set; }
-        public string DayOfWeekName { get; set; } = string.Empty;
-        public bool MissedMass { get; set; }
-        public bool MissedClass { get; set; }
-        public string Reason { get; set; } = string.Empty;
-    }
-
+    #region Thong ke chuyên cần
     // ViewModel cho màn hình Thống kê chuyên cần (TASK-411)
     public class AttendanceStatisticsViewModel
     {
@@ -245,7 +220,6 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ClassAbsentUnpermitted { get; set; }
         public double ClassAttendanceRate { get; set; } // Tỷ lệ %
 
-        public int TotalMakeUpCount { get; set; }
         public bool IsEligibleForSacrament { get; set; } // Đủ điều kiện lãnh Bí tích (>= 80% cả Lễ và Học)
     }
     #endregion
@@ -269,19 +243,16 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public bool HasMassThuRecord { get; set; }
         public string MassThuStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
         public TimeSpan? MassThuCheckInTime { get; set; }
-        public bool IsMassThuMakeUp { get; set; }
 
-        // Trạng thái Lễ (T5)
+        // Trạng thái Lễ (CN)
         public bool HasMassSunRecord { get; set; }
         public string MassSunStatus { get; set; } = "ABSENT_UNPERMITTED"; // PRESENT, LATE, ABSENT_PERMITTED, ABSENT_UNPERMITTED
         public TimeSpan? MassSunCheckInTime { get; set; }
-        public bool IsMassSunMakeUp { get; set; }
 
         // Trạng thái Học (Chỉ CN)
         public bool HasClassRecord { get; set; }
         public string ClassStatus { get; set; } = "ABSENT_UNPERMITTED";
         public TimeSpan? ClassCheckInTime { get; set; }
-        public bool IsClassMakeUp { get; set; }
     }
 
     public class StudentMonthlyAttendanceRow

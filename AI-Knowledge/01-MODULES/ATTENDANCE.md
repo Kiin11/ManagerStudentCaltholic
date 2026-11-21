@@ -20,9 +20,6 @@
 * Phụ huynh báo sai sót điểm danh (Dispute) và GLV/BĐH duyệt.
 
 
-* Điểm danh bù (Makeup attendance).
-
-
 * Hangfire Background Jobs nạp bộ đệm (Pre-warm) và đồng bộ DB (Sync-back).
 
 
@@ -98,7 +95,7 @@
 
 
 * **DTOs / ViewModels:**
-* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `AttendanceSingleUpdateDto`, `QrScanRequestDto`, `QrScanResponseDto`, `UndoScanRequestDto`, `OfflineStudentCacheItemDto`, `ClassAttendanceSheetViewModel`, v.v.).
+* `D:\github\...\Models\ViewModels\AttendanceViewModels.cs` (`AttendanceBatchSubmitDto`, `AttendanceSingleUpdateDto`, `QrScanRequestDto`, `QrScanResponseDto`, `UndoScanRequestDto`, `OfflineStudentCacheItemDto`, `ClassAttendanceSheetViewModel`, v.v.; đã bỏ `MakeUpAttendanceRequestDto` và `MissedDateItemDto`).
 
 
 * `D:\github\...\Models\DTOs\HighThroughputAttendanceModels.cs` (`RedisClassAttendancePayload`, `RedisQrStudentLookupItem`).
@@ -159,9 +156,9 @@
 ### Flow 1C: Quick Single Row Update (Real-time Write-Through)
 
 * **Entry point:** `AttendanceController.QuickUpdateSingle` (`POST /Attendance/QuickUpdateSingle`).
-* **Input:** `AttendanceSingleUpdateDto` (`ClassId`, `AttendanceDate`, `EnrollmentId`, `StudentCode`, `AttendedMass`, `MassStatus`, `ClassAttended`, `ClassStatus`, `Note`).
+* **Input:** `AttendanceSingleUpdateDto` (`ClassId`, `AttendanceDate`, `EnrollmentId`, `StudentCode`, `AttendedMass`, `MassStatus`, `ClassAttended`, `ClassStatus`, `UpdateTarget`, `Note`).
 * **Validation:** Kiểm tra `EnrollmentId > 0`, `ClassId > 0`, quyền `CanAccessClassAsync(request.ClassId)`, và xác nhận học sinh thuộc lớp trong `GetOrLoadClassSheetAsync`.
-* **Business processing & Database access:** Gọi `RedisAttendanceService.QuickUpdateSingleAttendanceAsync` chuẩn hóa trạng thái (`NormalizeAttendanceStatus`), ghi **Write-Through tức thì** bản ghi của học sinh xuống bảng PostgreSQL `Attendances` trong transaction (`CreateExecutionStrategy()` + `BeginTransactionAsync()`), cập nhật Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), và xóa cache `ClassSessionInfo` cùng cache `staff_lookup:student_360:{studentId}`. Trên UI (`Views/Attendance/Index.cshtml`), thao tác bật/tắt `.chk-class`/`.chk-mass`, đổi `.select-class-status`/`.select-mass-status`, hoặc sửa `.input-note` tự động đồng bộ trạng thái nút gạt/dropdown kế bên và gọi API này (nếu mất mạng sẽ fallback lưu vào IndexedDB qua `ParishOfflineEngine.saveBatchAttendanceOffline`).
+* **Business processing & Database access:** Gọi `RedisAttendanceService.QuickUpdateSingleAttendanceAsync` phân tách phạm vi cập nhật theo `UpdateTarget` (`CLASS`, `MASS`, `NOTE` hoặc `ALL`): bảo toàn nguyên trạng dữ liệu hiện có trong DB/Redis đối với các cột không thuộc `UpdateTarget`, chuẩn hóa trạng thái (`NormalizeAttendanceStatus`), ghi **Write-Through tức thì** bản ghi của học sinh xuống bảng PostgreSQL `Attendances` trong transaction (`CreateExecutionStrategy()` + `BeginTransactionAsync()`), cập nhật Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), và xóa cache `ClassSessionInfo` cùng cache `staff_lookup:student_360:{studentId}`. Trên UI (`Views/Attendance/Index.cshtml`), thứ tự cột thống nhất **Thánh Lễ (trái) | Giờ Học Giáo Lý (phải)** với thanh tiêu đề cột cố định (sticky header) trên cả Desktop và Mobile; thao tác bật/tắt `.chk-class`/`.chk-mass`, đổi `.select-class-status`/`.select-mass-status`, hoặc sửa `.input-note` tự động gửi kèm `updateTarget` tương ứng và chỉ cập nhật lại DOM đúng cột vừa thao tác (nếu mất mạng sẽ fallback lưu vào IndexedDB qua `ParishOfflineEngine.saveBatchAttendanceOffline`).
 * **Output:** JSON `{ success, message, data }`.
 
 
@@ -173,7 +170,7 @@
   * `FlushSingleClassPayloadToDbAsync` (`BATCH_SAVE` từ `SaveBatch` và `QR_SCAN` từ `ScanCheckIn`).
   * `UndoScanCheckInAsync` (`QR_UNDO`).
   * `AttendanceController.SyncOfflineQueue` (`OFFLINE_QR_SYNC`, `OFFLINE_BATCH_SYNC`).
-  * `AttendanceController.SubmitMakeUp` (`MAKE_UP`), `AttendanceDisputeService.ReviewDisputeByTeacherAsync` (`DISPUTE_APPROVED`), `AbsenceController.Review` (`EXCUSE_APPROVED`), và `AutoMarkAbsentUncheckedStudentsAsync` (`AUTO_ABSENT`).
+  * `AttendanceDisputeService.ReviewDisputeByTeacherAsync` (`DISPUTE_APPROVED`), `AbsenceController.Review` (`EXCUSE_APPROVED`), và `AutoMarkAbsentUncheckedStudentsAsync` (`AUTO_ABSENT`).
 * **Thông tin lưu vết:** `AttendanceId`, `ActionType`, `OldValues` (trạng thái Lễ/Học/Ghi chú trước sửa), `NewValues` (sau sửa), `ModifiedBy`, `Reason`, `IpAddress`, `CreatedAt`.
 
 
@@ -200,7 +197,7 @@
 
 
 
-* **Database access:** Mở `BeginTransactionAsync`, Upsert dữ liệu vào bảng `Attendances`.
+* **Database access:** Mở `BeginTransactionAsync`, Upsert dữ liệu vào bảng `Attendances`, sau đó xóa cache Redis (`ClassSheet`, `ClassSessionInfo`) và `staff_lookup:student_360:{studentId}` cho các lớp/ngày vừa đồng bộ (tương tự `AbsenceController.Review` xóa cache Redis khi duyệt đơn xin phép).
 
 
 * **Output:** JSON báo cáo số lượng bản ghi đã đồng bộ (`syncedCount`).
@@ -245,8 +242,9 @@
 
 * *Lễ Thứ Năm:* 17:30 - 19:30 (Mặc định Present).
 * *Lễ Chúa Nhật:* 06:20 - 08:20 (< 06:35: Lined Up / Xếp hàng; < 07:00: Present / Đúng giờ; > 07:00: Late / Trễ).
-* *Học Khối Sáng:* 08:55 - 11:00 (< 09:30: Present; > 09:30: Late).
-* *Học Khối Chiều:* 14:30 - 17:10 (< 15:15: Present; > 15:15: Late).
+* *Học Khối Sáng (`Khai Tâm`, `Rước Lễ`, `Thêm Sức` - `GradeLevel.IsMorningGrade`):* 08:55 - 11:00 (< 09:30: Present; > 09:30: Late).
+* *Học Khối Chiều (`Bao Đồng`, `Dự Bị` - `GradeLevel.IsAfternoonGrade`):* 14:30 - 17:10 (< 15:15: Present; > 15:15: Late).
+* *Chế độ quét mặc định (`/Attendance/ScanQr`):* Khởi tạo `RecommendedSessionMode = "AUTO"` để tự động phân biệt Thánh Lễ và Giờ Học Giáo Lý theo khung giờ quét.
 
 
 * **Quy tắc tính chuyên cần:**
@@ -306,7 +304,7 @@
 * **Memory Overhead khi Xuất Excel:** Trong `AttendanceController.ExportStatisticsExcel`, hệ thống query toàn bộ Enrollments và Attendances của một lớp vào bộ nhớ qua `.ToListAsync()` trước khi xử lý logic tính toán. Nếu dữ liệu điểm danh của cả năm quá lớn, có nguy cơ gây áp lực lên RAM (Mặc dù đã dùng `.AsNoTracking()`).
 
 
-* **Đồng bộ Write-Through & Dự phòng Hangfire:** Cả hai luồng `ScanCheckIn` và `SaveBatch` (`AttendanceController.cs:147-151`, comment `P2-LOG-16 FIX`) đều thực hiện ghi **Write-Through trực tiếp** xuống PostgreSQL qua `SyncDirtyAttendancesToDatabaseAsync` ngay trong cùng HTTP request. Job định kỳ 10 phút của Hangfire đóng vai trò **cơ chế dự phòng (fallback/retry)** cho các phân vùng còn `IsDirty = true` nếu DB gặp sự cố tạm thời. Với kịch bản mất mạng cục bộ tại thiết bị quét, dữ liệu được lưu an toàn trong IndexedDB (`offline-attendance.js`) và đồng bộ lên qua `SyncOfflineQueue`.
+* **Đồng bộ Write-Through & Dự phòng Hangfire:** Cả hai luồng `ScanCheckIn` và `SaveBatch` (`AttendanceController.cs:147-151`, comment `P2-LOG-16 FIX`) đều thực hiện ghi **Write-Through trực tiếp** xuống PostgreSQL qua `SyncDirtyAttendancesToDatabaseAsync` ngay trong cùng HTTP request. Job định kỳ 2 phút (`*/2 * * * *`) của Hangfire đóng vai trò **cơ chế dự phòng (fallback/retry)** cho các phân vùng còn `IsDirty = true` nếu DB gặp sự cố tạm thời. Với kịch bản mất mạng cục bộ tại thiết bị quét, dữ liệu được lưu an toàn trong IndexedDB (`offline-attendance.js`) và đồng bộ lên qua `SyncOfflineQueue`.
 
 
 * **Dynamic Policy/Reflection:** Không có dynamic reflection, mọi policy role được set cứng.
@@ -344,7 +342,6 @@
 | **Offline Sync** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance` | `Index.cshtml` | `Attendances` |
 | **Absence Mgt** | `AbsenceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `AbsenceRequest` | `Manage.cshtml` | `AbsenceRequests` |
 | **Dispute Review** | `AttendanceController` | `AttendanceDisputeService` | `NOT_FOUND` | `AttendanceDisputeRequest` | `Index.cshtml` (Modal) | `AttendanceDisputeRequests` |
-| **Makeup Check-in** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance`, `AttendanceAuditLog` | `Index.cshtml` (Modal) | `Attendances`, `AttendanceAuditLogs` |
 | **Statistics** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance` | `Statistics.cshtml` | `Attendances` |
 | **Monthly Summary** | `AttendanceController` | `NOT_FOUND` (Logic trong Controller) | `NOT_FOUND` | `Attendance` | `MonthlySummary.cshtml` | `Attendances` |
 | **Class Rules** | `AttendanceController` | `NOT_FOUND` | `NOT_FOUND` | `AttendanceRuleConfig` | `Index.cshtml` (Modal) | `AttendanceRuleConfigs` |

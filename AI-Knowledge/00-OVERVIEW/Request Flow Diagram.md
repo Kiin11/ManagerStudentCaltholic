@@ -26,7 +26,7 @@ sequenceDiagram
     R_Svc->>Redis: Set IsDirty = false
     Ctrl-->>User: JSON Response (Hiển thị kết quả & phát âm thanh)
 
-    Note over R_Svc, DB: Luồng chạy nền dự phòng (Hangfire mỗi 10 phút cho phân vùng còn IsDirty)
+    Note over R_Svc, DB: Luồng chạy nền dự phòng (Hangfire mỗi 2 phút cho phân vùng còn IsDirty)
     Hangfire->>R_Svc: Trigger SyncDirtyAttendancesToDatabaseAsync()
     R_Svc->>Redis: Quét các ClassId có trạng thái IsDirty
     Redis-->>R_Svc: Dữ liệu JSON sổ điểm danh

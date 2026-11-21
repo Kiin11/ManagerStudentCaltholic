@@ -1,5 +1,7 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Extensions;
+using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
@@ -16,10 +18,12 @@ namespace ManagerStudentCaltholic.Controllers
     public class AbsenceController : Controller
     {
         private readonly ParishDbContext _context;
+        private readonly ICacheService _cache;
 
-        public AbsenceController(ParishDbContext context)
+        public AbsenceController(ParishDbContext context, ICacheService cache)
         {
             _context = context;
+            _cache = cache;
         }
 
         /// <summary>
@@ -222,6 +226,15 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            if (dto.IsApproved)
+            {
+                var attDateUtc = DateTime.SpecifyKind(req.AbsenceDate.Date, DateTimeKind.Utc);
+                await _cache.RemoveAsync(RedisAttendanceKeys.ClassSheet(req.Enrollment.ClassRoomId, attDateUtc));
+                await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(req.Enrollment.ClassRoomId, attDateUtc));
+                await _cache.RemoveAsync($"staff_lookup:student_360:{req.Enrollment.StudentId}");
+            }
+
             return Json(new { success = true, message = dto.IsApproved ? "Đã duyệt đơn và ghi nhận vắng có phép!" : "Đã từ chối đơn." });
         }
 

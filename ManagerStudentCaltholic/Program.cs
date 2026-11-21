@@ -17,7 +17,7 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// TASK-706: Cconfig limit payload v‡ timeout in Kestrel layer
+// TASK-706: Cconfig limit payload v√† timeout in Kestrel layer
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
     options.Limits.MaxRequestBodySize = 20 * 1024 * 1024; // 20 MB
@@ -160,11 +160,11 @@ RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     "30 16 * * 4", // 16:30 Thursday Afternoon
     new RecurringJobOptions { TimeZone = vnTimeZone });
 
-// TASK-P3-12.4 (Job 3): Fallback safety-net job syncing any remaining dirty Redis attendance partitions to PostgreSQL every 10 minutes (primary Write-Through runs immediately in ScanCheckIn/SaveBatch)
+// TASK-P3-12.4 (Job 3): Fallback safety-net job syncing any remaining dirty Redis attendance partitions to PostgreSQL every 2 minutes (primary Write-Through runs immediately in ScanCheckIn/QuickUpdateSingle/SaveBatch)
 RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     "syncback-redis-attendance-to-db",
     service => service.SyncDirtyAttendancesToDatabaseAsync(null),
-    "*/10 * * * *", // Every 10 minutes
+    "*/2 * * * *", // Every 2 minutes
     new RecurringJobOptions { TimeZone = vnTimeZone });
 
 // P2-LOG-17 (Job 4): Automatically mark absent students to DB at 20:30 every Thursday (for Thursday Mass)

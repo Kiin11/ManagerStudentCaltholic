@@ -205,6 +205,15 @@ const ParishOfflineEngine = (function () {
         }
     }
 
+    function isAfternoonGrade(gradeLevel) {
+        const normalized = (gradeLevel || '').trim().toUpperCase();
+        return normalized === 'BAO ĐỒNG' ||
+            normalized === 'BAO DONG' ||
+            normalized === 'DỰ BỊ' ||
+            normalized === 'DU BI' ||
+            normalized === 'DU_BI';
+    }
+
     // 6. Đánh giá khung giờ điểm danh QR phía Client (Đồng bộ với Backend & hỗ trợ SessionMode)
     function evaluateOfflineCheckInTime(scanDate, gradeLevel, sessionMode = 'AUTO') {
         const day = scanDate.getDay(); // 0: Sunday, 4: Thursday
@@ -239,7 +248,7 @@ const ParishOfflineEngine = (function () {
         }
 
         if (mode === 'CATECHISM_CLASS') {
-            const isMorningGrade = gradeLevel !== 'Bao Đồng';
+            const isMorningGrade = !isAfternoonGrade(gradeLevel);
             const isLate = isMorningGrade ? (totalMinutes >= 9 * 60 + 30) : (totalMinutes >= 15 * 60 + 15);
             return {
                 isMass: false,
@@ -288,8 +297,8 @@ const ParishOfflineEngine = (function () {
 
         // 3. Giờ học Giáo lý Chúa Nhật
         if (day === 0) {
-            const isMorningGrade = gradeLevel === 'Khai Tâm' || gradeLevel === 'Rước Lễ' || gradeLevel === 'Thêm Sức';
-            if (isMorningGrade && totalMinutes >= 8 * 60 + 55 && totalMinutes <= 11 * 60) {
+            const isAfternoon = isAfternoonGrade(gradeLevel);
+            if (!isAfternoon && totalMinutes >= 8 * 60 + 55 && totalMinutes <= 11 * 60) {
                 return {
                     isMass: false,
                     isClass: true,
@@ -299,7 +308,7 @@ const ParishOfflineEngine = (function () {
                 };
             }
 
-            if (gradeLevel === 'Bao Đồng' && totalMinutes >= 14 * 60 + 30 && totalMinutes <= 17 * 60 + 10) {
+            if (isAfternoon && totalMinutes >= 14 * 60 + 30 && totalMinutes <= 17 * 60 + 10) {
                 return {
                     isMass: false,
                     isClass: true,
@@ -329,7 +338,7 @@ const ParishOfflineEngine = (function () {
             return {
                 success: false,
                 studentCode: cleanCode,
-                message: `Không tìm thấy mã '${cleanCode}' trong bộ nhớ đệm Offline! Hãy bấm "Tải DS Offline" khi có mạng.`
+                message: `Không tìm thấy mã '${cleanCode}' trong bộ nhớ đệm Offline! Hãy mở cổng Quét QR hoặc Sổ Điểm Danh khi có mạng để thiết bị tự động đồng bộ danh sách.`
             };
         }
 

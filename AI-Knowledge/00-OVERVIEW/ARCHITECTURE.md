@@ -25,7 +25,7 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 - **Đặc điểm:** Sử dụng **Hangfire** (PostgreSql Storage) để xử lý các tác vụ nền không đồng bộ (Asynchronous processing).
 - *Bằng chứng:* `BackgroundExportJobService.cs`, `Program.cs` (đăng ký `RecurringJob.AddOrUpdate`).
   - Xuất báo cáo Excel (`GenerateClassExcelReportJobAsync`).
-  - Đồng bộ điểm danh Write-Through trực tiếp từ `ScanCheckIn` / `SaveBatch` xuống Database trong cùng request, kết hợp Hangfire job dự phòng mỗi 10 phút.
+  - Đồng bộ điểm danh Write-Through trực tiếp từ `ScanCheckIn` / `SaveBatch` xuống Database trong cùng request, kết hợp Hangfire job dự phòng mỗi 2 phút.
   - Tự động đánh vắng học sinh cuối ngày.
 
 ## 2. Request Flow (Luồng xử lý dữ liệu)
@@ -40,7 +40,7 @@ Dự án áp dụng mô hình **Monolithic MVC Architecture** kết hợp với 
 *(Bằng chứng: `AttendanceController.cs`, `RedisAttendanceService.cs`, `AttendanceViewModels.cs`, `ScanQr.cshtml`, `offline-attendance.js`)*
 
 ### Flow 3: Luồng Đồng bộ Dữ liệu Nền (Xác nhận từ source)
-**Hangfire Worker** (cơ chế dự phòng định kỳ mỗi 10 phút nếu DB có lỗi tạm thời) -> **RedisAttendanceService.SyncDirtyAttendancesToDatabaseAsync()** -> Lấy các phân vùng còn cờ `IsDirty = true` từ **Redis** -> Sử dụng **IExecutionStrategy & Transaction** -> Lưu hàng loạt xuống **PostgreSQL Database**.
+**Hangfire Worker** (cơ chế dự phòng định kỳ mỗi 2 phút nếu DB có lỗi tạm thời) -> **RedisAttendanceService.SyncDirtyAttendancesToDatabaseAsync()** -> Lấy các phân vùng còn cờ `IsDirty = true` từ **Redis** -> Sử dụng **IExecutionStrategy & Transaction** -> Lưu hàng loạt xuống **PostgreSQL Database**.
 *(Bằng chứng: `Program.cs`, `RedisAttendanceService.cs`)*
 
 ### Flow 4: Luồng Tra cứu Tức thời 360 Độ Thiếu nhi Nội bộ tại Trang chủ (`FEAT-P5-01`)

@@ -11,7 +11,7 @@ Dựa trên việc kiểm tra mã nguồn, hệ thống **ManagerStudentCaltholi
 ## 2. Hệ thống Background Jobs
 - **Hangfire:** Quản lý và thực thi các tác vụ nền định kỳ (Recurring Jobs) và hàng đợi (Enqueued Jobs).
   - *Storage:* Sử dụng `Hangfire.PostgreSql` gắn với Database PostgreSQL mặc định.
-  - *Sử dụng:* Job dự phòng đồng bộ Redis còn `IsDirty` về DB (mỗi 10 phút, bổ trợ cho luồng Write-Through trực tiếp ở `ScanCheckIn`/`SaveBatch`), chốt sổ đánh vắng cuối ngày (Thứ 5 & Chúa Nhật), xuất file Excel ngầm.
+  - *Sử dụng:* Job dự phòng đồng bộ Redis còn `IsDirty` về DB (mỗi 2 phút, bổ trợ cho luồng Write-Through trực tiếp ở `ScanCheckIn`/`SaveBatch`), chốt sổ đánh vắng cuối ngày (Thứ 5 & Chúa Nhật), xuất file Excel ngầm.
 
 ## 3. Web Client Side Integrations
 - **Html5Qrcode:** Thư viện Javascript được tải từ Client-side (Local file trong `~/lib/html5-qrcode/`) để mở Camera quét thẻ QR trực tiếp trên trình duyệt Web/Mobile (kèm điều khiển Torch/Flip/Zoom tại `Views/Attendance/ScanQr.cshtml`).

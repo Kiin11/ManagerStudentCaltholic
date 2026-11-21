@@ -182,7 +182,7 @@ namespace ManagerStudentCaltholic.Controllers
                 // 5.1. Thánh Lễ Chúa Nhật
                 var sunRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Sunday).ToList();
                 totalSunMass = sunRecords.Count;
-                attendedSunMass = sunRecords.Count(a => a.AttendedMass || a.IsMakeUp);
+                attendedSunMass = sunRecords.Count(a => a.AttendedMass);
                 sunLinedUp = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp);
                 sunLate = sunRecords.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
                 sunPresent = Math.Max(0, attendedSunMass - sunLinedUp - sunLate);
@@ -191,12 +191,12 @@ namespace ManagerStudentCaltholic.Controllers
                 // 5.2. Thánh Lễ Thứ Năm
                 var thuRecords = attendances.Where(a => a.DayOfWeek == DayOfWeek.Thursday).ToList();
                 totalThuMass = thuRecords.Count;
-                attendedThuMass = thuRecords.Count(a => a.AttendedMass || a.IsMakeUp);
+                attendedThuMass = thuRecords.Count(a => a.AttendedMass);
                 thuAbsent = Math.Max(0, totalThuMass - attendedThuMass);
 
                 // 5.3. Giờ Học Giáo Lý (Chúa Nhật)
                 totalClass = sunRecords.Count;
-                attendedClass = sunRecords.Count(a => a.ClassAttended || a.IsMakeUp);
+                attendedClass = sunRecords.Count(a => a.ClassAttended);
                 classLate = sunRecords.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
                 classPresent = Math.Max(0, attendedClass - classLate);
                 classAbsent = Math.Max(0, totalClass - attendedClass);
@@ -221,14 +221,13 @@ namespace ManagerStudentCaltholic.Controllers
                             ? "Chúa Nhật"
                             : (att.DayOfWeek == DayOfWeek.Thursday ? "Thứ Năm" : GetVnDayShort(att.DayOfWeek)),
                         IsCampaignDay = false,
-                        AttendedMass = att.AttendedMass || att.IsMakeUp,
-                        MassStatus = att.IsMakeUp ? "MAKE_UP" : att.MassStatus,
+                        AttendedMass = att.AttendedMass,
+                        MassStatus = att.MassStatus,
                         MassCheckInTime = att.MassCheckInTime.HasValue ? att.MassCheckInTime.Value.ToString(@"hh\:mm") : null,
                         HasClassSession = att.DayOfWeek == DayOfWeek.Sunday,
-                        AttendedClass = att.ClassAttended || att.IsMakeUp,
-                        ClassStatus = att.IsMakeUp ? "MAKE_UP" : att.ClassStatus,
+                        AttendedClass = att.ClassAttended,
+                        ClassStatus = att.ClassStatus,
                         ClassCheckInTime = att.ClassCheckInTime.HasValue ? att.ClassCheckInTime.Value.ToString(@"hh\:mm") : null,
-                        IsMakeUp = att.IsMakeUp,
                         Note = att.Note,
                         MassCorrectionStatus = massDispute?.Status,
                         ClassCorrectionStatus = classDispute?.Status,

@@ -41,7 +41,7 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto);
 
         /// <summary>
-        /// TASK-P3-12.4 / P2-LOG-16: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh từ Redis về PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng mỗi 10 phút qua Hangfire).
+        /// TASK-P3-12.4 / P2-LOG-16: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh từ Redis về PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng mỗi 2 phút qua Hangfire).
         /// </summary>
         Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null);
 

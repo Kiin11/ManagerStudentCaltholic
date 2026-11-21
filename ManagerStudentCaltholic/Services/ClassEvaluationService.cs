@@ -548,7 +548,7 @@ namespace ManagerStudentCaltholic.Services
             double massPoints = 0;
             foreach (var a in sundayOrThuMass)
             {
-                if (a.IsMakeUp || a.AttendedMass)
+                if (a.AttendedMass)
                 {
                     massPoints += a.MassStatus == AttendanceStatus.Late ? 0.8 : 1.0;
                 }
@@ -562,7 +562,7 @@ namespace ManagerStudentCaltholic.Services
             double classPoints = 0;
             foreach (var a in classSessions)
             {
-                if (a.IsMakeUp || a.ClassAttended)
+                if (a.ClassAttended)
                 {
                     classPoints += a.ClassStatus == AttendanceStatus.Late ? 0.8 : 1.0;
                 }
