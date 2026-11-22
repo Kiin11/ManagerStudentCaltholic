@@ -1,6 +1,6 @@
 # ManagerStudentCatholic
 
-Tài liệu hướng dẫn quản lý Database Migration với Entity Framework Core và quy trình triển khai ứng dụng bằng Docker.
+Tài liệu hướng dẫn quản lý Database Migration với Entity Framework Core và quy trình đóng gói / triển khai Docker Image qua GitHub Container Registry (GHCR).
 
 ---
 
@@ -13,7 +13,7 @@ Tài liệu hướng dẫn quản lý Database Migration với Entity Framework 
 Lệnh này dùng để tạo bản ghi nhận thay đổi mới của model/database schema:
 
 ```powershell
-dotnet ef migrations add <TenMigration>
+dotnet ef migrations add <TenMigration> --project ManagerStudentCaltholic
 ```
 
 ### 1.2. Cập nhật vào Database (Database Update)
@@ -22,46 +22,50 @@ Có hai cách để áp dụng migration vào cơ sở dữ liệu:
 
 * **Cách 1: Chỉ định trực tiếp chuỗi kết nối (Connection String)**
   ```powershell
-  dotnet ef database update --connection "<connection_string>"
+  dotnet ef database update --project ManagerStudentCaltholic --connection "<connection_string>"
   ```
 
-* **Cách 2: Sử dụng chuỗi kết nối mặc định trong cấu hình (`appsettings.Development.json`)**
+* **Cách 2: Sử dụng chuỗi kết nối mặc định trong cấu hình cục bộ (`appsettings.Development.json`, không commit lên Git)**
   ```powershell
-  dotnet ef database update
+  dotnet ef database update --project ManagerStudentCaltholic
   ```
 
 ---
 
-## 2. Triển khai với Docker (Build & Run)
+## 2. Đóng gói Docker Image & Triển khai (GHCR Immutable Image Workflow)
 
-Quy trình cập nhật mã nguồn và khởi chạy dịch vụ qua Docker Compose:
+Kho mã nguồn này chỉ chứa **source code ứng dụng & Dockerfile**. Toàn bộ cấu hình triển khai Production (`docker-compose.yml`, Nginx, `.env`, script deploy/rollback) được tách sang kho riêng tư `parish-infra-config`.
 
-### a. Build lại Docker image
-Đóng gói mã nguồn mới nhất và bỏ qua cache cũ để đảm bảo nhận toàn bộ thay đổi:
-```bash
-docker compose build --no-cache app
+- **Chuẩn đặt tên Tag Image:**
+  - Bản phát hành thường: `{name}-v1.{yy}.{phase}.{number}` (ví dụ: `parish-app-v1.26.inf.1`)
+  - Bản vá lỗi (Hotfix): `{name}-v1.{yy}.{phase}-{hotfix}.{number}` (ví dụ: `parish-app-v1.26.5-hf1.2`)
+  - Full OCI Ref: `ghcr.io/kiin11/parish-app:<TAG>`
+
+### Cách 1: Build & Push tự động bằng GitHub Actions (Không cần cài Docker trên máy)
+
+Mở tab **Actions** trên GitHub -> chọn workflow **Build and Push Docker Image to GHCR** (`.github/workflows/build-push-ghcr.yml`) -> **Run workflow** và nhập `phase`, `hotfix` (nếu có), `number`.
+
+### Cách 2: Build & Push từ máy cục bộ (Local Script)
+
+```powershell
+# Kiểm tra tag và lệnh build (Dry-Run, không cần Docker)
+powershell -File scripts/build-push.ps1 -Phase inf -Number 1 -DryRun
+
+# Build linux/amd64 và đẩy lên GHCR
+powershell -File scripts/build-push.ps1 -Phase inf -Number 1 -Push
 ```
 
-### b. Khởi chạy lại container
-Khởi chạy container `app` ở chế độ chạy ngầm (detached mode):
 ```bash
-docker compose up -d app
+# Linux / macOS / WSL
+./scripts/build-push.sh --phase inf --number 1 --push
 ```
 
-Kiểm tra container đã nạp code mới và chạy ổn định hay chưa:
+### Triển khai lên máy chủ Azure VM
+
+Chạy tại thư mục `parish-infra-config` trên máy chủ Azure:
+
 ```bash
-docker compose logs --tail 30 <server_name>
+./scripts/deploy.sh parish-app-v1.26.inf.1
 ```
 
-
-### c. Theo dõi log ứng dụng
-Kiểm tra log thời gian thực để xác nhận ứng dụng đã khởi động và nhận code mới thành công:
-```bash
-docker compose logs -f app
-```
-
-### d. Build lại image và khởi động lại container
-Chỉ định Docker Compose build lại riêng service ứng dụng (hoặc toàn bộ) mà không sử dụng cache cũ để nạp các thay đổi mới:
-```bash
-docker compose up -d --build <server_name>
-```
+Xem chi tiết quy trình đăng nhập GHCR, quy chuẩn tag và triển khai tại [docs/DOCKER-BUILD-DEPLOY.md](docs/DOCKER-BUILD-DEPLOY.md).

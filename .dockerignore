@@ -1,34 +1,80 @@
-**/.classpath
-**/.dockerignore
-**/.env
-**/.git
-**/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
+# ==============================================================================
+# Docker Build Context Ignore Rules (Context = Repository Root `.`)
+# ==============================================================================
+
+# Version control & CI/CD metadata
+.git
+.gitignore
+.gitattributes
+.github
+
+# IDE & Editor files
+.vs
+.vscode
 **/.vs
 **/.vscode
 **/*.*proj.user
+**/*.user
+**/*.suo
 **/*.dbmdl
 **/*.jfm
-**/azds.yaml
-**/bin
-**/charts
+**/.classpath
+**/.project
+**/.settings
+**/.toolstarget
+
+# Documentation, Knowledge Base, Diagrams & Helper Scripts
+AI-Knowledge
+diagram
+docs
+script
+scripts
+*.md
+*.jsonl
+LICENSE
+
+# Infrastructure & Deployment files (managed in private parish-infra-config repo)
+nginx
+docker-compose*
 **/docker-compose*
+Dockerfile*
 **/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
+.dockerignore
+**/.dockerignore
+**/charts
+**/azds.yaml
+
+# Secrets & Environment-specific Configuration (NEVER bake into image!)
+.env
+.env*
+**/.env
+**/.env*
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/appsettings.*.local.json
+**/appsettings-copy.json
+**/secrets
 **/secrets.dev.yaml
 **/values.dev.yaml
+google-service-account*.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# .NET Build Outputs & Test Artifacts
+**/bin
+**/obj
 **/TestResults
-Dockerfile
-docker-compose*.yml
-.dockerignore
-LICENSE
-README.md
-!**/.gitignore
-!.git/HEAD
-!.git/config
-!.git/packed-refs
-!.git/refs/heads/**
+**/node_modules
+**/npm-debug.log
+tmp_publish_check
+
+# Runtime Logs, Uploads & DataProtection Keys (mounted via Docker volumes at runtime)
+**/logs
+!ManagerStudentCaltholic/Views/Logs
+!ManagerStudentCaltholic/Views/Logs/**
+**/PrivateUploads
+**/dataprotection-keys
+**/wwwroot/uploads
+*.log
