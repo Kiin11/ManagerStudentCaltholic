@@ -18,7 +18,7 @@ All production and staging images follow the exact naming contract tracked in `S
   - Example: `ghcr.io/kiin11/parish-app:parish-app-v1.26.inf.1`
 - **Target Platform:** `linux/amd64` (Azure Standard B2ats v2 VM)
 - **Target Runtime Size:** `< 250 MB` (`mcr.microsoft.com/dotnet/aspnet:8.0-alpine` with `tzdata`, `icu-libs`, `icu-data-full`, `fontconfig`, `ttf-dejavu`)
-- **Container Runtime Contract:** non-root `$APP_UID`, internal port `5000`, mounted paths `/app/dataprotection-keys`, `/app/logs`, `/app/secrets`, `/app/wwwroot/uploads/lesson_plans`.
+- **Container Runtime Contract:** non-root `$APP_UID`, internal port `8080` (`ASPNETCORE_HTTP_PORTS=8080`, compose service `dotnet_app`), mounted paths `/app/dataprotection-keys`, `/app/logs`, `/app/secrets`, `/app/wwwroot/uploads/lesson_plans`.
 
 ---
 
@@ -102,6 +102,12 @@ On the Azure VM inside the private `parish-infra-config` directory:
 
 ```bash
 ./scripts/deploy.sh parish-app-v1.26.inf.1
+```
+
+Or manually (after updating `APP_IMAGE_TAG=parish-app-v1.26.inf.1` in `.env`):
+
+```bash
+docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app
 ```
 
 To roll back to the previous known-good image in `< 30s`:

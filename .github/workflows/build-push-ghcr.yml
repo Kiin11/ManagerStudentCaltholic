@@ -211,5 +211,7 @@ jobs:
             echo "### Deploy on Azure VM (\`parish-infra-config\`)"
             echo '```bash'
             echo "./scripts/deploy.sh ${IMAGE_TAG}"
+            echo "# Or manual compose (after setting APP_IMAGE_TAG=${IMAGE_TAG} in .env):"
+            echo "# docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -194,5 +194,6 @@ echo "${TODAY_STR} | ${TAG} | ${FULL_IMAGE_REF} | ${SIZE_DISPLAY} | ${GIT_SHA} |
 echo ""
 echo "--- Azure VM Deploy Command (in parish-infra-config) ----------------"
 echo "./scripts/deploy.sh ${TAG}"
-echo "# (.env variable: APP_IMAGE_TAG=${TAG})"
+echo "# Or manual compose: set APP_IMAGE_TAG=${TAG} in .env, then run:"
+echo "# docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app"
 echo "======================================================================"

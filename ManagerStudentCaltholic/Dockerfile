@@ -54,7 +54,7 @@ WORKDIR /app
 
 ENV TZ=Asia/Ho_Chi_Minh \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
-    ASPNETCORE_HTTP_PORTS=5000
+    ASPNETCORE_HTTP_PORTS=8080
 
 # Install timezone data, full ICU (vi-VN), and TrueType fonts for ClosedXML AdjustToContents()
 RUN apk add --no-cache \
@@ -84,6 +84,6 @@ COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .
 # Run as built-in .NET 8 non-root user (UID 1654)
 USER $APP_UID
 
-EXPOSE 5000
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "ManagerStudentCaltholic.dll"]

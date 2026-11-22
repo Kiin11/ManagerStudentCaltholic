@@ -175,5 +175,6 @@ Write-Host ("{0} | {1} | {2} | {3} | {4} | {5} | {6}" -f $TodayStr, $Tag, $FullI
 Write-Host ""
 Write-Host "--- Azure VM Deploy Command (in parish-infra-config) ----------------" -ForegroundColor Cyan
 Write-Host "./scripts/deploy.sh $Tag"
-Write-Host "# (.env variable: APP_IMAGE_TAG=$Tag)"
+Write-Host "# Or manual compose: set APP_IMAGE_TAG=$Tag in .env, then run:"
+Write-Host "# docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app"
 Write-Host "======================================================================" -ForegroundColor Cyan

@@ -66,6 +66,8 @@ Chạy tại thư mục `parish-infra-config` trên máy chủ Azure:
 
 ```bash
 ./scripts/deploy.sh parish-app-v1.26.inf.1
+# Hoặc thủ công sau khi cập nhật APP_IMAGE_TAG trong .env:
+# docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app
 ```
 
 Xem chi tiết quy trình đăng nhập GHCR, quy chuẩn tag và triển khai tại [docs/DOCKER-BUILD-DEPLOY.md](docs/DOCKER-BUILD-DEPLOY.md).
