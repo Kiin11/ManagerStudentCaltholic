@@ -1,6 +1,6 @@
 using ClosedXML.Excel;
-using DocumentFormat.OpenXml.InkML;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
@@ -8,6 +8,7 @@ using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -21,6 +22,10 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IRedisAttendanceService _redisAttendance;
         private readonly IAttendanceDisputeService _disputeService;
         private readonly ICacheService _cache;
+
+        private static readonly TimeSpan CurrentYearCacheTtl = TimeSpan.FromHours(12);
+        private static readonly TimeSpan MetadataCacheTtl = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan OfflineStudentsCacheTtl = TimeSpan.FromMinutes(5);
 
         private long CurrentUserId =>
             long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
@@ -74,8 +79,8 @@ namespace ManagerStudentCaltholic.Controllers
             var inputDate = date ?? DateTime.UtcNow.AddHours(7).Date;
             var targetDate = DateTime.SpecifyKind(inputDate.Date, DateTimeKind.Utc);
 
-            // Lấy niên khóa đang chạy
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            // Lấy niên khóa đang chạy (ưu tiên Redis Cache)
+            var currentYear = await GetCurrentAcademicYearAsync();
             var yearId = currentYear?.Id ?? 0;
 
             // 1. Khởi tạo truy vấn danh sách lớp của niên khóa
@@ -150,10 +155,11 @@ namespace ManagerStudentCaltholic.Controllers
 
 
         /// <summary>
-        /// 2. POST: /Attendance/SaveBatch (P2-LOG-16 FIX: Write-Through Redis + Sync thẳng xuống PostgreSQL)
+        /// 2. POST: /Attendance/SaveBatch (P2-LOG-16 / TASK-INF-08: Lưu Redis + Flush riêng đúng lớp này xuống PostgreSQL)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> SaveBatch([FromBody] AttendanceBatchSubmitDto request)
         {
             if (request == null || !request.Items.Any())
@@ -175,8 +181,8 @@ namespace ManagerStudentCaltholic.Controllers
                 var (success, message) = await _redisAttendance.SaveBatchToRedisAsync(request);
                 if (success)
                 {
-                    // 2. P2-LOG-16 FIX: Đồng bộ tức thì (Write-Through) từ Redis xuống PostgreSQL ngay trong cùng Request
-                    await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate);
+                    // 2. Đồng bộ tức thì (Write-Through) chỉ đúng lớp vừa lưu xuống PostgreSQL (không chặn các lớp khác đang quét QR)
+                    await _redisAttendance.FlushClassToDatabaseAsync(request.ClassId, request.AttendanceDate);
                 }
 
                 return Json(new { success, message });
@@ -193,6 +199,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> QuickUpdateSingle([FromBody] AttendanceSingleUpdateDto request)
         {
             if (request == null || request.EnrollmentId <= 0 || request.ClassId <= 0)
@@ -244,7 +251,7 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> ScanQr()
         {
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await GetCurrentAcademicYearAsync();
             ViewBag.AcademicYearName = currentYear?.Name ?? "Chưa kích hoạt niên khóa";
 
             // Mặc định AUTO để tự động nhận diện Thánh Lễ / Giờ học Giáo lý theo đúng khung giờ quét
@@ -254,10 +261,12 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// POST: /Attendance/ScanCheckIn (P2-LOG-16 FIX: Quét QR cập nhật ngay xuống DB)
+        /// POST: /Attendance/ScanCheckIn (TASK-INF-08: Quét QR ưu tiên 100% trên Redis O(1) + Write-Behind theo lô ~5s xuống PostgreSQL,
+        /// tự động Fallback ghi trực tiếp 1 dòng xuống PostgreSQL nếu Redis sự cố; KHÔNG chặn mỗi lượt quét bằng Sync cả lớp).
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> ScanCheckIn([FromBody] QrScanRequestDto request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.StudentCode))
@@ -275,13 +284,6 @@ namespace ManagerStudentCaltholic.Controllers
                 request.IpAddress = CurrentClientIp;
 
                 var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request);
-                if (response.Success && !response.IsDuplicate)
-                {
-                    // P2-LOG-16 FIX: Ghi thẳng lượt quét QR mới xuống PostgreSQL ngay lập tức
-                    var targetDate = request.ScanTimestamp?.Date ?? DateTime.UtcNow.AddHours(7).Date;
-                    await _redisAttendance.SyncDirtyAttendancesToDatabaseAsync(targetDate);
-                }
-
                 return Json(response);
             }
             catch (Exception ex)
@@ -301,6 +303,7 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> UndoScanCheckIn([FromBody] UndoScanRequestDto request)
         {
             if (request == null || request.EnrollmentId <= 0)
@@ -333,10 +336,10 @@ namespace ManagerStudentCaltholic.Controllers
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
         public async Task<IActionResult> Statistics(int? classId)
         {
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await GetCurrentAcademicYearAsync();
             var yearId = currentYear?.Id ?? 0;
 
-            var classesQuery = _context.Classes.Where(c => c.AcademicYearId == yearId);
+            var classesQuery = _context.Classes.AsNoTracking().Where(c => c.AcademicYearId == yearId);
 
             // Lọc theo khối nếu là BranchHead
             if (User.IsInRole(UserRole.BranchHead))
@@ -352,7 +355,7 @@ namespace ManagerStudentCaltholic.Controllers
                     classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
                 }
             }
-            var classes = await classesQuery.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+            var classes = await classesQuery.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).ToListAsync();
             ViewBag.Classes = classes;
 
             if (!classes.Any())
@@ -364,8 +367,12 @@ namespace ManagerStudentCaltholic.Controllers
             if (classId.HasValue && User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                var requestedClass = await _context.Classes.FindAsync(classId.Value);
-                if (requestedClass != null && requestedClass.GradeLevel != managedGrade)
+                var requestedClassGrade = await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.Id == classId.Value)
+                    .Select(c => c.GradeLevel)
+                    .FirstOrDefaultAsync();
+                if (requestedClassGrade != null && requestedClassGrade != managedGrade)
                 {
                     return Forbid();
                 }
@@ -375,21 +382,41 @@ namespace ManagerStudentCaltholic.Controllers
             var targetClass = classes.FirstOrDefault(c => c.Id == targetClassId) ?? classes.First();
             ViewBag.SelectedClassId = targetClass.Id;
 
-            // Danh sách học sinh trong lớp
+            // Danh sách học sinh trong lớp (Projection gọn + AsNoTracking)
             var enrollments = await _context.Enrollments
-                .Include(e => e.Student)
+                .AsNoTracking()
                 .Where(e => e.ClassRoomId == targetClass.Id && e.Student.IsActive)
                 .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
-                .AsNoTracking()
+                .Select(e => new
+                {
+                    e.Id,
+                    e.StudentId,
+                    e.Student.StudentCode,
+                    e.Student.ChristianName,
+                    e.Student.FirstName,
+                    e.Student.LastName
+                })
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
 
-            // Toàn bộ dữ liệu điểm danh của lớp trong niên khóa
+            // Toàn bộ dữ liệu điểm danh của lớp trong niên khóa (Projection gọn + AsNoTracking)
             var allAttendances = await _context.Attendances
-                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
                 .AsNoTracking()
+                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
+                .Select(a => new
+                {
+                    a.EnrollmentId,
+                    a.AttendanceDate,
+                    a.DayOfWeek,
+                    a.AttendedMass,
+                    a.MassStatus,
+                    a.ClassAttended,
+                    a.ClassStatus
+                })
                 .ToListAsync();
+
+            var attendancesByEnrollment = allAttendances.ToLookup(a => a.EnrollmentId);
 
             // Tổng số buổi lễ và buổi học đã diễn ra
             var distinctSunMassDates = allAttendances
@@ -410,7 +437,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             var statRows = enrollments.Select(e =>
             {
-                var attList = allAttendances.Where(a => a.EnrollmentId == e.Id).ToList();
+                var attList = attendancesByEnrollment[e.Id].ToList();
 
                 var massPresent = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Sunday);
                 var massLinedUp = attList.Count(a => a.AttendedMass && a.MassStatus == AttendanceStatus.LinedUp && a.DayOfWeek == DayOfWeek.Sunday);
@@ -425,7 +452,7 @@ namespace ManagerStudentCaltholic.Controllers
                 var classPresent = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present && a.DayOfWeek == DayOfWeek.Sunday);
                 var classLate = attList.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late && a.DayOfWeek == DayOfWeek.Sunday);
                 var classAbsPermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentPermitted && a.DayOfWeek == DayOfWeek.Sunday);
-                var classAbsUnpermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday );
+                var classAbsUnpermitted = attList.Count(a => a.ClassStatus == AttendanceStatus.AbsentUnpermitted && a.DayOfWeek == DayOfWeek.Sunday);
 
                 // Tính % chuyên cần (Có mặt + 0.5 * Đi trễ)
                 var massRate = Math.Min(100, Math.Round(((massPresent + massLinedUp + massLate * 0.8) / (double)totalMassSessions) * 100, 1));
@@ -437,9 +464,9 @@ namespace ManagerStudentCaltholic.Controllers
                 return new StudentAttendanceStatRow
                 {
                     StudentId = e.StudentId,
-                    StudentCode = e.Student.StudentCode,
-                    ChristianName = e.Student.ChristianName,
-                    FullName = $"{e.Student.FirstName} {e.Student.LastName}".Trim(),
+                    StudentCode = e.StudentCode,
+                    ChristianName = e.ChristianName,
+                    FullName = $"{e.FirstName} {e.LastName}".Trim(),
                     MassLinedUpCount = massLinedUp,
                     MassPresentCount = massPresent,
                     MassLateCount = massLate,
@@ -487,10 +514,16 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> ExportStatisticsExcel(int classId)
         {
             var targetClass = await _context.Classes
-                .Include(c => c.AcademicYear)
-                .Include(c => c.Enrollments)
-                    .ThenInclude(e => e.Student)
-                .FirstOrDefaultAsync(c => c.Id == classId);
+                .AsNoTracking()
+                .Where(c => c.Id == classId)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.GradeLevel,
+                    AcademicYearName = c.AcademicYear.Name
+                })
+                .FirstOrDefaultAsync();
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
 
@@ -509,17 +542,38 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid(); // TASK-02.3: Chặn GLV Dự Bị xuất báo cáo lớp Ca Chiều hoặc lớp không phụ trách
             }
 
-            var enrollments = targetClass.Enrollments
-                .Where(e => e.Student.IsActive)
+            var enrollments = await _context.Enrollments
+                .AsNoTracking()
+                .Where(e => e.ClassRoomId == classId && e.Student.IsActive)
                 .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
-                .ToList();
+                .Select(e => new
+                {
+                    e.Id,
+                    e.Student.StudentCode,
+                    e.Student.ChristianName,
+                    e.Student.FirstName,
+                    e.Student.LastName
+                })
+                .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
 
             var allAttendances = await _context.Attendances
-                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
                 .AsNoTracking()
+                .Where(a => enrollmentIds.Contains(a.EnrollmentId))
+                .Select(a => new
+                {
+                    a.EnrollmentId,
+                    a.AttendanceDate,
+                    a.DayOfWeek,
+                    a.AttendedMass,
+                    a.MassStatus,
+                    a.ClassAttended,
+                    a.ClassStatus
+                })
                 .ToListAsync();
+
+            var attendancesByEnrollment = allAttendances.ToLookup(a => a.EnrollmentId);
 
             // Buổi lễ Chúa Nhật & Lễ Thứ 5
             var totalSundayMass = Math.Max(1, allAttendances.Where(a => a.DayOfWeek == DayOfWeek.Sunday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted)).Select(a => a.AttendanceDate).Distinct().Count());
@@ -535,7 +589,7 @@ namespace ManagerStudentCaltholic.Controllers
             worksheet.Cell("A1").Style.Font.FontSize = 15;
             worksheet.Range("A1:P1").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) - Niên khóa: {targetClass.AcademicYear.Name} - Sĩ số: {enrollments.Count} em";
+            worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) - Niên khóa: {targetClass.AcademicYearName} - Sĩ số: {enrollments.Count} em";
             worksheet.Cell("A2").Style.Font.Italic = true;
             worksheet.Range("A2:P2").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -588,7 +642,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             foreach (var e in enrollments)
             {
-                var attList = allAttendances.Where(a => a.EnrollmentId == e.Id).ToList();
+                var attList = attendancesByEnrollment[e.Id].ToList();
 
                 // Lễ CN
                 var sunAtt = attList.Where(a => a.DayOfWeek == DayOfWeek.Sunday).ToList();
@@ -613,8 +667,8 @@ namespace ManagerStudentCaltholic.Controllers
                 var isEligible = (sunRate >= 80.0 && classRate >= 80.0);
 
                 worksheet.Cell(currRow, 1).Value = stt++;
-                worksheet.Cell(currRow, 2).Value = e.Student.StudentCode;
-                worksheet.Cell(currRow, 3).Value = $"{e.Student.ChristianName} {e.Student.FirstName} {e.Student.LastName}".Trim();
+                worksheet.Cell(currRow, 2).Value = e.StudentCode;
+                worksheet.Cell(currRow, 3).Value = $"{e.ChristianName} {e.FirstName} {e.LastName}".Trim();
 
                 // Lễ CN
                 worksheet.Cell(currRow, 4).Value = sunPresent;
@@ -683,10 +737,12 @@ namespace ManagerStudentCaltholic.Controllers
         {
             var targetDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
 
-            // 1. Tìm thông tin học sinh
+            // 1. Tìm thông tin học sinh (Projection gọn + AsNoTracking)
             var student = await _context.Students
                 .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.Id == studentId);
+                .Where(s => s.Id == studentId)
+                .Select(s => new { s.Id, s.ChristianName, s.FirstName, s.LastName })
+                .FirstOrDefaultAsync();
 
             if (student == null)
             {
@@ -698,8 +754,18 @@ namespace ManagerStudentCaltholic.Controllers
             // 2. Tìm bản ghi điểm danh trong ngày
             var attendance = await _context.Attendances
                 .AsNoTracking()
-                .Include(a => a.Enrollment)
-                .FirstOrDefaultAsync(a => a.Enrollment.StudentId == studentId && a.AttendanceDate == targetDate);
+                .Where(a => a.Enrollment.StudentId == studentId && a.AttendanceDate == targetDate)
+                .Select(a => new
+                {
+                    a.Id,
+                    a.AttendedMass,
+                    a.MassStatus,
+                    a.ClassAttended,
+                    a.ClassStatus,
+                    a.Note,
+                    a.CreatedAt
+                })
+                .FirstOrDefaultAsync();
 
             var timeline = new List<AttendanceHistoryDto>();
 
@@ -793,8 +859,8 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> MonthlySummary(int? classId, int? month, int? year)
         {
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
-            var classesQuery = _context.Classes.AsQueryable();
+            var currentYear = await GetCurrentAcademicYearAsync();
+            var classesQuery = _context.Classes.AsNoTracking().AsQueryable();
 
             if (currentYear != null)
             {
@@ -829,17 +895,10 @@ namespace ManagerStudentCaltholic.Controllers
             var classes = await classesQuery
                 .OrderBy(c => c.GradeLevel)
                 .ThenBy(c => c.Name)
-                .AsNoTracking()
                 .ToListAsync();
 
             ViewBag.Classes = classes;
 
-            if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
-            {
-                return Forbid();
-            }
-
-            // Và nếu truyền classId không nằm trong danh sách classes của khối mình thì trả về Forbid():
             if (classId.HasValue && !classes.Any(c => c.Id == classId.Value))
             {
                 return Forbid();
@@ -873,24 +932,45 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            // 2. Lấy danh sách học sinh đã xếp vào lớp
+            // 2. Lấy danh sách học sinh đã xếp vào lớp (AsNoTracking + Projection gọn)
             var enrollments = await _context.Enrollments
-                .Include(e => e.Student)
+                .AsNoTracking()
                 .Where(e => e.ClassRoomId == selectedClass.Id && e.Student.IsActive)
                 .OrderBy(e => e.Student.StudentCode)
                 .ThenBy(e => e.Student.LastName)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.StudentId,
+                    e.Student.StudentCode,
+                    e.Student.ChristianName,
+                    e.Student.FirstName,
+                    e.Student.LastName
+                })
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
 
-            // 3. Lấy dữ liệu điểm danh trong tháng của lớp
+            // 3. Lấy dữ liệu điểm danh trong tháng của lớp (AsNoTracking + Projection gọn)
             var startDate = new DateTime(targetYear, targetMonth, 1);
             var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
 
             var attendances = await _context.Attendances
+                .AsNoTracking()
                 .Where(a => enrollmentIds.Contains(a.EnrollmentId) &&
                             a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
+                .Select(a => new
+                {
+                    a.EnrollmentId,
+                    a.AttendanceDate,
+                    a.ClassStatus,
+                    a.ClassCheckInTime,
+                    a.MassStatus,
+                    a.MassCheckInTime
+                })
                 .ToListAsync();
+
+            var attendancesByEnrollment = attendances.ToLookup(a => a.EnrollmentId);
 
             // 4. Tổ chức dữ liệu theo từng dòng học sinh
             var rows = new List<StudentMonthlyAttendanceRow>();
@@ -900,16 +980,18 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     StudentId = en.StudentId,
                     EnrollmentId = en.Id,
-                    StudentCode = en.Student.StudentCode,
-                    ChristianName = en.Student.ChristianName,
-                    FullName = $"{en.Student.FirstName} {en.Student.LastName}".Trim()
+                    StudentCode = en.StudentCode,
+                    ChristianName = en.ChristianName,
+                    FullName = $"{en.FirstName} {en.LastName}".Trim()
                 };
 
-                var studentAtts = attendances.Where(a => a.EnrollmentId == en.Id).ToList();
+                var studentAttByDate = attendancesByEnrollment[en.Id]
+                    .GroupBy(a => a.AttendanceDate.Date)
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 foreach (var sess in sessionDates)
                 {
-                    var att = studentAtts.FirstOrDefault(a => a.AttendanceDate.Date == sess.Date.Date);
+                    studentAttByDate.TryGetValue(sess.Date.Date, out var att);
                     var statusDto = new StudentDailyStatusDto
                     {
                         Date = sess.Date,
@@ -993,7 +1075,11 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetClassRule(int classId)
         {
-            var targetClass = await _context.Classes.FindAsync(classId);
+            var targetClass = await _context.Classes
+                .AsNoTracking()
+                .Where(c => c.Id == classId)
+                .Select(c => new { c.Id, c.Name })
+                .FirstOrDefaultAsync();
             if (targetClass == null) return NotFound(new { success = false, message = "Không tìm thấy lớp" });
 
             if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
@@ -1009,10 +1095,13 @@ namespace ManagerStudentCaltholic.Controllers
                                 User.IsInRole(UserRole.SpiritualDirector) ||
                                 User.IsInRole(UserRole.ExecutiveBoard);
 
-            bool isHeadTeacher = await _context.ClassTeachers
+            bool isHeadTeacher = !isLeadership && await _context.ClassTeachers
+                .AsNoTracking()
                 .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
 
-            var rule = await _context.AttendanceRuleConfigs.FirstOrDefaultAsync(r => r.ClassRoomId == classId);
+            var rule = await _context.AttendanceRuleConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.ClassRoomId == classId);
             if (rule == null)
             {
                 rule = new AttendanceRuleConfig { ClassRoomId = classId };
@@ -1063,7 +1152,8 @@ namespace ManagerStudentCaltholic.Controllers
                                 User.IsInRole(UserRole.SpiritualDirector) ||
                                 User.IsInRole(UserRole.ExecutiveBoard);
 
-            bool isHeadTeacher = await _context.ClassTeachers
+            bool isHeadTeacher = !isLeadership && await _context.ClassTeachers
+                .AsNoTracking()
                 .AnyAsync(ct => ct.ClassRoomId == dto.ClassId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
 
             if (!isLeadership && !isHeadTeacher)
@@ -1104,8 +1194,16 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> ExportMonthlySummaryExcel(int classId, int? month, int? year)
         {
             var targetClass = await _context.Classes
-                .Include(c => c.AcademicYear)
-                .FirstOrDefaultAsync(c => c.Id == classId);
+                .AsNoTracking()
+                .Where(c => c.Id == classId)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.Name,
+                    c.GradeLevel,
+                    AcademicYearName = c.AcademicYear.Name
+                })
+                .FirstOrDefaultAsync();
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
 
@@ -1138,11 +1236,19 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            // 2. Lấy danh sách học sinh và điểm danh trong tháng
+            // 2. Lấy danh sách học sinh và điểm danh trong tháng (AsNoTracking + Projection gọn)
             var enrollments = await _context.Enrollments
-                .Include(e => e.Student)
+                .AsNoTracking()
                 .Where(e => e.ClassRoomId == classId && e.Student.IsActive)
                 .OrderBy(e => e.Student.StudentCode).ThenBy(e => e.Student.LastName)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.Student.StudentCode,
+                    e.Student.ChristianName,
+                    e.Student.FirstName,
+                    e.Student.LastName
+                })
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
@@ -1150,10 +1256,19 @@ namespace ManagerStudentCaltholic.Controllers
             var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
 
             var attendances = await _context.Attendances
+                .AsNoTracking()
                 .Where(a => enrollmentIds.Contains(a.EnrollmentId) &&
                             a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
-                .AsNoTracking()
+                .Select(a => new
+                {
+                    a.EnrollmentId,
+                    a.AttendanceDate,
+                    a.MassStatus,
+                    a.ClassStatus
+                })
                 .ToListAsync();
+
+            var attendancesByEnrollment = attendances.ToLookup(a => a.EnrollmentId);
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add($"Thang_{targetMonth}_{targetYear}");
@@ -1163,7 +1278,7 @@ namespace ManagerStudentCaltholic.Controllers
             worksheet.Cell("A1").Style.Font.Bold = true;
             worksheet.Cell("A1").Style.Font.FontSize = 14;
 
-            worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) | Niên khóa: {targetClass.AcademicYear.Name} | Sĩ số: {enrollments.Count} em";
+            worksheet.Cell("A2").Value = $"Lớp: {targetClass.Name} ({targetClass.GradeLevel}) | Niên khóa: {targetClass.AcademicYearName} | Sĩ số: {enrollments.Count} em";
             worksheet.Cell("A2").Style.Font.Italic = true;
 
             // 4. Dựng Header 2 tầng
@@ -1236,11 +1351,13 @@ namespace ManagerStudentCaltholic.Controllers
 
             foreach (var en in enrollments)
             {
-                var attList = attendances.Where(a => a.EnrollmentId == en.Id).ToList();
+                var attByDate = attendancesByEnrollment[en.Id]
+                    .GroupBy(a => a.AttendanceDate.Date)
+                    .ToDictionary(g => g.Key, g => g.First());
 
                 worksheet.Cell(currRow, 1).Value = stt++;
-                worksheet.Cell(currRow, 2).Value = en.Student.StudentCode;
-                worksheet.Cell(currRow, 3).Value = $"{en.Student.ChristianName} {en.Student.FirstName} {en.Student.LastName}".Trim();
+                worksheet.Cell(currRow, 2).Value = en.StudentCode;
+                worksheet.Cell(currRow, 3).Value = $"{en.ChristianName} {en.FirstName} {en.LastName}".Trim();
 
                 int dataCol = 4;
                 int mPresent = 0, mLate = 0, mAbsent = 0;
@@ -1248,7 +1365,7 @@ namespace ManagerStudentCaltholic.Controllers
 
                 foreach (var sess in sessionDates)
                 {
-                    var att = attList.FirstOrDefault(a => a.AttendanceDate.Date == sess.Date.Date);
+                    attByDate.TryGetValue(sess.Date.Date, out var att);
 
                     // Xử lý cột Lễ (T5 hoặc CN)
                     string mCode = GetStatusCode(att?.MassStatus);
@@ -1350,15 +1467,14 @@ namespace ManagerStudentCaltholic.Controllers
 
         #region Offline-First Attendance APIs (FEAT-P3-06)
         /// <summary>
-        /// 1. GET: /Attendance/GetOfflineStudentsCache?classId=... (TASK-P3-06.1)
-        /// Tải danh sách thiếu nhi trong niên khóa hiện hành (theo phạm vi quyền của GLV) để lưu vào IndexedDB
+        /// 1. GET: /Attendance/GetOfflineStudentsCache?classId=... (TASK-P3-06.1 / TASK-INF-08)
+        /// Tải danh sách thiếu nhi trong niên khóa hiện hành (đệm trên Redis 5 phút, lọc theo phạm vi quyền của GLV) để lưu vào IndexedDB
         /// </summary>
         [HttpGet]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> GetOfflineStudentsCache(int? classId)
         {
-            var currentYear = await _context.AcademicYears
-                .AsNoTracking()
-                .FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await GetCurrentAcademicYearAsync();
 
             if (currentYear == null)
             {
@@ -1386,64 +1502,67 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid();
             }
 
-            var enrollmentsQuery = _context.Enrollments
-                .Include(e => e.Student)
-                .Include(e => e.ClassRoom)
-                .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id &&
-                            e.Student.IsActive &&
-                            authorizedClassIds.Contains(e.ClassRoomId));
-
-            if (classId.HasValue && classId.Value > 0)
-            {
-                enrollmentsQuery = enrollmentsQuery.Where(e => e.ClassRoomId == classId.Value);
-            }
-
-            var students = await enrollmentsQuery
-                .OrderBy(e => e.ClassRoom.Name)
-                .ThenBy(e => e.Student.StudentCode)
-                .Select(e => new OfflineStudentCacheItemDto
+            // TASK-INF-08: Đệm danh sách toàn bộ thiếu nhi hiện hành + mã năm cũ trên Redis 5 phút để 20-30 máy GLV mở /Attendance/ScanQr đồng thời không đánh sập DB
+            var allYearStudents = await _cache.GetOrSetAsync(
+                RedisAttendanceKeys.OfflineStudentsCache(currentYear.Id),
+                async () =>
                 {
-                    EnrollmentId = e.Id,
-                    StudentId = e.StudentId,
-                    StudentCode = e.Student.StudentCode.ToUpper(),
-                    ChristianName = e.Student.ChristianName,
-                    FullName = (e.Student.FirstName + " " + e.Student.LastName).Trim(),
-                    Gender = e.Student.Gender ?? "Nam",
-                    ClassId = e.ClassRoomId,
-                    ClassName = e.ClassRoom.Name,
-                    GradeLevel = e.ClassRoom.GradeLevel
-                })
-                .AsNoTracking()
-                .ToListAsync();
+                    var list = await _context.Enrollments
+                        .AsNoTracking()
+                        .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id && e.Student.IsActive)
+                        .OrderBy(e => e.ClassRoom.Name)
+                        .ThenBy(e => e.Student.StudentCode)
+                        .Select(e => new OfflineStudentCacheItemDto
+                        {
+                            EnrollmentId = e.Id,
+                            StudentId = e.StudentId,
+                            StudentCode = e.Student.StudentCode.ToUpper(),
+                            ChristianName = e.Student.ChristianName,
+                            FullName = (e.Student.FirstName + " " + e.Student.LastName).Trim(),
+                            Gender = e.Student.Gender ?? "Nam",
+                            ClassId = e.ClassRoomId,
+                            ClassName = e.ClassRoom.Name,
+                            GradeLevel = e.ClassRoom.GradeLevel
+                        })
+                        .ToListAsync();
 
-            // TASK-P5-04.2: Tải thêm danh sách mã cũ từ StudentCodeHistories để hỗ trợ tra cứu ngoại tuyến
-            if (students.Count > 0)
-            {
-                var studentIds = students.Select(s => s.StudentId).Distinct().ToList();
-                var historyCodes = await _context.StudentCodeHistories
-                    .AsNoTracking()
-                    .Where(h => studentIds.Contains(h.StudentId))
-                    .ToListAsync();
-
-                var historyMap = historyCodes
-                    .GroupBy(h => h.StudentId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(h => h.OriginalCode.Trim().ToUpper())
-                              .Concat(g.Select(h => h.ArchivedYearCode.Trim().ToUpper()))
-                              .Where(c => !string.IsNullOrEmpty(c))
-                              .Distinct()
-                              .ToList()
-                    );
-
-                foreach (var stu in students)
-                {
-                    if (historyMap.TryGetValue(stu.StudentId, out var oldCodes))
+                    if (list.Count > 0)
                     {
-                        stu.HistoricalCodes = oldCodes;
+                        var studentIds = list.Select(s => s.StudentId).Distinct().ToList();
+                        var historyCodes = await _context.StudentCodeHistories
+                            .AsNoTracking()
+                            .Where(h => studentIds.Contains(h.StudentId))
+                            .Select(h => new { h.StudentId, h.OriginalCode, h.ArchivedYearCode })
+                            .ToListAsync();
+
+                        var historyMap = historyCodes
+                            .GroupBy(h => h.StudentId)
+                            .ToDictionary(
+                                g => g.Key,
+                                g => g.Select(h => (h.OriginalCode ?? string.Empty).Trim().ToUpperInvariant())
+                                      .Concat(g.Select(h => (h.ArchivedYearCode ?? string.Empty).Trim().ToUpperInvariant()))
+                                      .Where(c => !string.IsNullOrEmpty(c))
+                                      .Distinct()
+                                      .ToList()
+                            );
+
+                        foreach (var stu in list)
+                        {
+                            if (historyMap.TryGetValue(stu.StudentId, out var oldCodes))
+                            {
+                                stu.HistoricalCodes = oldCodes;
+                            }
+                        }
                     }
-                }
-            }
+
+                    return list;
+                },
+                OfflineStudentsCacheTtl);
+
+            var students = allYearStudents
+                .Where(s => authorizedClassIds.Contains(s.ClassId) &&
+                            (!classId.HasValue || classId.Value <= 0 || s.ClassId == classId.Value))
+                .ToList();
 
             return Json(new
             {
@@ -1456,11 +1575,12 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 2. POST: /Attendance/SyncOfflineQueue (TASK-P3-06.4 & TASK-P3-06.5)
+        /// 2. POST: /Attendance/SyncOfflineQueue (TASK-P3-06.4 & TASK-P3-06.5 / TASK-INF-08)
         /// Đồng bộ hàng đợi điểm danh Offline từ IndexedDB lên Server kèm xử lý xung đột (Conflict Resolution)
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
         public async Task<IActionResult> SyncOfflineQueue([FromBody] OfflineSyncQueueRequestDto request)
         {
             if (request == null || request.Records == null || !request.Records.Any())
@@ -1468,9 +1588,7 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = true, syncedCount = 0, syncedClientIds = new List<string>(), message = "Không có dữ liệu chờ đồng bộ." });
             }
 
-            var currentYear = await _context.AcademicYears
-                .AsNoTracking()
-                .FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await GetCurrentAcademicYearAsync();
 
             if (currentYear == null)
             {
@@ -1508,18 +1626,51 @@ namespace ManagerStudentCaltholic.Controllers
                 .Distinct()
                 .ToList();
 
+            // Projection gọn + AsNoTracking thay vì Include toàn bộ Student & ClassRoom
             var validEnrollments = await _context.Enrollments
-                .Include(e => e.Student)
-                .Include(e => e.ClassRoom)
+                .AsNoTracking()
                 .Where(e => e.ClassRoom.AcademicYearId == currentYear.Id &&
                             (enrollmentIds.Contains(e.Id) || studentCodes.Contains(e.Student.StudentCode.ToUpper())))
-                .AsNoTracking()
+                .Select(e => new OfflineSyncEnrollmentProjection
+                {
+                    Id = e.Id,
+                    StudentId = e.StudentId,
+                    ClassRoomId = e.ClassRoomId,
+                    StudentCode = e.Student.StudentCode,
+                    GradeLevel = e.ClassRoom.GradeLevel
+                })
                 .ToListAsync();
 
             var enrollmentById = validEnrollments.ToDictionary(e => e.Id, e => e);
             var enrollmentByCode = validEnrollments
-                .GroupBy(e => e.Student.StudentCode.ToUpperInvariant())
+                .GroupBy(e => e.StudentCode.ToUpperInvariant())
                 .ToDictionary(g => g.Key, g => g.First());
+
+            // TASK-INF-08: Tiền đồng bộ mọi phân vùng Redis đang có IsDirty = true liên quan đến lô Offline trước khi hợp nhất xung đột và xóa cache ClassSheet
+            var preFlushPartitions = new HashSet<(int ClassId, DateTime DateUtc)>();
+            foreach (var rec in request.Records)
+            {
+                OfflineSyncEnrollmentProjection? matched = null;
+                if (rec.EnrollmentId > 0 && enrollmentById.TryGetValue(rec.EnrollmentId, out var byId))
+                {
+                    matched = byId;
+                }
+                else if (!string.IsNullOrWhiteSpace(rec.StudentCode) &&
+                         enrollmentByCode.TryGetValue(rec.StudentCode.Trim().ToUpperInvariant(), out var byCode))
+                {
+                    matched = byCode;
+                }
+
+                if (matched != null && authorizedClassIds.Contains(matched.ClassRoomId))
+                {
+                    preFlushPartitions.Add((matched.ClassRoomId, DateTime.SpecifyKind(rec.AttendanceDate.Date, DateTimeKind.Utc)));
+                }
+            }
+
+            if (preFlushPartitions.Count > 0)
+            {
+                await _redisAttendance.SyncDirtyClassesForPartitionsAsync(preFlushPartitions);
+            }
 
             var syncedClientIds = new List<string>();
             int upsertedCount = 0;
@@ -1573,7 +1724,7 @@ namespace ManagerStudentCaltholic.Controllers
 
                     foreach (var item in orderedRecords)
                     {
-                        Enrollment? targetEnrollment = null;
+                        OfflineSyncEnrollmentProjection? targetEnrollment = null;
                         if (item.EnrollmentId > 0 && enrollmentById.TryGetValue(item.EnrollmentId, out var enrById))
                         {
                             targetEnrollment = enrById;
@@ -1581,7 +1732,7 @@ namespace ManagerStudentCaltholic.Controllers
                         else if (!string.IsNullOrWhiteSpace(item.StudentCode) &&
                                  enrollmentByCode.TryGetValue(item.StudentCode.Trim().ToUpperInvariant(), out var enrByCode))
                         {
-                            targetEnrollment = enrByCode;   
+                            targetEnrollment = enrByCode;
                         }
 
                         if (targetEnrollment == null)
@@ -1597,7 +1748,7 @@ namespace ManagerStudentCaltholic.Controllers
 
                         // Chặn ghi chéo khối nếu là Trưởng khối
                         if (!string.IsNullOrEmpty(managedGrade) &&
-                            !string.Equals(targetEnrollment.ClassRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                            !string.Equals(targetEnrollment.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
                         {
                             continue;
                         }
@@ -1822,7 +1973,47 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// P2-SEC-01 & P2-SEC-02 FIX: Lấy danh sách lớp học mà người dùng hiện tại được phép truy cập
+        /// TASK-INF-08: Đọc niên khóa hiện hành từ Redis Cache (TTL 12h, tự động hủy khi đổi niên khóa tại AcademicYearsController)
+        /// </summary>
+        private async Task<AcademicYear?> GetCurrentAcademicYearAsync()
+        {
+            var cached = await _cache.GetAsync<AcademicYear>(CacheKeys.CurrentAcademicYear);
+            if (cached != null && cached.IsCurrent)
+            {
+                return cached;
+            }
+
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (currentYear != null)
+            {
+                await _cache.SetAsync(CacheKeys.CurrentAcademicYear, currentYear, CurrentYearCacheTtl);
+            }
+
+            return currentYear;
+        }
+
+        private async Task<HashSet<int>> GetTeacherAssignedClassIdsCachedAsync(long userId, int academicYearId)
+        {
+            if (userId <= 0) return new HashSet<int>();
+
+            var assignedList = await _cache.GetOrSetAsync(
+                RedisAttendanceKeys.TeacherAuthorizedClassIds(userId, academicYearId),
+                async () => await _context.ClassTeachers
+                    .AsNoTracking()
+                    .Where(ct => ct.UserId == userId && (academicYearId == 0 || ct.ClassRoom.AcademicYearId == academicYearId))
+                    .Select(ct => ct.ClassRoomId)
+                    .Distinct()
+                    .ToListAsync(),
+                MetadataCacheTtl);
+
+            return assignedList.ToHashSet();
+        }
+
+        /// <summary>
+        /// P2-SEC-01 & P2-SEC-02 FIX / TASK-INF-08: Lấy danh sách lớp học mà người dùng hiện tại được phép truy cập (đệm trên Redis 2 phút)
         /// - Leadership (Admin, Cha Xứ, BĐH): Toàn bộ lớp
         /// - BranchHead (Trưởng khối): Các lớp thuộc khối phụ trách + lớp đứng dạy trực tiếp
         /// - Teacher (Giáo lý viên): Chỉ các lớp được phân công trong bảng ClassTeachers
@@ -1830,55 +2021,79 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         private async Task<List<ClassRoom>> GetAuthorizedClassesAsync(int academicYearId)
         {
-            var query = _context.Classes.Where(c => academicYearId == 0 || c.AcademicYearId == academicYearId);
+            var allYearClasses = await _cache.GetOrSetAsync(
+                RedisAttendanceKeys.ClassesByYear(academicYearId),
+                async () => await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => academicYearId == 0 || c.AcademicYearId == academicYearId)
+                    .OrderBy(c => c.GradeLevel)
+                    .ThenBy(c => c.Name)
+                    .ToListAsync(),
+                MetadataCacheTtl);
 
             if (IsLeadership)
             {
-                return await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+                return allYearClasses;
             }
 
             var uid = CurrentUserId;
+            var assignedClassIds = await GetTeacherAssignedClassIdsCachedAsync(uid, academicYearId);
 
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
                 if (!string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    query = query.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == uid));
+                    return allYearClasses
+                        .Where(c => string.Equals(c.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase) ||
+                                    assignedClassIds.Contains(c.Id))
+                        .ToList();
                 }
-                else
-                {
-                    query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
-                }
-            }
-            else if (User.IsInRole(UserRole.ProbationaryTeacher))
-            {
-                // TASK-02.3: GLV Dự Bị chỉ được thao tác các lớp được phân công thuộc Ca Sáng
-                query = query.Where(c =>
-                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
-                    c.Session != GradeLevel.SessionAfternoon &&
-                    c.GradeLevel != GradeLevel.BaoDong &&
-                    c.GradeLevel != GradeLevel.DuBi &&
-                    c.GradeLevel != GradeLevel.DuBiCode);
-            }
-            else
-            {
-                // Vai trò Teacher: Bắt buộc chỉ lấy các lớp được phân công dạy
-                query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
+
+                return allYearClasses
+                    .Where(c => assignedClassIds.Contains(c.Id))
+                    .ToList();
             }
 
-            return await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+            if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                // TASK-02.3: GLV Dự Bị chỉ được thao tác các lớp được phân công thuộc Ca Sáng
+                return allYearClasses
+                    .Where(c => assignedClassIds.Contains(c.Id) &&
+                                !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
+
+            // Vai trò Teacher: Bắt buộc chỉ lấy các lớp được phân công dạy
+            return allYearClasses
+                .Where(c => assignedClassIds.Contains(c.Id))
+                .ToList();
         }
 
         /// <summary>
-        /// P2-SEC-01 FIX: Kiểm tra người dùng hiện tại có quyền thao tác trên classId hay không
+        /// P2-SEC-01 FIX / TASK-INF-08: Kiểm tra người dùng hiện tại có quyền thao tác trên classId hay không (đệm metadata trên Redis 2 phút)
         /// </summary>
         private async Task<bool> CanAccessClassAsync(int classId)
         {
             if (classId <= 0) return false;
             if (IsLeadership) return true;
 
-            var targetClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
+            var targetClass = await _cache.GetOrSetAsync(
+                RedisAttendanceKeys.ClassMetadata(classId),
+                async () => await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.Id == classId)
+                    .Select(c => new RedisClassMetaItem
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        GradeLevel = c.GradeLevel,
+                        Session = c.Session,
+                        AcademicYearId = c.AcademicYearId
+                    })
+                    .FirstOrDefaultAsync(),
+                MetadataCacheTtl);
+
             if (targetClass == null) return false;
 
             // TASK-02.3: Chặn tuyệt đối GLV Dự Bị truy cập / thao tác các lớp Ca Chiều (IDOR)
@@ -1899,9 +2114,19 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var uid = CurrentUserId;
-            return uid > 0 && await _context.ClassTeachers
-                .AsNoTracking()
-                .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == uid);
+            if (uid <= 0) return false;
+
+            var assignedClassIds = await GetTeacherAssignedClassIdsCachedAsync(uid, targetClass.AcademicYearId);
+            return assignedClassIds.Contains(classId);
+        }
+
+        private sealed class OfflineSyncEnrollmentProjection
+        {
+            public long Id { get; set; }
+            public long StudentId { get; set; }
+            public int ClassRoomId { get; set; }
+            public string StudentCode { get; set; } = string.Empty;
+            public string GradeLevel { get; set; } = string.Empty;
         }
         #endregion
 

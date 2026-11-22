@@ -41,9 +41,20 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto);
 
         /// <summary>
-        /// TASK-P3-12.4 / P2-LOG-16: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh từ Redis về PostgreSQL (được gọi Write-Through trực tiếp ở ScanCheckIn/SaveBatch và chạy dự phòng mỗi 2 phút qua Hangfire).
+        /// TASK-P3-12.4 / TASK-INF-08: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh còn cờ IsDirty từ Redis về PostgreSQL
+        /// (chạy theo chu kỳ gom nhóm Write-Behind ~5s qua BackgroundService, khi tắt ứng dụng, khi bấm Flush thủ công và dự phòng mỗi 2 phút qua Hangfire).
         /// </summary>
         Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyAttendancesToDatabaseAsync(DateTime? targetDate = null);
+
+        /// <summary>
+        /// TASK-INF-08: Đồng bộ tức thì dữ liệu điểm danh đang chờ của duy nhất 1 lớp từ Redis xuống PostgreSQL (dùng cho SaveBatch thủ công để không chặn các lớp khác).
+        /// </summary>
+        Task<(int ClassesSynced, int RecordsUpserted)> FlushClassToDatabaseAsync(int classId, DateTime targetDate);
+
+        /// <summary>
+        /// TASK-INF-08: Đồng bộ theo lô một tập phân vùng (ClassId, DateUtc) cụ thể từ Redis xuống PostgreSQL (dùng cho Background Write-Behind và tiền đồng bộ trước SyncOfflineQueue).
+        /// </summary>
+        Task<(int ClassesSynced, int RecordsUpserted)> SyncDirtyClassesForPartitionsAsync(IEnumerable<(int ClassId, DateTime DateUtc)> partitions);
 
         /// <summary>
         /// P2-LOG-17: Tự động tạo bản ghi vắng mặt (ABSENT_UNPERMITTED / ABSENT_PERMITTED) xuống DB

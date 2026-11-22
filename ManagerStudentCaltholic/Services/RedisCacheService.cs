@@ -12,8 +12,11 @@ namespace ManagerStudentCaltholic.Services
         private readonly IMemoryCache _memoryFallback;
         private readonly ILogger<RedisCacheService> _logger;
         private readonly TimeSpan _defaultExpiration;
+        private readonly bool _isBackedByRedis;
         private static readonly TimeSpan CircuitBreakDuration = TimeSpan.FromSeconds(30);
         private static long _circuitOpenUntilTicks = 0;
+
+        public bool IsRedisAvailable => _isBackedByRedis && !IsRedisCircuitOpen();
 
         private static bool IsRedisCircuitOpen() =>
             DateTime.UtcNow.Ticks < Interlocked.Read(ref _circuitOpenUntilTicks);
@@ -37,6 +40,7 @@ namespace ManagerStudentCaltholic.Services
             _distributedCache = distributedCache;
             _memoryFallback = memoryFallback;
             _logger = logger;
+            _isBackedByRedis = distributedCache is not MemoryDistributedCache;
 
             int defaultMinutes = int.TryParse(configuration["CacheSettings:DefaultExpirationMinutes"], out int m) ? m : 60;
             _defaultExpiration = TimeSpan.FromMinutes(defaultMinutes);
