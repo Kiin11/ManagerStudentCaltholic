@@ -23,63 +23,60 @@
 
 ## 2. Execution Flow
 
-### Flow 1: Fast QR Check-in (Online Mode)
+### Flow 1: Fast QR Check-in (Online Mode - Redis-First & Write-Behind Coalesced Flush, `TASK-INF-08`)
 
-1. **Entry point:** HTTP POST `/Attendance/ScanCheckIn` nhận `QrScanRequestDto` (`StudentCode`, `SessionMode`, `ScanTimestamp`, `CampaignId`).
-
-
-2. **Validation:** `AttendanceController.ScanCheckIn` kiểm tra `StudentCode` không được rỗng.
+1. **Entry point:** HTTP POST `/Attendance/ScanCheckIn` (`[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`: TokenBucket 60 req/s bền vững, burst 180 req, queue 60 — không chặn HTTP 429 khi 20–30 máy GLV quét đồng thời sau 1 IP NAT Wi-Fi nhà thờ) nhận `QrScanRequestDto` (`StudentCode`, `SessionMode`, `ScanTimestamp`, `CampaignId`).
 
 
-3. **Controller processing:** Chuyển `QrScanRequestDto` sang `IRedisAttendanceService.ProcessQrCheckInViaRedisAsync`.
+2. **Auth Principal Cache & Validation:** `CookieAuthenticationEvents.OnValidatePrincipal` đọc trạng thái nhân sự ngắn hạn từ `ICacheService` (`auth:user_state:{userId}`, TTL 60s) để tránh truy vấn bảng `Users` trên từng lượt quét. `AttendanceController.ScanCheckIn` kiểm tra `StudentCode` không được rỗng.
 
 
-4. **Cache Lookup & Historical Code Fallback:** Tìm khóa `ATT:QR:DATE:{date}:CODE:{code}` trên Redis. Nếu không có (Cache Miss), truy vấn PostgreSQL (`Enrollments`); nếu không khớp mã hiện hành, tra cứu thêm bảng `StudentCodeHistories` (`OriginalCode` / `ArchivedYearCode`) để nhận diện thẻ mã năm cũ (`isHistoricalCode = true`), nạp ClassSheet vào Redis và cache alias key `ATT:QR:DATE:{date}:CODE:{oldCode}` đạt `O(1)` cho các lần quét sau.
+3. **Controller processing:** Chuyển `QrScanRequestDto` sang `IRedisAttendanceService.ProcessQrCheckInViaRedisAsync` (KHÔNG còn gọi đồng bộ `SyncDirtyAttendancesToDatabaseAsync` trực tiếp trên mỗi lượt quét).
 
 
-5. **Business logic (Time Evaluation):** Gọi `AttendanceTimeHelper.EvaluateCheckIn()` đánh giá thời điểm quét (kết hợp `SessionMode` nếu được chọn trên HUD) để xác định ca học/lễ và tính toán trạng thái (`PRESENT`, `LATE`, `LINED_UP`).
+4. **Cache Lookup, Negative Cache & Historical Code Fallback:** Tìm khóa `ATT:QR:DATE:{date}:CODE:{code}` trên Redis (Job `PreWarmDailyAttendanceAndTasksAsync` chạy theo múi giờ Việt Nam UTC+7 đã pre-warm sẵn cả mã chính thức lẫn alias mã năm cũ từ `StudentCodeHistories` và trạng thái chiến dịch `ATT:CAMPAIGN:CLASS:{classId}:DATE:{date}`). Nếu Cache Miss: kiểm tra Negative Cache `ATT:QR:MISS:DATE:{date}:CODE:{code}` (TTL 30s) để chặn spam mã sai, sau đó mới truy vấn PostgreSQL với `.AsNoTracking()` + projection gọn (`AcademicYears` từ cache, `Enrollments`, `StudentCodeHistories`), nạp ClassSheet (single-flight theo lớp) và cache alias mã cũ đạt `O(1)` cho các lần quét sau.
 
 
-6. **Redis Update:** Lấy lưới điểm danh lớp `ATT:CLASS:{classId}:DATE:{date}`, cập nhật trạng thái `AttendedMass` / `ClassAttended` cho học sinh tương ứng. Đánh dấu `IsDirty = true`.
+5. **Business logic (Time Evaluation & Campaign Cache):** Gọi `AttendanceTimeHelper.EvaluateCheckIn()` đánh giá thời điểm quét (kết hợp `SessionMode` nếu được chọn trên HUD) để xác định ca học/lễ và tính toán trạng thái (`PRESENT`, `LATE`, `LINED_UP`). Ở chế độ `CAMPAIGN_MONTH`, chiến dịch đang mở được đọc từ cache `ATT:CAMPAIGN:CLASS:{classId}:DATE:{date}` (TTL 5 phút) và dedup qua `ATT:CAMPAIGN:SCAN:{campaignId}:ENR:{enrollmentId}:DATE:{date}`.
 
 
-7. **Write-Through DB Sync:** Khi quét mới (`Success && !IsDuplicate`), `AttendanceController.ScanCheckIn` gọi ngay `SyncDirtyAttendancesToDatabaseAsync()` để ghi xuống PostgreSQL (tránh mất dữ liệu nếu Redis sập).
+6. **Thread-Safe Redis Update (Striped Locks):** Dưới per-class striped lock (`ClassSheetLocks`), đọc/cập nhật lưới điểm danh lớp `ATT:CLASS:{classId}:DATE:{date}` cho đúng học sinh vừa quét, tăng `Revision`, đánh dấu `IsDirty = true`, ghi `EnrollmentId` vào `DirtyEnrollmentIds` cùng thông tin audit riêng theo học sinh (`DirtyAuditMetaByEnrollment`) và hàng đợi chiến dịch (`PendingCampaignCheckIns`, nếu có).
 
 
-8. **Response:** Trả về JSON `QrScanResponseDto` (bao gồm `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`, và cờ cảnh báo mã cũ `IsHistoricalCode`, `OldCode`, `CurrentCode`, `WarningMessage`) để UI phát âm thanh và kích hoạt đếm lùi hoàn tác 5 giây.
+7. **Adaptive Persistence (Write-Behind Batch vs. Redis-Down Single-Row Fallback):**
+   * **Khi Redis khỏe (`_cache.IsRedisAvailable == true`, Redis AOF `appendfsync everysec`):** Đánh dấu `classId` vào `ATT:DIRTY:DATE:{date}` (dưới `DirtyIndexLocks`, bỏ qua SET dư thừa nếu lớp đã dirty), gửi tín hiệu non-blocking vào `IAttendanceFlushSignal.NotifyDirty(...)` để `AttendanceWriteBehindBackgroundService` gom nhóm và Batch Upsert xuống PostgreSQL theo cửa sổ **5 giây** (hoặc ngay khi gom đủ **25 lượt quét**), đồng thời tự động Flush toàn bộ khi ứng dụng tắt (`StopAsync`) và có Hangfire `syncback-redis-attendance-to-db` (2 phút/lần) + API `POST /Attendance/FlushRedisToDatabase` làm lớp dự phòng. Trong mỗi lần Flush (`FlushSingleClassByIdAsync`), chỉ truy vấn & Upsert đúng các `DirtyEnrollmentIds` (không chèn dòng vắng thừa cho các học sinh chưa quét) và dùng `Revision` để không xóa cờ `IsDirty` nếu có lượt quét mới vừa đến trong lúc ghi DB.
+   * **Khi Redis sự cố / Circuit Breaker mở (`_cache.IsRedisAvailable == false`):** Tự động Fallback gọi `PersistSingleQrScanFallbackAsync` ghi trực tiếp **duy nhất 1 bản ghi** học sinh đó xuống PostgreSQL trong transaction để đảm bảo **0% mất dữ liệu điểm danh**.
+
+
+8. **Response:** Trả về JSON `QrScanResponseDto` (bao gồm `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`, và cờ cảnh báo mã cũ `IsHistoricalCode`, `OldCode`, `CurrentCode`, `WarningMessage`) với độ trễ hot path `< 150ms` (0 truy vấn DB trực tiếp khi Cache Hit) để UI phát âm thanh và kích hoạt đếm lùi hoàn tác 5 giây.
 
 
 
-### Flow 2: Offline Synchronization (kèm `HistoricalCodes`)
+### Flow 2: Offline Synchronization (kèm `HistoricalCodes` & Tiền đồng bộ Redis)
 
-1. **Pre-warm Offline Cache:** Client gọi `GET /Attendance/GetOfflineStudentsCache?classId=...` để nạp danh sách học sinh kèm `HistoricalCodes` (tổng hợp từ `StudentCodeHistories`) vào IndexedDB (`offline-attendance.js`).
-
-
-2. **Entry point Sync:** HTTP POST `/Attendance/SyncOfflineQueue`.
+1. **Pre-warm Offline Cache:** Client gọi `GET /Attendance/GetOfflineStudentsCache?classId=...` (`[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`) để nạp danh sách học sinh kèm `HistoricalCodes` vào IndexedDB (`offline-attendance.js`). Server đệm danh sách thiếu nhi niên khóa hiện hành + mã cũ trên Redis (`ATT:OFFLINE:STUDENTS:YEAR:{yearId}`, TTL 5 phút) và lọc theo quyền truy cập lớp đã cache (`ATT:CLASSES:YEAR:{yearId}`, `ATT:AUTH:TEACHER:{userId}:YEAR:{yearId}`, TTL 2 phút).
 
 
-2. **Request parameters:** Danh sách các lượt điểm danh quét lúc rớt mạng (`OfflineSyncQueueRequestDto`).
+2. **Entry point Sync:** HTTP POST `/Attendance/SyncOfflineQueue` (`[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`).
 
 
-3. **Validation:** Kiểm tra quyền `CanAccessClassAsync` của người đồng bộ trên các lớp liên quan.
+3. **Validation & Pre-Flush:** Kiểm tra quyền `GetAuthorizedClassesAsync` của người đồng bộ trên các lớp liên quan, truy vấn danh sách `Enrollments` hợp lệ bằng `.AsNoTracking()` + projection gọn, và gọi `IRedisAttendanceService.SyncDirtyClassesForPartitionsAsync` cho các phân vùng `(ClassRoomId, AttendanceDate)` bị chạm tới nhằm đảm bảo mọi lượt quét QR còn đang chờ trên Redis được ghi xuống DB trước khi hợp nhất xung đột và hủy cache `ClassSheet`.
 
 
-4. **Database queries:** Truy vấn toàn bộ bảng `Attendances` của các học sinh và ngày tương ứng vào một `Dictionary` trong bộ nhớ.
+4. **Database queries:** Truy vấn bảng `Attendances` của các học sinh và ngày tương ứng vào một `Dictionary` trong bộ nhớ.
 
 
 5. **Business logic (Conflict Resolution):**
 * Duyệt qua từng bản ghi Offline. Nếu là quét QR (`RecordType == "QR_SCAN"`), ưu tiên ghi đè nếu trạng thái có lợi hơn hoặc thời gian quét sớm hơn bản ghi hiện tại trên DB.
 
 
-* Dùng hàm `PickBetterAttendanceStatus` để ưu tiên trạng thái (VD: `PRESENT` > `LATE` > `ABSENT_PERMITTED`).
+* Dùng hàm `PickBetterAttendanceStatus` để ưu tiên trạng thái (VD: `LINED_UP` > `PRESENT` > `LATE` > `ABSENT_PERMITTED`).
 
 
+6. **Database Write:** Dùng `CreateExecutionStrategy` và `BeginTransactionAsync` để Upsert (thêm mới hoặc cập nhật) dữ liệu vào bảng `Attendances` + `AttendanceAuditLogs`, sau đó xóa cache `ClassSheet`, `ClassSessionInfo` và `staff_lookup:student_360:{studentId}`.
 
 
-6. **Database Write:** Dùng `CreateExecutionStrategy` và `BeginTransactionAsync` để Upsert (thêm mới hoặc cập nhật) dữ liệu vào bảng `Attendances`.
-
-
-7. **Response:** Trả về JSON chứa số lượng đã đồng bộ `syncedCount`.
+7. **Response:** Trả về JSON chứa số lượng đã đồng bộ `syncedCount` và `syncedClientIds`.
 
 
 
@@ -96,33 +93,46 @@ sequenceDiagram
     participant Ctrl as AttendanceController
     participant R_Svc as RedisAttendanceService
     participant Time as AttendanceTimeHelper
-    participant Redis as Redis Cache
+    participant Redis as Redis Cache (AOF)
+    participant BG as WriteBehindBG / Hangfire
     participant DB as PostgreSQL DB
 
-    UI->>Ctrl: POST /Attendance/ScanCheckIn (QR Code, SessionMode)
+    UI->>Ctrl: POST /Attendance/ScanCheckIn (PolicyQrAttendance)
     Ctrl->>R_Svc: ProcessQrCheckInViaRedisAsync()
     R_Svc->>Redis: Get ATT:QR:DATE:{date}:CODE:{code}
     alt Cache Miss
-        R_Svc->>DB: Query Enrollment & StudentCodeHistories
+        R_Svc->>DB: Query Enrollment & StudentCodeHistories (AsNoTracking)
         DB-->>R_Svc: Student Info (+ isHistoricalCode)
-        R_Svc->>Redis: Set Cache (+ alias key nếu là mã cũ)
+        R_Svc->>Redis: Set ClassSheet + QR Keys (+ alias mã cũ)
     end
     R_Svc->>Time: EvaluateCheckIn(timestamp, gradeLevel)
     Time-->>R_Svc: Status (PRESENT/LATE/LINED_UP)
-    R_Svc->>Redis: Update ATT:CLASS (IsDirty=true)
-    R_Svc->>R_Svc: SyncDirtyAttendancesToDatabaseAsync()
-    R_Svc->>DB: Upsert Attendances Table
-    R_Svc-->>Ctrl: QrScanResponseDto
-    Ctrl-->>UI: JSON Result
-
+    R_Svc->>Redis: Update ATT:CLASS (IsDirty=true, Revision++, DirtyEnrollmentIds)
+    alt Redis Available
+        R_Svc->>Redis: Mark ATT:DIRTY:DATE:{date} & NotifyDirty()
+        R_Svc-->>Ctrl: QrScanResponseDto (< 150ms, 0 DB queries)
+        Ctrl-->>UI: JSON Result
+        BG->>Redis: Snapshot DirtyEnrollmentIds (~5s / 25 scans / Shutdown)
+        BG->>DB: Batch Upsert ONLY dirty Attendances + AuditLogs + Campaigns
+    else Redis Unavailable (Circuit Open)
+        R_Svc->>DB: Direct Single-Row Upsert Fallback (Zero Data Loss)
+        R_Svc-->>Ctrl: QrScanResponseDto
+        Ctrl-->>UI: JSON Result
+    end
 ```
 
 ## 3. Code Mapping
 
-* `ManagerStudentCaltholic.Controllers.AttendanceController` | `ScanQr`, `ScanCheckIn`, `UndoScanCheckIn`, `GetOfflineStudentsCache`, `SyncOfflineQueue` | `Controllers/AttendanceController.cs` | Controller tiếp nhận Request điểm danh QR, hoàn tác và đồng bộ offline.
+* `ManagerStudentCaltholic.Controllers.AttendanceController` | `ScanQr`, `ScanCheckIn`, `UndoScanCheckIn`, `GetOfflineStudentsCache`, `SyncOfflineQueue`, `SaveBatch`, `FlushRedisToDatabase` | `Controllers/AttendanceController.cs` | Controller tiếp nhận Request điểm danh QR, hoàn tác, đồng bộ offline và kiểm soát rate limit `PolicyQrAttendance`.
 
 
-* `ManagerStudentCaltholic.Services.RedisAttendanceService` | `ProcessQrCheckInViaRedisAsync`, `UndoScanCheckInAsync`, `SyncDirtyAttendancesToDatabaseAsync` | `Services/RedisAttendanceService.cs` | Logic lưu cache, quét QR, tra cứu mã cũ, hoàn tác và đồng bộ DB.
+* `ManagerStudentCaltholic.Services.RedisAttendanceService` | `PreWarmDailyAttendanceAndTasksAsync`, `ProcessQrCheckInViaRedisAsync`, `UndoScanCheckInAsync`, `FlushClassToDatabaseAsync`, `SyncDirtyClassesForPartitionsAsync`, `SyncDirtyAttendancesToDatabaseAsync` | `Services/RedisAttendanceService.cs` | Logic lưu cache (striped lock + revision), quét QR 0-DB-query, tra cứu mã cũ, fallback single-row khi Redis sự cố, hoàn tác và batch upsert chỉ đúng dòng dirty.
+
+
+* `ManagerStudentCaltholic.Services.AttendanceWriteBehindBackgroundService` & `AttendanceWriteBehindSignal` | `ExecuteAsync`, `StopAsync`, `NotifyDirty` | `Services/AttendanceWriteBehindBackgroundService.cs` | Hosted service gom nhóm Write-Behind ~5 giây (hoặc ngưỡng 25 lượt quét), quét khôi phục Redis AOF lúc khởi động và flush cưỡng bức trước khi container dừng.
+
+
+* `ManagerStudentCaltholic.Extensions.SecurityExtensions` | `AddAppRateLimiter`, `PolicyQrAttendance` | `Extensions/SecurityExtensions.cs` | Cấu hình TokenBucket Rate Limiter cho điểm danh QR (60 req/s, burst 180, queue 60) tương thích 20–30 máy GLV sau 1 IP NAT Wi-Fi nhà thờ, giữ nghiêm ngặt `PolicyPublicLookup` & `PolicyAuth`.
 
 
 * `ManagerStudentCaltholic.Services.AttendanceTimeHelper` | `EvaluateCheckIn` | `Services/AttendanceTimeHelper.cs` | Xác định ca sinh hoạt và tính độ trễ.
@@ -152,7 +162,16 @@ sequenceDiagram
 * **Relationships:** `Attendance` n-1 `Enrollment`, `Enrollment` n-1 `Student` & `ClassRoom`.
 
 
-* **Redis Keys:** `ATT:QR:DATE:{date}:CODE:{code}` (O(1) Lookup), `ATT:CLASS:{classId}:DATE:{date}` (Class Sheet Payload), `ATT:DIRTY:DATE:{date}` (Dirty partitions).
+* **Redis Keys:**
+  * `ATT:QR:DATE:{date}:CODE:{code}` (O(1) Lookup cho cả mã hiện hành và alias mã năm cũ)
+  * `ATT:QR:MISS:DATE:{date}:CODE:{code}` (Negative cache 30s chặn spam mã sai)
+  * `ATT:CLASS:{classId}:DATE:{date}` (Class Sheet Payload kèm `Revision`, `DirtyEnrollmentIds`, `DirtyAuditMetaByEnrollment`, `PendingCampaignCheckIns`)
+  * `ATT:SESSION:CLASS:{classId}:DATE:{date}` (Session context & checklist)
+  * `ATT:DIRTY:DATE:{date}` (Dirty partitions index)
+  * `ATT:CAMPAIGN:CLASS:{classId}:DATE:{date}` & `ATT:CAMPAIGN:SCAN:{campaignId}:ENR:{enrollmentId}:DATE:{date}` (Cache chiến dịch 1 tháng)
+  * `ATT:CLASSES:YEAR:{academicYearId}`, `ATT:META:CLASS:{classId}`, `ATT:AUTH:TEACHER:{userId}:YEAR:{academicYearId}` (Cache phân quyền & metadata lớp 2 phút)
+  * `ATT:OFFLINE:STUDENTS:YEAR:{academicYearId}` (Cache danh sách tải trước Offline 5 phút)
+  * `auth:user_state:{userId}` (Cache trạng thái xác thực phiên GLV 60 giây trong `OnValidatePrincipal`)
 
 
 

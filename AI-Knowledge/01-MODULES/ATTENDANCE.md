@@ -68,7 +68,10 @@
 
 
 * **Services:**
-* `D:\github\...\Services\RedisAttendanceService.cs` (Xử lý logic Redis, Pre-warm, Sync-back).
+* `D:\github\...\Services\RedisAttendanceService.cs` (Xử lý logic Redis-First, Pre-warm kèm mã cũ & chiến dịch, Striped locks, Snapshot-and-Flush chỉ các dòng dirty, Fallback 1 dòng xuống DB khi Redis sự cố).
+
+
+* `D:\github\...\Services\AttendanceWriteBehindBackgroundService.cs` (BackgroundService gom nhóm Write-Behind mỗi 5 giây / 25 lượt quét, khôi phục Redis AOF khi khởi động và Flush cuối khi tắt ứng dụng).
 
 
 * `D:\github\...\Services\AttendanceDisputeService.cs` (Xử lý khiếu nại điểm danh).
@@ -124,32 +127,34 @@
 
 ## 4. Business Flows
 
-### Flow 1: Fast QR Check-in (Online)
+### Flow 1: Fast QR Check-in (Online - Redis-First & Write-Behind, `TASK-INF-08`)
 
-* **Entry point:** `AttendanceController.ScanCheckIn` (POST).
+* **Entry point:** `AttendanceController.ScanCheckIn` (POST, gắn `[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`).
 
 
 * **Input:** `QrScanRequestDto` (`StudentCode`, `ScanTimestamp`, `SessionMode`, `CampaignId`).
 
 
-* **Validation:** Kiểm tra null/trống mã QR.
+* **Validation:** `OnValidatePrincipal` kiểm tra trạng thái nhân sự từ cache ngắn hạn 60s (`auth:user_state:{userId}`); `ScanCheckIn` kiểm tra null/trống mã QR.
 
 
-* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` -> Lookup Redis (hoặc fallback `Enrollments` / `StudentCodeHistories` kèm cache alias mã năm cũ) -> Đánh giá thời gian bằng `AttendanceTimeHelper` -> Cập nhật trạng thái `IsDirty = true` trên Redis.
+* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` -> Lookup Redis `ATT:QR:DATE:{date}:CODE:{code}` (đã pre-warm cả mã năm cũ; có Negative Cache 30s `ATT:QR:MISS:*`; fallback `Enrollments` / `StudentCodeHistories` với `.AsNoTracking()` + projection gọn) -> Đánh giá thời gian bằng `AttendanceTimeHelper` -> Cập nhật lưới lớp trên Redis dưới striped lock (`IsDirty = true`, `Revision++`, `DirtyEnrollmentIds`, `DirtyAuditMetaByEnrollment`, `PendingCampaignCheckIns`).
 
 
-* **Database access:** Ghi Write-Through tức thì xuống PostgreSQL thông qua `SyncDirtyAttendancesToDatabaseAsync` (trong cùng Request khi quét mới).
+* **Database access:**
+  * *Khi Redis khỏe (`IsRedisAvailable == true`):* 0 truy vấn PostgreSQL trực tiếp trên đường nóng; báo tín hiệu `IAttendanceFlushSignal.NotifyDirty` để `AttendanceWriteBehindBackgroundService` gom nhóm Batch Upsert **chỉ các `DirtyEnrollmentIds`** sau mỗi 5 giây (hoặc ngưỡng 25 lượt quét), kết hợp Hangfire safety-net 2 phút (`syncback-redis-attendance-to-db`), Graceful Shutdown flush và API `FlushRedisToDatabase`.
+  * *Khi Redis sự cố (`IsRedisAvailable == false`):* Tự động Fallback gọi `PersistSingleQrScanFallbackAsync` ghi trực tiếp duy nhất 1 bản ghi học sinh xuống PostgreSQL để không mất dữ liệu.
 
 
-* **Output:** Trả về `QrScanResponseDto` (kèm cờ mã cũ `IsHistoricalCode`, `OldCode`, `WarningMessage`, `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`) dạng JSON cho UI để phát âm thanh và kích hoạt đếm lùi hoàn tác 5 giây.
+* **Output:** Trả về `QrScanResponseDto` (kèm cờ mã cũ `IsHistoricalCode`, `OldCode`, `WarningMessage`, `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`) dạng JSON với thời gian phản hồi `< 150ms`.
 
 
 
-### Flow 1B: Manual Grid Batch Save (Write-Through)
+### Flow 1B: Manual Grid Batch Save (Single-Class Write-Through)
 
-* **Entry point:** `AttendanceController.SaveBatch` (`POST /Attendance/SaveBatch`, comment `P2-LOG-16 FIX`).
+* **Entry point:** `AttendanceController.SaveBatch` (`POST /Attendance/SaveBatch`, gắn `[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`).
 * **Input:** `AttendanceBatchSubmitDto` (`ClassId`, `AttendanceDate`, `Items`).
-* **Business processing & Database access:** Gọi `RedisAttendanceService.SaveBatchToRedisAsync` để cập nhật sổ lớp trên Redis (`IsDirty = true`) và nạp ngay `SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate)` trong cùng HTTP request để ghi **Write-Through trực tiếp** xuống PostgreSQL (`Attendances`), đồng bộ tức thì hai tầng dữ liệu.
+* **Business processing & Database access:** Gọi `RedisAttendanceService.SaveBatchToRedisAsync` cập nhật sổ lớp trên Redis dưới per-class lock và gọi `FlushClassToDatabaseAsync(request.ClassId, request.AttendanceDate)` ngay trong cùng HTTP request để ghi **Write-Through trực tiếp chỉ đúng lớp đó** xuống PostgreSQL (`Attendances`), không gây xung đột với các lớp khác đang quét QR.
 * **Output:** JSON `{ success, message }`.
 
 
@@ -167,7 +172,7 @@
 * **Mục đích:** Ghi vết toàn bộ các thay đổi trạng thái/lý do điểm danh xuống bảng `AttendanceAuditLogs` (kèm log Serilog) và hiển thị chi tiết trên popup `GetAuditHistory` (`#auditTimelineModal`).
 * **Các nguồn ghi Audit Log:**
   * `QuickUpdateSingleAttendanceAsync` (`QUICK_UPDATE_CLASS`, `QUICK_UPDATE_MASS`, `QUICK_UPDATE_NOTE`, `QUICK_UPDATE`).
-  * `FlushSingleClassPayloadToDbAsync` (`BATCH_SAVE` từ `SaveBatch` và `QR_SCAN` từ `ScanCheckIn`).
+  * `FlushSingleClassByIdAsync` / `FlushSnapshotToDbAsync` (`BATCH_SAVE` từ `SaveBatch`, `QR_SCAN` từ `ScanCheckIn`, và `QR_UNDO` từ `UndoScanCheckIn`).
   * `UndoScanCheckInAsync` (`QR_UNDO`).
   * `AttendanceController.SyncOfflineQueue` (`OFFLINE_QR_SYNC`, `OFFLINE_BATCH_SYNC`).
   * `AttendanceDisputeService.ReviewDisputeByTeacherAsync` (`DISPUTE_APPROVED`), `AbsenceController.Review` (`EXCUSE_APPROVED`), và `AutoMarkAbsentUncheckedStudentsAsync` (`AUTO_ABSENT`).
@@ -264,7 +269,7 @@
 
 ## 6. Dependencies
 
-* **Dependencies nội bộ:** `AttendanceController` inject `ParishDbContext`, `ILogger<AttendanceController>`, `IRedisAttendanceService` và `IAttendanceDisputeService`. Đối với mã QR năm cũ, `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` và `AttendanceController.GetOfflineStudentsCache` truy vấn trực tiếp bảng `StudentCodeHistories` (`OriginalCode` / `ArchivedYearCode`) qua `ParishDbContext` mà không gọi `IStudentCodeRolloverService` (`IStudentCodeRolloverService` được dùng bởi `AttendanceDisputeService`, `LookupController` và `PromotionController`).
+* **Dependencies nội bộ:** `AttendanceController` inject `ParishDbContext`, `ILogger<AttendanceController>`, `IRedisAttendanceService`, `IAttendanceDisputeService` và `ICacheService`. Đối với mã QR năm cũ, `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` và `AttendanceController.GetOfflineStudentsCache` truy vấn trực tiếp bảng `StudentCodeHistories` (`OriginalCode` / `ArchivedYearCode`) qua `ParishDbContext` mà không gọi `IStudentCodeRolloverService` (`IStudentCodeRolloverService` được dùng bởi `AttendanceDisputeService`, `LookupController` và `PromotionController`).
 
 
 * **Database dependencies:** Tables: `Attendances`, `AbsenceRequests`, `AttendanceAuditLogs`, `AttendanceDisputeRequests`, `ClassSchedules`, `Announcements`.
@@ -304,7 +309,11 @@
 * **Memory Overhead khi Xuất Excel:** Trong `AttendanceController.ExportStatisticsExcel`, hệ thống query toàn bộ Enrollments và Attendances của một lớp vào bộ nhớ qua `.ToListAsync()` trước khi xử lý logic tính toán. Nếu dữ liệu điểm danh của cả năm quá lớn, có nguy cơ gây áp lực lên RAM (Mặc dù đã dùng `.AsNoTracking()`).
 
 
-* **Đồng bộ Write-Through & Dự phòng Hangfire:** Cả hai luồng `ScanCheckIn` và `SaveBatch` (`AttendanceController.cs:147-151`, comment `P2-LOG-16 FIX`) đều thực hiện ghi **Write-Through trực tiếp** xuống PostgreSQL qua `SyncDirtyAttendancesToDatabaseAsync` ngay trong cùng HTTP request. Job định kỳ 2 phút (`*/2 * * * *`) của Hangfire đóng vai trò **cơ chế dự phòng (fallback/retry)** cho các phân vùng còn `IsDirty = true` nếu DB gặp sự cố tạm thời. Với kịch bản mất mạng cục bộ tại thiết bị quét, dữ liệu được lưu an toàn trong IndexedDB (`offline-attendance.js`) và đồng bộ lên qua `SyncOfflineQueue`.
+* **Đồng bộ Write-Behind theo lô, Fallback Redis-Down & Dự phòng Hangfire (`TASK-INF-08`):**
+  * Luồng quét QR `ScanCheckIn` ưu tiên 100% trên Redis AOF (`appendfsync everysec`) kết hợp `AttendanceWriteBehindBackgroundService` gom nhóm Batch Upsert xuống PostgreSQL mỗi 5 giây (hoặc ngưỡng 25 lượt quét), tự động Flush toàn bộ khi tắt ứng dụng (`StopAsync`), và có Job Hangfire mỗi 2 phút (`*/2 * * * *`, dùng múi giờ Việt Nam UTC+7) + nút `FlushRedisToDatabase` làm lớp dự phòng. Khi Redis gặp sự cố (`!IsRedisAvailable`), `ScanCheckIn` tự động chuyển sang ghi thẳng 1 dòng duy nhất xuống PostgreSQL để đảm bảo không mất dữ liệu.
+  * Luồng `SaveBatch` và `QuickUpdateSingle` vẫn thực hiện ghi Write-Through trực tiếp cho đúng lớp/học sinh vừa thao tác.
+  * Trước khi `SyncOfflineQueue` hợp nhất dữ liệu từ IndexedDB và xóa cache `ClassSheet`, hệ thống tiền đồng bộ các phân vùng đang `IsDirty` bằng `SyncDirtyClassesForPartitionsAsync` để không làm mất lượt quét QR chưa kịp flush.
+  * Toàn bộ các truy vấn chỉ đọc trong `AttendanceController` và `RedisAttendanceService` đều dùng `.AsNoTracking()` + projection gọn; các điểm nóng QR áp dụng `SecurityExtensions.PolicyQrAttendance` (60 req/s, burst 180, queue 60) tương thích 20–30 thiết bị GLV qua 1 IP NAT Wi-Fi nhà thờ.
 
 
 * **Dynamic Policy/Reflection:** Không có dynamic reflection, mọi policy role được set cứng.

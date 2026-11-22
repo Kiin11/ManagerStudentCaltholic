@@ -8,6 +8,7 @@ namespace ManagerStudentCaltholic.Extensions
         public const string PolicyGlobal = "PolicyGlobal";
         public const string PolicyAuth = "PolicyAuth";
         public const string PolicyPublicLookup = "PolicyPublicLookup"; // Thêm hằng số này
+        public const string PolicyQrAttendance = "PolicyQrAttendance"; // TASK-INF-08: High-concurrency QR burst behind 1 shared NAT IP
 
         /// <summary>
         /// TASK-705: Đăng ký dịch vụ Rate Limiting
@@ -63,6 +64,23 @@ namespace ManagerStudentCaltholic.Extensions
                         Window = TimeSpan.FromMinutes(1),
                         SegmentsPerWindow = 2,
                         QueueLimit = 0
+                    });
+                });
+
+                // 4. TASK-INF-08 / TASK-INF-07 alignment: Policy dành riêng cho luồng Điểm danh QR & Đồng bộ Offline
+                // Cho phép 20-30 thiết bị GLV quét QR đồng thời qua chung 1 IP NAT Wi-Fi nhà thờ (60 req/s bền vững, burst 180 req, hàng đợi 60)
+                // mà KHÔNG bao giờ bị HTTP 429, đồng thời vẫn giữ nguyên PolicyPublicLookup & PolicyAuth nghiêm ngặt.
+                options.AddPolicy(PolicyQrAttendance, httpContext =>
+                {
+                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    return RateLimitPartition.GetTokenBucketLimiter(clientIp, _ => new TokenBucketRateLimiterOptions
+                    {
+                        TokenLimit = 180,
+                        TokensPerPeriod = 60,
+                        ReplenishmentPeriod = TimeSpan.FromSeconds(1),
+                        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                        QueueLimit = 60,
+                        AutoReplenishment = true
                     });
                 });
             });

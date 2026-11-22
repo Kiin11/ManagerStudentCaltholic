@@ -107,6 +107,9 @@ namespace ManagerStudentCaltholic.Extensions
 
             // Bổ sung vào Program.cs (cùng cụm đăng ký dịch vụ trước dòng var app = builder.Build();):
             services.AddSingleton<SystemMetricsCollector>();
+            // TASK-INF-08: Tín hiệu gom nhóm & BackgroundService đồng bộ Write-Behind điểm danh QR từ Redis xuống PostgreSQL
+            services.AddSingleton<IAttendanceFlushSignal, AttendanceWriteBehindSignal>();
+            services.AddHostedService<AttendanceWriteBehindBackgroundService>();
             services.AddScoped<IRedisAttendanceService, RedisAttendanceService>();
             services.AddScoped<IMassCampaignService, MassCampaignService>();
             services.AddScoped<IClassEvaluationService, ClassEvaluationService>();
@@ -176,15 +179,42 @@ namespace ManagerStudentCaltholic.Extensions
                             return;
                         }
 
-                        var dbContext = context.HttpContext.RequestServices.GetRequiredService<ParishDbContext>();
-                        var user = await dbContext.Users
-                            .AsNoTracking()
-                            .Select(u => new { u.Id, u.IsActive, u.Role, u.ManagedGradeLevel, u.LockoutEnd })
-                            .FirstOrDefaultAsync(u => u.Id == userId);
+                        var cacheService = context.HttpContext.RequestServices.GetRequiredService<ICacheService>();
+                        var stateKey = CacheKeys.UserPrincipalState(userId);
+                        var user = await cacheService.GetAsync<CachedUserPrincipalState>(stateKey);
 
-                        // 1. Nếu tài khoản không tồn tại, bị khóa (IsActive = false) hoặc đang bị Lockout -> Hủy phiên ngay lập tức
-                        if (user == null || !user.IsActive || (user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow))
+                        if (user == null)
                         {
+                            var dbContext = context.HttpContext.RequestServices.GetRequiredService<ParishDbContext>();
+                            var dbUser = await dbContext.Users
+                                .AsNoTracking()
+                                .Where(u => u.Id == userId)
+                                .Select(u => new CachedUserPrincipalState
+                                {
+                                    IsActive = u.IsActive,
+                                    Role = u.Role,
+                                    ManagedGradeLevel = u.ManagedGradeLevel,
+                                    LockoutEndUtc = u.LockoutEnd
+                                })
+                                .FirstOrDefaultAsync();
+
+                            if (dbUser == null || !dbUser.IsActive || (dbUser.LockoutEndUtc.HasValue && dbUser.LockoutEndUtc > DateTime.UtcNow))
+                            {
+                                context.RejectPrincipal();
+                                await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
+                                    context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
+                                return;
+                            }
+
+                            user = dbUser;
+                            // TASK-INF-08: Lưu đệm ngắn hạn 60 giây trạng thái xác thực phiên nhân sự để tránh truy vấn bảng Users trên mỗi lượt quét QR
+                            await cacheService.SetAsync(stateKey, user, TimeSpan.FromSeconds(60));
+                        }
+
+                        // 1. Nếu tài khoản bị khóa (IsActive = false) hoặc đang bị Lockout -> Hủy phiên ngay lập tức
+                        if (!user.IsActive || (user.LockoutEndUtc.HasValue && user.LockoutEndUtc > DateTime.UtcNow))
+                        {
+                            await cacheService.RemoveAsync(stateKey);
                             context.RejectPrincipal();
                             await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
                                 context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -198,6 +228,7 @@ namespace ManagerStudentCaltholic.Extensions
 
                         if (currentCookieRole != user.Role || currentCookieGrade != dbGrade)
                         {
+                            await cacheService.RemoveAsync(stateKey);
                             context.RejectPrincipal();
                             await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignOutAsync(
                                 context.HttpContext, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -299,6 +330,14 @@ namespace ManagerStudentCaltholic.Extensions
             });
 
             return services;
+        }
+
+        internal sealed class CachedUserPrincipalState
+        {
+            public bool IsActive { get; set; }
+            public string Role { get; set; } = string.Empty;
+            public string? ManagedGradeLevel { get; set; }
+            public DateTime? LockoutEndUtc { get; set; }
         }
     }
 }

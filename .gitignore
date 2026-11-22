@@ -1,13 +1,56 @@
+# ==============================================================================
+# Secrets, Environment & Local Configuration (NEVER COMMIT)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/appsettings.*.local.json
+**/appsettings-copy.json
+
+google-service-account*.json
+**/secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+
+# ==============================================================================
+# Infrastructure / Deployment Config (Moved to private parish-infra-config repo)
+# ==============================================================================
+docker-compose*.yml
+docker-compose*.yaml
+nginx/
+
+# ==============================================================================
+# .NET Build Artifacts & IDE Files
+# ==============================================================================
+**/bin/
+**/obj/
+/.vs/
+.vscode/
+*.user
+*.csproj.user
+*.suo
+*.userosscache
+*.sln.docstates
 *.dll
-/.vs
-/ManagerStudentCaltholic/obj
-docker-compose.override.yml
 *.pdb
 *.exe
 *.log
-parish-web-app_key.pem
-ManagerStudentCaltholic/appsettings.Development.json
-ManagerStudentCaltholic/bin/Debug/net8.0/appsettings.Development.json
-ManagerStudentCaltholic/appsettings-copy.json
-.env
+tmp_publish_check/
+
+# ==============================================================================
+# Runtime Data, Uploads, Logs & DataProtection Keys
+# ==============================================================================
+**/logs/
+!**/Views/Logs/
+!**/Views/Logs/**
+**/PrivateUploads/
 **/dataprotection-keys/
+**/wwwroot/uploads/

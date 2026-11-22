@@ -19,6 +19,27 @@ namespace ManagerStudentCaltholic.Models.DTOs
 
         public static string DirtyPartitionsIndex(DateTime date) =>
             $"ATT:DIRTY:DATE:{date:yyyy-MM-dd}";
+
+        public static string QrNegativeLookup(DateTime date, string studentCode) =>
+            $"ATT:QR:MISS:DATE:{date:yyyy-MM-dd}:CODE:{studentCode.Trim().ToUpperInvariant()}";
+
+        public static string ActiveCampaignByClass(int classId, DateTime date) =>
+            $"ATT:CAMPAIGN:CLASS:{classId}:DATE:{date:yyyy-MM-dd}";
+
+        public static string CampaignScanMarker(long campaignId, long enrollmentId, DateTime date) =>
+            $"ATT:CAMPAIGN:SCAN:{campaignId}:ENR:{enrollmentId}:DATE:{date:yyyy-MM-dd}";
+
+        public static string ClassesByYear(int academicYearId) =>
+            $"ATT:CLASSES:YEAR:{academicYearId}";
+
+        public static string ClassMetadata(int classId) =>
+            $"ATT:META:CLASS:{classId}";
+
+        public static string TeacherAuthorizedClassIds(long userId, int academicYearId) =>
+            $"ATT:AUTH:TEACHER:{userId}:YEAR:{academicYearId}";
+
+        public static string OfflineStudentsCache(int academicYearId) =>
+            $"ATT:OFFLINE:STUDENTS:YEAR:{academicYearId}";
     }
 
     /// <summary>
@@ -36,7 +57,55 @@ namespace ManagerStudentCaltholic.Models.DTOs
         public string? LastModifiedIp { get; set; }
         public string? LastActionType { get; set; }
         public bool IsDirty { get; set; }
+        /// <summary>
+        /// Số phiên bản tăng dần sau mỗi thay đổi trên Redis nhằm ngăn mất dữ liệu khi luồng quét QR và luồng Flush chạy song song.
+        /// </summary>
+        public long Revision { get; set; }
+        /// <summary>
+        /// Tập EnrollmentId thực sự thay đổi kể từ lần Flush DB gần nhất (chỉ Upsert đúng học sinh thay đổi thay vì cả lớp).
+        /// </summary>
+        public HashSet<long>? DirtyEnrollmentIds { get; set; }
+        /// <summary>
+        /// Thông tin Audit riêng cho từng EnrollmentId khi nhiều GLV quét cùng một lớp trong cùng chu kỳ gom nhóm.
+        /// </summary>
+        public Dictionary<long, RedisDirtyAuditMeta>? DirtyAuditMetaByEnrollment { get; set; }
+        /// <summary>
+        /// Danh sách lượt điểm danh Chiến dịch 1 tháng chờ đồng bộ theo lô cùng bảng Attendances.
+        /// </summary>
+        public List<RedisPendingCampaignCheckIn>? PendingCampaignCheckIns { get; set; }
         public List<StudentAttendanceRowItem> Students { get; set; } = new();
+    }
+
+    public class RedisDirtyAuditMeta
+    {
+        public string ActionType { get; set; } = "QR_SCAN";
+        public string? ModifiedBy { get; set; }
+        public string? IpAddress { get; set; }
+    }
+
+    public class RedisPendingCampaignCheckIn
+    {
+        public long CampaignId { get; set; }
+        public long StudentId { get; set; }
+        public long EnrollmentId { get; set; }
+        public DateTime AttendanceDate { get; set; }
+        public string? ModifiedBy { get; set; }
+        public DateTime CheckInTimeUtc { get; set; } = DateTime.UtcNow;
+    }
+
+    public class RedisActiveCampaignCacheItem
+    {
+        public bool HasActiveCampaign { get; set; }
+        public long? CampaignId { get; set; }
+    }
+
+    public class RedisClassMetaItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string GradeLevel { get; set; } = string.Empty;
+        public string Session { get; set; } = string.Empty;
+        public int AcademicYearId { get; set; }
     }
 
     /// <summary>
