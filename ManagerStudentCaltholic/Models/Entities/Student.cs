@@ -35,6 +35,9 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         public bool IsActive { get; set; } = true;
 
+        public long? AvatarCloudFileId { get; set; }
+        public CloudMediaFile? AvatarCloudFile { get; set; }
+
         public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }

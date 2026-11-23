@@ -65,6 +65,9 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         public bool IsActive { get; set; } = true;
 
+        public long? CloudFileId { get; set; }
+        public CloudMediaFile? CloudFile { get; set; }
+
         public ICollection<ClassCurriculumVersion> Versions { get; set; } = new List<ClassCurriculumVersion>();
         public ICollection<ClassLessonPlan> LessonPlans { get; set; } = new List<ClassLessonPlan>();
     }

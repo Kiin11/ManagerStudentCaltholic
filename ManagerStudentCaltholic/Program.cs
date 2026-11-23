@@ -5,6 +5,7 @@ using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Middlewares;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Security;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Serilog;
 
@@ -17,12 +18,17 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// TASK-706: Cconfig limit payload và timeout in Kestrel layer
+// TASK-706 / FEAT-P5-08: Config limit payload và timeout in Kestrel & Multipart Form layer
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
-    options.Limits.MaxRequestBodySize = 20 * 1024 * 1024; // 20 MB
+    options.Limits.MaxRequestBodySize = 30 * 1024 * 1024; // 30 MB
     options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(2);
     options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 30 * 1024 * 1024; // 30 MB
 });
 
 // 2. Add Serilog Logging
@@ -32,7 +38,7 @@ builder.Host.AddSerilogLogging();
 builder.Services
     .AddDatabaseConfiguration(builder.Configuration)
     .AddReverseProxyConfiguration()
-    .AddApplicationServices()
+    .AddApplicationServices(builder.Configuration)
     .AddHybridAuthentication(builder.Configuration)
     .AddStrictSecurityConfigurations() // task -707: Add Security Headers Middleware
     .AddAppRateLimiter()  // task-705: Add Rate Limiting

@@ -70,6 +70,9 @@ namespace ManagerStudentCaltholic.Data
         public DbSet<StaffQuickLookupLog> StaffQuickLookupLogs => Set<StaffQuickLookupLog>();
         public DbSet<LookupViewOption> LookupViewOptions => Set<LookupViewOption>();
 
+        // --- Cloud Media Storage (Phase 5: FEAT-P5-08) ---
+        public DbSet<CloudMediaFile> CloudMediaFiles => Set<CloudMediaFile>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -80,19 +83,33 @@ namespace ManagerStudentCaltholic.Data
             modelBuilder.Entity<Enrollment>().HasQueryFilter(e => !e.IsDeleted);
             modelBuilder.Entity<AbsenceRequest>().HasQueryFilter(r => !r.Enrollment.IsDeleted);
             modelBuilder.Entity<AttendanceRuleConfig>().HasQueryFilter(r => !r.ClassRoom.IsDeleted);
-            modelBuilder.Entity<ClassLessonDocument>().HasQueryFilter(d => !d.ClassRoom.IsDeleted);
+            modelBuilder.Entity<ClassLessonDocument>(entity =>
+            {
+                entity.HasQueryFilter(d => !d.ClassRoom.IsDeleted);
+                entity.HasOne(d => d.CloudFile)
+                      .WithMany()
+                      .HasForeignKey(d => d.CloudFileId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(d => d.CloudFileId);
+            });
 
             // Đánh index cho trường IsDeleted để truy vấn cực nhanh
-            modelBuilder.Entity<Student>().HasIndex(e => e.IsDeleted);
+            modelBuilder.Entity<Student>(entity =>
+            {
+                entity.HasIndex(e => e.IsDeleted);
+                entity.HasIndex(e => e.StudentCode);
+                entity.HasIndex(e => new { e.LastName, e.FirstName });
+                entity.HasIndex(e => e.ChristianName);
+                entity.HasIndex(e => e.BaoDongPromiseDate);
+                entity.HasIndex(e => e.CatechistPromiseDate);
+                entity.HasOne(e => e.AvatarCloudFile)
+                      .WithMany()
+                      .HasForeignKey(e => e.AvatarCloudFileId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(e => e.AvatarCloudFileId);
+            });
             modelBuilder.Entity<ClassRoom>().HasIndex(e => e.IsDeleted);
             modelBuilder.Entity<Enrollment>().HasIndex(e => e.IsDeleted);
-
-            // FEAT-P5-01 (TASK-P5-01.1): Bổ sung Index tìm kiếm đa khóa trên Students và Enrollments
-            modelBuilder.Entity<Student>().HasIndex(e => e.StudentCode);
-            modelBuilder.Entity<Student>().HasIndex(e => new { e.LastName, e.FirstName });
-            modelBuilder.Entity<Student>().HasIndex(e => e.ChristianName);
-            modelBuilder.Entity<Student>().HasIndex(e => e.BaoDongPromiseDate);
-            modelBuilder.Entity<Student>().HasIndex(e => e.CatechistPromiseDate);
             modelBuilder.Entity<Enrollment>().HasIndex(e => new { e.StudentId, e.AcademicYearId });
 
             modelBuilder.Entity<ClassRoom>(entity =>
@@ -225,6 +242,12 @@ namespace ManagerStudentCaltholic.Data
                       .HasFilter("\"LinkedStudentId\" IS NOT NULL");
 
                 entity.HasIndex(u => u.ManagedGradeLevel);
+
+                entity.HasOne(u => u.AvatarCloudFile)
+                      .WithMany()
+                      .HasForeignKey(u => u.AvatarCloudFileId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(u => u.AvatarCloudFileId);
             });
 
             modelBuilder.Entity<RefreshToken>(entity =>
@@ -341,6 +364,12 @@ namespace ManagerStudentCaltholic.Data
 
                 entity.HasIndex(r => new { r.ClassRoomLocationId, r.Status });
                 entity.HasIndex(r => r.ReporterUserId);
+
+                entity.HasOne(r => r.CloudImageFile)
+                      .WithMany()
+                      .HasForeignKey(r => r.CloudImageFileId)
+                      .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(r => r.CloudImageFileId);
             });
 
             modelBuilder.Entity<ClassLessonPlan>(entity =>
@@ -395,6 +424,8 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasMany(c => c.Versions).WithOne(v => v.CurriculumDocument).HasForeignKey(v => v.ClassCurriculumDocumentId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(c => new { c.ClassRoomId, c.AcademicYearId });
                 entity.HasIndex(c => c.AcademicYearId);
+                entity.HasOne(c => c.CloudFile).WithMany().HasForeignKey(c => c.CloudFileId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(c => c.CloudFileId);
             });
 
             modelBuilder.Entity<ClassCurriculumVersion>(entity =>
@@ -404,8 +435,10 @@ namespace ManagerStudentCaltholic.Data
                 entity.HasQueryFilter(v => !v.CurriculumDocument.ClassRoom.IsDeleted);
                 entity.HasOne(v => v.CurriculumDocument).WithMany(c => c.Versions).HasForeignKey(v => v.ClassCurriculumDocumentId).OnDelete(DeleteBehavior.Cascade);
                 entity.HasOne(v => v.CreatedByUser).WithMany().HasForeignKey(v => v.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(v => v.CloudFile).WithMany().HasForeignKey(v => v.CloudFileId).OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(v => new { v.ClassCurriculumDocumentId, v.VersionNumber });
                 entity.HasIndex(v => v.CreatedAt);
+                entity.HasIndex(v => v.CloudFileId);
             });
 
             // 5. GOVERNANCE & ROLES (TASK-906 & TASK-907)
@@ -842,6 +875,38 @@ namespace ManagerStudentCaltholic.Data
                         IsActive = true
                     }
                 );
+            });
+
+            // FEAT-P5-08: Cấu hình bảng CloudMediaFiles (Lưu trữ đám mây Google Drive & Fallback nội bộ)
+            modelBuilder.Entity<CloudMediaFile>(entity =>
+            {
+                entity.ToTable("CloudMediaFiles");
+                entity.HasKey(e => e.Id);
+                entity.HasQueryFilter(e => !e.IsDeleted);
+
+                entity.Property(e => e.Category).HasMaxLength(50).IsRequired();
+                entity.Property(e => e.EntityName).HasMaxLength(80);
+                entity.Property(e => e.OriginalFileName).HasMaxLength(255).IsRequired();
+                entity.Property(e => e.StoredFileName).HasMaxLength(255).IsRequired();
+                entity.Property(e => e.ContentType).HasMaxLength(120).IsRequired();
+                entity.Property(e => e.Sha256Hash).HasMaxLength(64);
+                entity.Property(e => e.StorageProvider).HasMaxLength(30).IsRequired().HasDefaultValue(CloudStorageProvider.GoogleDrive);
+                entity.Property(e => e.ExternalFileId).HasMaxLength(150);
+                entity.Property(e => e.ExternalFolderId).HasMaxLength(150);
+                entity.Property(e => e.DriveFolderPath).HasMaxLength(300);
+                entity.Property(e => e.LocalFallbackPath).HasMaxLength(500);
+                entity.Property(e => e.SyncStatus).HasMaxLength(20).IsRequired().HasDefaultValue(CloudSyncStatus.Success);
+                entity.Property(e => e.RetryCount).HasDefaultValue(0);
+                entity.Property(e => e.LastError).HasMaxLength(1000);
+                entity.Property(e => e.UploadedBy).HasMaxLength(100);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("NOW()");
+                entity.Property(e => e.IsDeleted).HasDefaultValue(false);
+
+                entity.HasIndex(e => new { e.Category, e.SyncStatus, e.CreatedAt });
+                entity.HasIndex(e => new { e.EntityName, e.EntityId });
+                entity.HasIndex(e => e.ExternalFileId);
+                entity.HasIndex(e => new { e.StorageProvider, e.SyncStatus });
+                entity.HasIndex(e => e.IsDeleted);
             });
         }
 

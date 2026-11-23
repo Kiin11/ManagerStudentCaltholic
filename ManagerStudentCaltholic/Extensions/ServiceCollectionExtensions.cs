@@ -2,6 +2,7 @@ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Security;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -74,6 +75,17 @@ namespace ManagerStudentCaltholic.Extensions
         }
 
         /// <summary>
+        /// Registry Business Services and bind application configuration options.
+        /// </summary>
+        public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
+        {
+            services.Configure<GoogleDriveOptions>(configuration.GetSection(GoogleDriveOptions.SectionName));
+            services.Configure<DriveLogUploadOptions>(configuration.GetSection(DriveLogUploadOptions.SectionName));
+
+            return services.AddApplicationServices();
+        }
+
+        /// <summary>
         /// Registry Bussiness Services for the application, such as IAttendanceService, IStudentService, etc.
         /// </summary>
         /// <param name="services"></param>
@@ -121,6 +133,9 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IStaffStudentLookupService, StaffStudentLookupService>();
             // TASK-04.1 (Phase 6): Service tổng hợp Profile Lịch sử Kép & 5 Cột mốc Đức tin
             services.AddScoped<IProfileHistoryService, ProfileHistoryService>();
+            // FEAT-P5-08: Dịch vụ lưu trữ Google Drive & Tối ưu hình ảnh WebP
+            services.AddScoped<IGoogleDriveStorageService, GoogleDriveStorageService>();
+            services.AddSingleton<IImageOptimizationService, ImageOptimizationService>();
 
             return services;
         }
