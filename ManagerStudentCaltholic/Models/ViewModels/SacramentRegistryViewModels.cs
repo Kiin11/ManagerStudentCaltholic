@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
@@ -69,6 +70,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? Notes { get; set; }
         public string? UpdatedBy { get; set; }
         public string? UpdatedAtDisplay { get; set; }
+        public List<CloudMediaSummaryDto> Certificates { get; set; } = new();
     }
 
     public class MissingSacramentAlertDto

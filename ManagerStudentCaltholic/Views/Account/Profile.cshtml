@@ -5,6 +5,7 @@
     ViewData["Title"] = "Hồ Sơ Cá Nhân";
     bool isMobile = Context.Request.IsMobileDevice();
     bool isViewingOther = ViewBag.IsViewingOther == true;
+    bool canUploadAvatar = !isViewingOther || User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard);
 }
 
 @if (isMobile)
@@ -121,8 +122,21 @@
         <!-- Thẻ Tóm Tắt Hồ Sơ Mobile -->
         <div class="mobile-profile-hero mb-3">
             <div class="d-flex align-items-center gap-3">
-                <div class="mobile-profile-avatar">
-                    <i class="bi bi-person-fill"></i>
+                <div class="mobile-profile-avatar position-relative overflow-hidden border border-primary-subtle">
+                    @if (!string.IsNullOrWhiteSpace(Model.AvatarUrl))
+                    {
+                        <img id="profileAvatarImg" src="@Model.AvatarUrl" alt="Ảnh đại diện"
+                             class="w-100 h-100 object-fit-cover rounded-circle"
+                             onerror="this.classList.add('d-none'); document.getElementById('profileAvatarFallbackIcon')?.classList.remove('d-none');" />
+                        <i id="profileAvatarFallbackIcon" class="bi bi-person-fill d-none"></i>
+                    }
+                    else
+                    {
+                        <img id="profileAvatarImg" src="" alt="Ảnh đại diện"
+                             class="w-100 h-100 object-fit-cover rounded-circle d-none"
+                             onerror="this.classList.add('d-none'); document.getElementById('profileAvatarFallbackIcon')?.classList.remove('d-none');" />
+                        <i id="profileAvatarFallbackIcon" class="bi bi-person-fill"></i>
+                    }
                 </div>
                 <div class="flex-grow-1 min-w-0">
                     <h6 class="fw-bold text-dark mb-0 text-truncate">
@@ -162,6 +176,18 @@
                     </div>
                 </div>
             </div>
+            @if (canUploadAvatar)
+            {
+                <div class="mt-2 pt-2 border-top d-flex align-items-center justify-content-between gap-2">
+                    <input type="file" id="profileAvatarFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,.gif,image/*" onchange="uploadAccountAvatar(this)" />
+                    <button type="button" id="btnUploadProfileAvatar"
+                            class="btn btn-outline-primary btn-sm rounded-pill px-3 fw-semibold touch-target-44 d-inline-flex align-items-center gap-1"
+                            onclick="document.getElementById('profileAvatarFileInput').click()">
+                        <i class="bi bi-camera-fill"></i> Đổi ảnh đại diện
+                    </button>
+                    <small id="profileAvatarStatus" class="text-muted text-truncate">JPG, PNG, WebP (&le; 5 MB)</small>
+                </div>
+            }
         </div>
 
         <!-- Thanh Chọn Nhanh Phân Khu Hồ Sơ -->
@@ -356,10 +382,35 @@ else
                 <!-- Thẻ Thông Tin Cơ Bản -->
                 <div class="card border-0 shadow-sm rounded-4 mb-4 text-center overflow-hidden">
                     <div class="card-body p-4">
-                        <div class="mx-auto mb-3 rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center"
+                        <div class="mx-auto mb-3 rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center overflow-hidden border border-2 border-primary-subtle shadow-sm"
                              style="width: 84px; height: 84px;">
-                            <i class="bi bi-person-fill display-4"></i>
+                            @if (!string.IsNullOrWhiteSpace(Model.AvatarUrl))
+                            {
+                                <img id="profileAvatarImg" src="@Model.AvatarUrl" alt="Ảnh đại diện"
+                                     class="w-100 h-100 object-fit-cover rounded-circle"
+                                     onerror="this.classList.add('d-none'); document.getElementById('profileAvatarFallbackIcon')?.classList.remove('d-none');" />
+                                <i id="profileAvatarFallbackIcon" class="bi bi-person-fill display-4 d-none"></i>
+                            }
+                            else
+                            {
+                                <img id="profileAvatarImg" src="" alt="Ảnh đại diện"
+                                     class="w-100 h-100 object-fit-cover rounded-circle d-none"
+                                     onerror="this.classList.add('d-none'); document.getElementById('profileAvatarFallbackIcon')?.classList.remove('d-none');" />
+                                <i id="profileAvatarFallbackIcon" class="bi bi-person-fill display-4"></i>
+                            }
                         </div>
+                        @if (canUploadAvatar)
+                        {
+                            <div class="mb-3">
+                                <input type="file" id="profileAvatarFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,.gif,image/*" onchange="uploadAccountAvatar(this)" />
+                                <button type="button" id="btnUploadProfileAvatar"
+                                        class="btn btn-outline-primary btn-sm rounded-pill px-3 fw-semibold"
+                                        onclick="document.getElementById('profileAvatarFileInput').click()">
+                                    <i class="bi bi-camera-fill me-1"></i> Đổi ảnh đại diện
+                                </button>
+                                <div id="profileAvatarStatus" class="small text-muted mt-1">Ảnh JPG, PNG, WebP (tối đa 5 MB)</div>
+                            </div>
+                        }
                         <h5 class="fw-bold text-dark mb-1">
                             @(!string.IsNullOrEmpty(Model.ChristianName) ? $"{Model.ChristianName} " : "")@Model.FirstName @Model.LastName
                         </h5>
@@ -618,6 +669,83 @@ else
                 alertBox.className = "alert alert-danger border-0 rounded-3 small";
                 alertBox.innerText = "Lỗi kết nối khi đổi mật khẩu: " + err.message;
                 alertBox.classList.remove('d-none');
+            }
+        }
+
+        async function uploadAccountAvatar(inputEl) {
+            const file = inputEl?.files?.[0];
+            if (!file) return;
+
+            const statusEl = document.getElementById('profileAvatarStatus');
+            const btnEl = document.getElementById('btnUploadProfileAvatar');
+            const imgEl = document.getElementById('profileAvatarImg');
+            const fallbackEl = document.getElementById('profileAvatarFallbackIcon');
+
+            const setStatus = (msg, cls) => {
+                if (!statusEl) return;
+                statusEl.className = cls;
+                statusEl.textContent = msg;
+            };
+
+            if (file.size > 5 * 1024 * 1024) {
+                setStatus('Ảnh vượt quá giới hạn tối đa 5 MB.', 'small text-danger mt-1');
+                inputEl.value = '';
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('avatarFile', file);
+            const targetUserId = @(Model.Id);
+            if (targetUserId > 0) {
+                formData.append('userId', targetUserId.toString());
+            }
+
+            const prevBtnHtml = btnEl ? btnEl.innerHTML : '';
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tải...';
+            }
+            setStatus('Đang tối ưu và tải ảnh lên...', 'small text-primary mt-1');
+
+            try {
+                const res = await fetch('/Account/UploadAvatar', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token
+                    },
+                    body: formData
+                });
+
+                const rawText = await res.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    result = null;
+                }
+
+                if (res.ok && result && result.success && result.data?.proxyUrl) {
+                    if (imgEl) {
+                        imgEl.src = result.data.proxyUrl;
+                        imgEl.classList.remove('d-none');
+                    }
+                    if (fallbackEl) {
+                        fallbackEl.classList.add('d-none');
+                    }
+                    setStatus(result.message || 'Đã cập nhật ảnh đại diện!', 'small text-success fw-semibold mt-1');
+                } else {
+                    const errMsg = result?.message || `Không thể tải lên ảnh đại diện (HTTP ${res.status}).`;
+                    setStatus(errMsg, 'small text-danger mt-1');
+                }
+            } catch (err) {
+                setStatus('Lỗi kết nối khi tải ảnh: ' + err.message, 'small text-danger mt-1');
+            } finally {
+                if (btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.innerHTML = prevBtnHtml;
+                }
+                inputEl.value = '';
             }
         }
     </script>

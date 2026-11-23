@@ -2,10 +2,12 @@
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
@@ -13,20 +15,34 @@ namespace ManagerStudentCaltholic.Controllers
     [Authorize(Policy = "RequireStaff")]
     public class SacramentsController : Controller
     {
+        private static readonly HashSet<string> AllowedCertificateExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pdf", ".jpg", ".jpeg", ".png", ".webp"
+        };
+
         private readonly ParishDbContext _context;
         private readonly ISacramentRegistryService _sacramentService;
         private readonly ISacramentEvaluationService _evaluationService;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly IImageOptimizationService _imageOptimizationService;
+        private readonly GoogleDriveOptions _driveOptions;
         private readonly ILogger<SacramentsController> _logger;
 
         public SacramentsController(
             ParishDbContext context,
             ISacramentRegistryService sacramentService,
             ISacramentEvaluationService evaluationService,
+            IGoogleDriveStorageService storageService,
+            IImageOptimizationService imageOptimizationService,
+            IOptions<GoogleDriveOptions> driveOptions,
             ILogger<SacramentsController> logger)
         {
             _context = context;
             _sacramentService = sacramentService;
             _evaluationService = evaluationService;
+            _storageService = storageService;
+            _imageOptimizationService = imageOptimizationService;
+            _driveOptions = driveOptions.Value;
             _logger = logger;
         }
 
@@ -288,6 +304,29 @@ namespace ManagerStudentCaltholic.Controllers
 
             int currentAge = CalculateAge(student.DateOfBirth);
             var timeline = await _sacramentService.GetStudentSacramentsAsync(id);
+            var recordIds = timeline
+                .Where(t => t.Id > 0)
+                .Select(t => t.Id)
+                .Distinct()
+                .ToList();
+
+            if (recordIds.Count > 0)
+            {
+                var certMap = await _storageService.GetMediaMapForEntitiesAsync(
+                    nameof(StudentSacramentRecord),
+                    recordIds,
+                    CloudMediaCategory.SacramentDoc,
+                    HttpContext.RequestAborted);
+
+                foreach (var item in timeline)
+                {
+                    if (item.Id > 0 && certMap.TryGetValue(item.Id, out var certs))
+                    {
+                        item.Certificates = certs;
+                    }
+                }
+            }
+
             var missingAlerts = await _sacramentService.GetMissingSacramentsAsync(id, currentAge);
 
             return Json(new StudentSacramentTimelineResponseDto
@@ -406,6 +445,246 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 success = true,
                 message = "Đã xóa bản ghi khỏi Sổ bộ Bí tích."
+            });
+        }
+
+        /// <summary>
+        /// 3B. POST: /Sacraments/UploadCertificate (Tải lên chứng nhận / giấy phép Bí tích)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> UploadCertificate([FromForm] long recordId, IFormFile certificateFile)
+        {
+            if (recordId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã bản ghi Sổ bộ Bí tích không hợp lệ." });
+            }
+
+            var record = await _context.StudentSacramentRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == recordId);
+
+            if (record == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy bản ghi Sổ bộ Bí tích." });
+            }
+
+            if (!await CanAccessStudentAsync(record.StudentId))
+            {
+                return Forbid();
+            }
+
+            if (certificateFile == null || certificateFile.Length <= 0)
+            {
+                return BadRequest(new { success = false, message = "Vui lòng chọn tệp chứng nhận Bí tích hợp lệ." });
+            }
+
+            long maxDocumentBytes = _driveOptions.MaxDocumentBytes > 0 ? _driveOptions.MaxDocumentBytes : 10 * 1024 * 1024;
+            if (certificateFile.Length > maxDocumentBytes)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = $"Dung lượng tệp chứng nhận vượt quá giới hạn tối đa ({maxDocumentBytes / (1024 * 1024)} MB)."
+                });
+            }
+
+            var ext = Path.GetExtension(certificateFile.FileName)?.Trim() ?? string.Empty;
+            if (!AllowedCertificateExtensions.Contains(ext))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Định dạng tệp không hợp lệ. Chỉ chấp nhận .pdf, .jpg, .jpeg, .png, .webp."
+                });
+            }
+
+            CloudMediaFile media;
+            var operatorName = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Staff";
+
+            try
+            {
+                await using var rawStream = certificateFile.OpenReadStream();
+                Stream uploadStream;
+                string uploadContentType;
+                string uploadFileName;
+                bool disposeUploadStream = false;
+
+                if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    Stream pdfStream = rawStream;
+                    if (!pdfStream.CanSeek)
+                    {
+                        var ms = new MemoryStream();
+                        await rawStream.CopyToAsync(ms, HttpContext.RequestAborted);
+                        ms.Position = 0;
+                        pdfStream = ms;
+                        disposeUploadStream = true;
+                    }
+                    else
+                    {
+                        pdfStream.Position = 0;
+                    }
+
+                    byte[] header = new byte[4];
+                    int bytesRead = await pdfStream.ReadAsync(header.AsMemory(0, 4), HttpContext.RequestAborted);
+                    if (bytesRead < 4 || header[0] != 0x25 || header[1] != 0x50 || header[2] != 0x44 || header[3] != 0x46)
+                    {
+                        if (disposeUploadStream)
+                        {
+                            await pdfStream.DisposeAsync();
+                        }
+
+                        return BadRequest(new { success = false, message = "Tệp PDF không hợp lệ (sai chữ ký tệp %PDF)." });
+                    }
+
+                    pdfStream.Position = 0;
+                    uploadStream = pdfStream;
+                    uploadContentType = "application/pdf";
+                    uploadFileName = string.IsNullOrWhiteSpace(certificateFile.FileName)
+                        ? $"sacrament_cert_{record.Id}.pdf"
+                        : Path.GetFileName(certificateFile.FileName);
+                }
+                else
+                {
+                    var opt = await _imageOptimizationService.OptimizeToWebpAsync(
+                        rawStream,
+                        maxWidth: 1800,
+                        maxHeight: 1800,
+                        quality: 82,
+                        ct: HttpContext.RequestAborted);
+
+                    uploadStream = opt.OptimizedStream;
+                    disposeUploadStream = true;
+                    uploadContentType = opt.ContentType;
+                    uploadFileName = string.IsNullOrWhiteSpace(certificateFile.FileName)
+                        ? $"sacrament_cert_{record.Id}{opt.FileExtension}"
+                        : Path.ChangeExtension(Path.GetFileName(certificateFile.FileName), opt.FileExtension);
+                }
+
+                try
+                {
+                    media = await _storageService.UploadAsync(new CloudUploadRequest
+                    {
+                        Content = uploadStream,
+                        OriginalFileName = uploadFileName,
+                        ContentType = uploadContentType,
+                        Category = CloudMediaCategory.SacramentDoc,
+                        EntityName = nameof(StudentSacramentRecord),
+                        EntityId = record.Id,
+                        FolderSegments = new[] { "Sacraments_Docs" },
+                        UploadedBy = operatorName,
+                        UploadedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
+                        AllowLocalFallback = true
+                    }, HttpContext.RequestAborted);
+                }
+                finally
+                {
+                    if (disposeUploadStream)
+                    {
+                        await uploadStream.DisposeAsync();
+                    }
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tải lên chứng nhận Bí tích cho SacramentRecordId={RecordId}", recordId);
+                return StatusCode(500, new { success = false, message = "Không thể lưu tệp chứng nhận Bí tích. Vui lòng thử lại." });
+            }
+
+            _logger.LogInformation(
+                "AUDIT SACRAMENT_CERT_UPLOAD: User={Operator} uploaded CloudMediaId={MediaId} ({FileName}) for SacramentRecordId={RecordId}, StudentId={StudentId}",
+                operatorName, media.Id, media.OriginalFileName, record.Id, record.StudentId);
+
+            var summaryDto = new CloudMediaSummaryDto
+            {
+                Id = media.Id,
+                Category = media.Category,
+                EntityName = media.EntityName,
+                EntityId = media.EntityId,
+                OriginalFileName = media.OriginalFileName,
+                ContentType = media.ContentType,
+                FileSize = media.FileSize,
+                StorageProvider = media.StorageProvider,
+                ExternalFileId = media.ExternalFileId,
+                DriveFolderPath = media.DriveFolderPath,
+                SyncStatus = media.SyncStatus,
+                RetryCount = media.RetryCount,
+                LastError = media.LastError,
+                UploadedBy = media.UploadedBy,
+                CreatedAt = media.CreatedAt,
+                SyncedAt = media.SyncedAt,
+                ProxyUrl = $"/CloudMedia/File/{media.Id}"
+            };
+
+            return Json(new
+            {
+                success = true,
+                message = "Đã tải lên chứng nhận Bí tích thành công!",
+                data = summaryDto
+            });
+        }
+
+        /// <summary>
+        /// 3C. POST: /Sacraments/DeleteCertificate (Xóa tệp chứng nhận Bí tích)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead}")]
+        public async Task<IActionResult> DeleteCertificate([FromForm] long cloudMediaFileId)
+        {
+            if (cloudMediaFileId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã tệp chứng nhận không hợp lệ." });
+            }
+
+            var media = await _context.CloudMediaFiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == cloudMediaFileId);
+
+            if (media == null
+                || !string.Equals(media.Category, CloudMediaCategory.SacramentDoc, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(media.EntityName, nameof(StudentSacramentRecord), StringComparison.OrdinalIgnoreCase)
+                || !media.EntityId.HasValue)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy chứng nhận Bí tích cần xóa." });
+            }
+
+            var record = await _context.StudentSacramentRecords
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.Id == media.EntityId.Value);
+
+            if (record == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy bản ghi Bí tích liên kết." });
+            }
+
+            if (!await CanAccessStudentAsync(record.StudentId))
+            {
+                return Forbid();
+            }
+
+            bool deleted = await _storageService.DeleteAsync(cloudMediaFileId, deletePhysicalOnDrive: true, HttpContext.RequestAborted);
+            if (!deleted)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy chứng nhận Bí tích cần xóa." });
+            }
+
+            var operatorName = User.Identity?.Name ?? User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "Staff";
+            _logger.LogInformation(
+                "AUDIT SACRAMENT_CERT_DELETE: User={Operator} deleted CloudMediaId={MediaId} of SacramentRecordId={RecordId}, StudentId={StudentId}",
+                operatorName, cloudMediaFileId, record.Id, record.StudentId);
+
+            return Json(new
+            {
+                success = true,
+                message = "Đã xóa chứng nhận Bí tích thành công."
             });
         }
 
