@@ -55,8 +55,9 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
 ## 3. Đặc tả Chi tiết 9 Sub-tasks (`TASK-P5-08.0` ➔ `TASK-P5-08.8`)
 
 ### 3.1. `TASK-P5-08.0`: Hạ tầng lõi Google Drive Storage & Auth Proxy
-- **Cấu hình `GoogleDriveOptions` (`appsettings.json` section `"GoogleDrive"`):**
-  - `Enabled` (`true`), `ServiceAccountKeyPath` (`"/app/secrets/google-service-account.json"`), `RootFolderId` (`""`), `RootFolderName` (`"QLGL_Storage_Root"`), `SharedDriveId` (`""`), `LocalFallbackRoot` (`"PrivateUploads/cloud_fallback"`).
+- **Cấu hình `GoogleDriveOptions` (`appsettings.json` section `"GoogleDrive"` — mặc định an toàn không gắn credential/tài khoản trong repo app):**
+  - `Enabled` (`false`), `ServiceAccountKeyPath` (`""`), `RootFolderId` (`""`), `RootFolderName` (`"QLGL_Storage_Root"`), `SharedDriveId` (`""`), `LocalFallbackRoot` (`"PrivateUploads/cloud_fallback"`).
+  - Trên môi trường chạy thật/staging (`parish-infra-config`: `prod/docker-compose.yml` & `prod/.env`), các biến môi trường `GoogleDrive__Enabled`, `GoogleDrive__ServiceAccountKeyPath=/app/secrets/google-service-account.json`, `GoogleDrive__RootFolderId`, `GoogleDrive__SharedDriveId` được nạp từ bên ngoài cùng tệp khóa mount `:ro`.
   - Giới hạn mặc định: `MaxIncidentImageBytes = 15728640` (15 MB), `MaxLessonPlanBytes = 26214400` (25 MB), `MaxDocumentBytes = 10485760` (10 MB), `MaxAvatarBytes = 5242880` (5 MB).
   - Tham số truyền tải: `UploadChunkSizeBytes = 2097152` (2 MB), `MaxRetryAttempts = 3`.
 - **Thứ tự phân giải thư mục gốc trên Google Drive (`EnsureFolderPathInternalAsync`):**
@@ -117,8 +118,8 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
   - `AbsenceController.Manage` nạp `ViewBag.AbsenceAttachments` qua `GetMediaMapForEntitiesAsync` để GLV/BĐH mở xem qua `/CloudMedia/File/{id}`.
 
 ### 3.6. `TASK-P5-08.5`: Cấu hình & Dịch vụ Backjob Nén GZip + Upload Log (`DriveLogUploadService`)
-- Cấu hình qua `DriveLogUploadOptions` (`appsettings.json` section `"DriveLogUpload"`):
-  - `Enabled = true`, `CronExpression = "0 2 * * *"`, `IntervalMinutes = 0`, `LocalLogsPath = "logs"`, `LocalRetentionDays = 1`, `LogsFolderId = ""`, `DeleteLocalAfterVerifiedUpload = true`, `MaxRetriesPerFile = 3`, `RetryDelaySeconds = 10`, `UploadBufferSizeBytes = 65536`.
+- Cấu hình qua `DriveLogUploadOptions` (`appsettings.json` section `"DriveLogUpload"` — mặc định `Enabled = false` trong repo app; bật và cấu hình qua `DriveLogUpload__*` trong `parish-infra-config`):
+  - `Enabled = false`, `CronExpression = "0 2 * * *"`, `IntervalMinutes = 0`, `LocalLogsPath = "logs"`, `LocalRetentionDays = 1`, `LogsFolderId = ""`, `DeleteLocalAfterVerifiedUpload = true`, `MaxRetriesPerFile = 3`, `RetryDelaySeconds = 10`, `UploadBufferSizeBytes = 65536`.
 - Cơ chế bảo vệ & thực thi trong `DriveLogUploadService.RunUploadCycleAsync`:
   - Khóa đồng thời bằng `SemaphoreSlim(1, 1)` (`RunLock.WaitAsync(0, ct)`).
   - `IsProtectedActiveLogFile` bảo vệ tệp `.log` của ngày hôm nay theo múi giờ Việt Nam (`yyyyMMdd`) và các tệp nằm trong ngưỡng `LocalRetentionDays` (`cutoffDate = todayVn.AddDays(-(retentionDays - 1))`) theo cả ngày trong tên file lẫn `LastWriteTimeUtc`.

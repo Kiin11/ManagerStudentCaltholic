@@ -4,8 +4,8 @@ namespace ManagerStudentCaltholic.Models.Options
     {
         public const string SectionName = "GoogleDrive";
 
-        public bool Enabled { get; set; } = true;
-        public string ServiceAccountKeyPath { get; set; } = "/app/secrets/google-service-account.json";
+        public bool Enabled { get; set; } = false;
+        public string ServiceAccountKeyPath { get; set; } = string.Empty;
         public string RootFolderId { get; set; } = string.Empty;
         public string RootFolderName { get; set; } = "QLGL_Storage_Root";
         public string SharedDriveId { get; set; } = string.Empty;

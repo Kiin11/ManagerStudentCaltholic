@@ -8,7 +8,7 @@
   - `Google.Apis.Auth` (`1.78.0`)
 - **Cơ chế Xác thực (Zero Secrets in Repo):**
   - Sử dụng Google **Service Account** thông qua `CredentialFactory.FromFile<ServiceAccountCredential>(resolvedKeyPath).ToGoogleCredential().CreateScoped(DriveService.Scope.Drive)`.
-  - Đường dẫn tệp JSON key cấu hình qua `GoogleDrive:ServiceAccountKeyPath` (mặc định `/app/secrets/google-service-account.json` gắn qua Docker volume/secret bên ngoài Git). Tuyệt đối không lưu credential JSON, private key hoặc token trong mã nguồn hay tài liệu.
+  - Đường dẫn tệp JSON key và trạng thái kích hoạt cấu hình qua `GoogleDrive:ServiceAccountKeyPath` và `GoogleDrive:Enabled` (mặc định trong repo app là `""` và `false`; khi triển khai qua `parish-infra-config`, được nạp qua `GoogleDrive__Enabled=true`, `GoogleDrive__ServiceAccountKeyPath=/app/secrets/google-service-account.json` gắn Docker volume `:ro` và `GoogleDrive__RootFolderId` / `GoogleDrive__SharedDriveId` từ `.env`). Tuyệt đối không lưu credential JSON, private key hoặc token trong mã nguồn hay tài liệu.
   - Singleton `DriveService` được làm mới tự động khi `LastWriteTimeUtc` của tệp key thay đổi.
 - **Các API Operations đang gọi (`GoogleDriveStorageService`):**
   1. `Files.List` (Tìm thư mục theo tên & parent ID): Dùng `SupportsAllDrives = true`, `IncludeItemsFromAllDrives = true`; khi cấu hình `GoogleDrive:SharedDriveId`, bổ sung `Corpora = "drive"` và `DriveId`. Kết quả thư mục được cache 30 phút trong `IMemoryCache` kèm khóa `SemaphoreSlim` chống tạo trùng.

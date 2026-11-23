@@ -4,7 +4,7 @@ namespace ManagerStudentCaltholic.Models.Options
     {
         public const string SectionName = "DriveLogUpload";
 
-        public bool Enabled { get; set; } = true;
+        public bool Enabled { get; set; } = false;
         public string CronExpression { get; set; } = "0 2 * * *";
         public int IntervalMinutes { get; set; } = 0;
         public string LocalLogsPath { get; set; } = "logs";
