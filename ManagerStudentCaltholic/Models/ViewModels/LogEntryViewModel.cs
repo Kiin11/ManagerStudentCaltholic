@@ -1,4 +1,6 @@
-﻿namespace ManagerStudentCaltholic.Models.ViewModels
+﻿using ManagerStudentCaltholic.Models.DTOs;
+
+namespace ManagerStudentCaltholic.Models.ViewModels
 {
     public class LogEntryItem
     {
@@ -86,5 +88,11 @@
 
         // Danh sách dòng log trên trang hiện tại
         public List<LogEntryItem> Entries { get; set; } = new();
+
+        // FEAT-P5-08: Lưu trữ Google Drive, Backjob Log & Đồng bộ Dữ liệu cũ
+        public CloudStorageHealthDto? CloudStorageHealth { get; set; }
+        public List<CloudMediaSummaryDto> DriveLogUploads { get; set; } = new();
+        public string DriveLogCronSchedule { get; set; } = "0 2 * * *";
+        public bool DriveLogEnabled { get; set; }
     }
 }

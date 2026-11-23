@@ -1,22 +1,49 @@
 ﻿using System.Security.Claims;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ManagerStudentCaltholic.Controllers
 {
     [Authorize(Policy = "RequireStaff")]
     public class AnnouncementsController : Controller
     {
+        private const int MaxAnnouncementAttachments = 5;
+
+        private static readonly HashSet<string> AllowedDocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pdf", ".docx", ".doc", ".xlsx", ".xls"
+        };
+
+        private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".webp"
+        };
+
         private readonly ParishDbContext _context;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly IImageOptimizationService _imageOptimizationService;
+        private readonly GoogleDriveOptions _driveOptions;
         private readonly ILogger<AnnouncementsController> _logger;
 
-        public AnnouncementsController(ParishDbContext context, ILogger<AnnouncementsController> logger)
+        public AnnouncementsController(
+            ParishDbContext context,
+            IGoogleDriveStorageService storageService,
+            IImageOptimizationService imageOptimizationService,
+            IOptions<GoogleDriveOptions> driveOptions,
+            ILogger<AnnouncementsController> logger)
         {
             _context = context;
+            _storageService = storageService;
+            _imageOptimizationService = imageOptimizationService;
+            _driveOptions = driveOptions.Value;
             _logger = logger;
         }
 
@@ -176,6 +203,14 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
+            var announcementIds = announcements.Select(a => a.Id).ToList();
+            ViewBag.AnnouncementAttachments = announcementIds.Count > 0
+                ? await _storageService.GetMediaMapForEntitiesAsync(
+                    nameof(Announcement),
+                    announcementIds,
+                    CloudMediaCategory.AnnouncementDoc)
+                : new Dictionary<long, List<CloudMediaSummaryDto>>();
+
             ViewBag.Classes = new SelectList(authorizedClasses, "Id", "Name", classId);
             ViewBag.AuthorizedClassIds = authorizedClassIds;
             ViewBag.CanPostAll = IsLeadership;
@@ -198,7 +233,8 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.SpiritualDirector},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
         public async Task<IActionResult> Create(
-            [Bind("Title,Content,Scope,TargetGradeLevel,TargetClassRoomId,Priority,IsPinned,ExpireAt")] Announcement model)
+            [Bind("Title,Content,Scope,TargetGradeLevel,TargetClassRoomId,Priority,IsPinned,ExpireAt")] Announcement model,
+            List<IFormFile>? attachments)
         {
             if (string.IsNullOrWhiteSpace(model.Title) || string.IsNullOrWhiteSpace(model.Content))
             {
@@ -279,10 +315,23 @@ namespace ManagerStudentCaltholic.Controllers
             _context.Announcements.Add(model);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("AUDIT ANNOUNCEMENT_CREATE: User {User} posted '{Title}' (Scope={Scope}, ClassId={ClassId})",
-                User.Identity?.Name, model.Title, model.Scope, model.TargetClassRoomId);
+            var currentYearName = !string.IsNullOrWhiteSpace(currentYear?.Name)
+                ? currentYear.Name.Trim()
+                : DateTime.UtcNow.Year.ToString();
 
-            TempData["SuccessMessage"] = "Đã đăng bài thông báo / dặn dò thành công!";
+            var (uploadedCount, attachmentWarnings) = await UploadAnnouncementAttachmentsAsync(model, attachments, currentYearName);
+
+            _logger.LogInformation("AUDIT ANNOUNCEMENT_CREATE: User {User} posted '{Title}' (Scope={Scope}, ClassId={ClassId}, Attachments={Attachments})",
+                User.Identity?.Name, model.Title, model.Scope, model.TargetClassRoomId, uploadedCount);
+
+            if (attachmentWarnings.Count > 0)
+            {
+                TempData["WarningMessage"] = string.Join(" ", attachmentWarnings);
+            }
+
+            TempData["SuccessMessage"] = uploadedCount > 0
+                ? $"Đã đăng bài thông báo / dặn dò thành công (kèm {uploadedCount} tệp đính kèm)!"
+                : "Đã đăng bài thông báo / dặn dò thành công!";
             return RedirectToAction(nameof(Index));
         }
 
@@ -303,12 +352,198 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid();
             }
 
+            var attachments = await _storageService.GetMediaForEntityAsync(
+                nameof(Announcement),
+                id,
+                CloudMediaCategory.AnnouncementDoc);
+
             _context.Announcements.Remove(item);
             await _context.SaveChangesAsync();
+
+            foreach (var media in attachments)
+            {
+                try
+                {
+                    await _storageService.DeleteAsync(media.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Không thể xóa tệp đính kèm CloudMediaId={MediaId} của thông báo Id={AnnouncementId}.",
+                        media.Id,
+                        id);
+                }
+            }
+
             TempData["SuccessMessage"] = "Đã xóa bài thông báo.";
 
             return RedirectToAction(nameof(Index));
         }
+
+        private async Task<(int UploadedCount, List<string> Warnings)> UploadAnnouncementAttachmentsAsync(
+            Announcement model,
+            List<IFormFile>? attachments,
+            string currentYearName)
+        {
+            var warnings = new List<string>();
+            if (attachments == null || attachments.Count == 0)
+            {
+                return (0, warnings);
+            }
+
+            var submittedFiles = attachments
+                .Where(f => f != null && (f.Length > 0 || !string.IsNullOrWhiteSpace(f.FileName)))
+                .ToList();
+
+            if (submittedFiles.Count == 0)
+            {
+                return (0, warnings);
+            }
+
+            if (submittedFiles.Count > MaxAnnouncementAttachments)
+            {
+                warnings.Add($"Chỉ được đính kèm tối đa {MaxAnnouncementAttachments} tệp mỗi thông báo; các tệp vượt quá đã được bỏ qua.");
+            }
+
+            var maxBytes = _driveOptions.MaxDocumentBytes > 0
+                ? _driveOptions.MaxDocumentBytes
+                : 10 * 1024 * 1024;
+            var maxMb = maxBytes / (1024 * 1024);
+            var folderSegments = new[] { currentYearName, "Announcements" };
+            int uploadedCount = 0;
+
+            foreach (var file in submittedFiles.Take(MaxAnnouncementAttachments))
+            {
+                var safeName = Path.GetFileName(file.FileName);
+                if (string.IsNullOrWhiteSpace(safeName))
+                {
+                    safeName = "tep_dinh_kem";
+                }
+
+                if (file.Length <= 0)
+                {
+                    warnings.Add($"Tệp '{safeName}' trống (0 byte) nên đã bị bỏ qua.");
+                    continue;
+                }
+
+                if (file.Length > maxBytes)
+                {
+                    warnings.Add($"Tệp '{safeName}' vượt quá dung lượng tối đa {maxMb} MB.");
+                    continue;
+                }
+
+                var ext = Path.GetExtension(safeName).ToLowerInvariant();
+                bool isDoc = AllowedDocumentExtensions.Contains(ext);
+                bool isImage = AllowedImageExtensions.Contains(ext);
+
+                if (!isDoc && !isImage)
+                {
+                    warnings.Add($"Tệp '{safeName}' có định dạng không được hỗ trợ.");
+                    continue;
+                }
+
+                try
+                {
+                    Stream? uploadStream = null;
+                    string uploadFileName;
+                    string uploadContentType;
+
+                    try
+                    {
+                        if (isDoc)
+                        {
+                            if (!await HasValidDocumentMagicBytesAsync(file, ext))
+                            {
+                                warnings.Add($"Tệp '{safeName}' không đúng cấu trúc định dạng {ext}.");
+                                continue;
+                            }
+
+                            uploadStream = file.OpenReadStream();
+                            uploadFileName = safeName;
+                            uploadContentType = ResolveDocumentContentType(ext);
+                        }
+                        else
+                        {
+                            await using var rawImageStream = file.OpenReadStream();
+                            var optimized = await _imageOptimizationService.OptimizeToWebpAsync(
+                                rawImageStream,
+                                maxWidth: 1600,
+                                maxHeight: 1600,
+                                quality: 78);
+
+                            uploadStream = optimized.OptimizedStream;
+                            uploadFileName = Path.ChangeExtension(safeName, optimized.FileExtension);
+                            uploadContentType = optimized.ContentType;
+                        }
+
+                        await _storageService.UploadAsync(new CloudUploadRequest
+                        {
+                            Content = uploadStream,
+                            OriginalFileName = uploadFileName,
+                            ContentType = uploadContentType,
+                            Category = CloudMediaCategory.AnnouncementDoc,
+                            EntityName = nameof(Announcement),
+                            EntityId = model.Id,
+                            FolderSegments = folderSegments,
+                            UploadedBy = model.CreatedBy,
+                            UploadedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
+                            AllowLocalFallback = true
+                        });
+                        uploadedCount++;
+                    }
+                    finally
+                    {
+                        if (uploadStream != null)
+                        {
+                            await uploadStream.DisposeAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Tệp đính kèm '{FileName}' của thông báo Id={AnnouncementId} thất bại khi kiểm tra/tải lên.", safeName, model.Id);
+                    warnings.Add($"Không thể đính kèm tệp '{safeName}' ({ex.Message}).");
+                }
+            }
+
+            return (uploadedCount, warnings);
+        }
+
+        private static async Task<bool> HasValidDocumentMagicBytesAsync(IFormFile file, string ext)
+        {
+            if (file.Length < 4)
+            {
+                return false;
+            }
+
+            byte[] header = new byte[8];
+            await using var stream = file.OpenReadStream();
+            int bytesRead = await stream.ReadAsync(header.AsMemory(0, header.Length));
+            if (bytesRead < 4)
+            {
+                return false;
+            }
+
+            return ext switch
+            {
+                ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
+                ".docx" or ".xlsx" => header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04,
+                ".doc" or ".xls" => bytesRead >= 8
+                    && header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0
+                    && header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1,
+                _ => false
+            };
+        }
+
+        private static string ResolveDocumentContentType(string ext) => ext switch
+        {
+            ".pdf" => "application/pdf",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc" => "application/msword",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls" => "application/vnd.ms-excel",
+            _ => "application/octet-stream"
+        };
 
         /// <summary>
         /// 4. POST: /Announcements/TogglePin/{id}

@@ -3,11 +3,14 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -21,6 +24,10 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly IQrCodeService _qrService;
         private readonly IPasswordHasherService _passwordHasher;
         private readonly IProfileHistoryService _profileHistoryService;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly IImageOptimizationService _imageOptimizationService;
+        private readonly GoogleDriveOptions _driveOptions;
+        private readonly ICacheService _cacheService;
 
         public StudentsController(
             ParishDbContext context,
@@ -29,7 +36,11 @@ namespace ManagerStudentCaltholic.Controllers
             IStudentExcelService excelService,
             IQrCodeService qrCodeService,
             IPasswordHasherService passwordHasher,
-            IProfileHistoryService profileHistoryService)
+            IProfileHistoryService profileHistoryService,
+            IGoogleDriveStorageService storageService,
+            IImageOptimizationService imageOptimizationService,
+            IOptions<GoogleDriveOptions> driveOptions,
+            ICacheService cacheService)
         {
             _context = context;
             _codeGenerator = codeGenerator;
@@ -38,6 +49,10 @@ namespace ManagerStudentCaltholic.Controllers
             _qrService = qrCodeService;
             _passwordHasher = passwordHasher;
             _profileHistoryService = profileHistoryService;
+            _storageService = storageService;
+            _imageOptimizationService = imageOptimizationService;
+            _driveOptions = driveOptions.Value;
+            _cacheService = cacheService;
         }
 
         private long CurrentUserId =>
@@ -635,6 +650,33 @@ namespace ManagerStudentCaltholic.Controllers
                 Badges = badgeItems
             };
 
+            var badgeStudentIds = activeStudents.Select(s => s.Id).ToList();
+            var avatarMap = activeStudents
+                .Where(s => s.AvatarCloudFileId.HasValue)
+                .ToDictionary(s => s.Id, s => s.AvatarCloudFileId!.Value);
+
+            if (badgeStudentIds.Count > 0)
+            {
+                var linkedUserAvatars = await _context.Users
+                    .AsNoTracking()
+                    .Where(u => u.AvatarCloudFileId.HasValue &&
+                                ((u.LinkedStudentId.HasValue && badgeStudentIds.Contains(u.LinkedStudentId.Value)) ||
+                                 (u.StudentId.HasValue && badgeStudentIds.Contains(u.StudentId.Value))))
+                    .Select(u => new
+                    {
+                        StudentId = u.LinkedStudentId ?? u.StudentId!.Value,
+                        AvatarId = u.AvatarCloudFileId!.Value
+                    })
+                    .ToListAsync();
+
+                foreach (var item in linkedUserAvatars)
+                {
+                    avatarMap.TryAdd(item.StudentId, item.AvatarId);
+                }
+            }
+
+            ViewBag.StudentAvatarMap = avatarMap;
+
             return View(viewModel);
         }
 
@@ -683,6 +725,126 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             return View(viewModel);
+        }
+
+        /// <summary>
+        /// Tải lên ảnh đại diện cho Thiếu nhi (tối ưu WebP 512x512, lưu Google Drive qua CloudMedia)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadAvatar(long studentId, IFormFile avatarFile)
+        {
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã thiếu nhi không hợp lệ." });
+            }
+
+            if (!await CanAccessStudentAsync(studentId))
+            {
+                return Forbid();
+            }
+
+            var student = await _context.Students.FirstOrDefaultAsync(s => s.Id == studentId);
+            if (student == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy hồ sơ thiếu nhi." });
+            }
+
+            if (avatarFile == null || avatarFile.Length <= 0)
+            {
+                return BadRequest(new { success = false, message = "Vui lòng chọn tệp ảnh đại diện hợp lệ." });
+            }
+
+            long maxAvatarBytes = _driveOptions.MaxAvatarBytes > 0 ? _driveOptions.MaxAvatarBytes : 5 * 1024 * 1024;
+            if (avatarFile.Length > maxAvatarBytes)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = $"Dung lượng ảnh đại diện vượt quá giới hạn tối đa ({maxAvatarBytes / (1024 * 1024)} MB)."
+                });
+            }
+
+            var ext = Path.GetExtension(avatarFile.FileName);
+            if (!_imageOptimizationService.IsSupportedImageExtension(ext))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Định dạng ảnh không hợp lệ. Chỉ chấp nhận JPG, JPEG, PNG, WebP hoặc GIF."
+                });
+            }
+
+            CloudMediaFile media;
+            try
+            {
+                await using var inputStream = avatarFile.OpenReadStream();
+                var opt = await _imageOptimizationService.OptimizeToWebpAsync(
+                    inputStream,
+                    maxWidth: 512,
+                    maxHeight: 512,
+                    quality: 82,
+                    ct: HttpContext.RequestAborted);
+
+                await using var optimizedStream = opt.OptimizedStream;
+                var uploadFileName = string.IsNullOrWhiteSpace(avatarFile.FileName)
+                    ? $"avatar_{student.StudentCode}{opt.FileExtension}"
+                    : Path.ChangeExtension(Path.GetFileName(avatarFile.FileName), opt.FileExtension);
+
+                media = await _storageService.UploadAsync(new CloudUploadRequest
+                {
+                    Content = optimizedStream,
+                    OriginalFileName = uploadFileName,
+                    ContentType = opt.ContentType,
+                    Category = CloudMediaCategory.Avatar,
+                    EntityName = nameof(Student),
+                    EntityId = student.Id,
+                    FolderSegments = new[] { "Students_Avatars" },
+                    UploadedBy = User.Identity?.Name,
+                    UploadedByUserId = CurrentUserId > 0 ? CurrentUserId : null,
+                    AllowLocalFallback = true
+                }, HttpContext.RequestAborted);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tải lên ảnh đại diện thiếu nhi StudentId={StudentId}", student.Id);
+                return StatusCode(500, new { success = false, message = "Không thể lưu ảnh đại diện. Vui lòng thử lại." });
+            }
+
+            long? oldAvatarId = student.AvatarCloudFileId;
+            student.AvatarCloudFileId = media.Id;
+            await _context.SaveChangesAsync();
+
+            if (oldAvatarId.HasValue && oldAvatarId.Value != media.Id)
+            {
+                bool stillReferencedByUser = await _context.Users.AsNoTracking()
+                    .AnyAsync(u => u.AvatarCloudFileId == oldAvatarId.Value);
+                if (!stillReferencedByUser)
+                {
+                    await _storageService.DeleteAsync(oldAvatarId.Value);
+                }
+            }
+
+            await _cacheService.RemoveAsync($"staff_lookup:student_360:{studentId}");
+
+            _logger.LogInformation(
+                "Đã cập nhật ảnh đại diện thiếu nhi StudentId={StudentId} ({StudentCode}), CloudFileId={CloudFileId} bởi {Operator}",
+                student.Id, student.StudentCode, media.Id, User.Identity?.Name);
+
+            return Json(new
+            {
+                success = true,
+                message = "Đã cập nhật ảnh đại diện thiếu nhi thành công!",
+                data = new
+                {
+                    cloudFileId = media.Id,
+                    proxyUrl = $"/CloudMedia/File/{media.Id}"
+                }
+            });
         }
 
         /// <summary>

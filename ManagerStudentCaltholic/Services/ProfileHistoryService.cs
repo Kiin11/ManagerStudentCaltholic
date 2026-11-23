@@ -86,7 +86,15 @@ namespace ManagerStudentCaltholic.Services
                 Email = user?.Email,
                 PhoneNumber = user?.PhoneNumber ?? student?.ParentPhone,
                 Address = user?.Address,
-                AvatarUrl = user?.AvatarUrl,
+                AvatarCloudFileId = user?.AvatarCloudFileId,
+                StudentAvatarCloudFileId = student?.AvatarCloudFileId,
+                AvatarUrl = user?.AvatarCloudFileId.HasValue == true
+                    ? $"/CloudMedia/File/{user.AvatarCloudFileId.Value}"
+                    : (!string.IsNullOrWhiteSpace(user?.AvatarUrl)
+                        ? user!.AvatarUrl
+                        : (student?.AvatarCloudFileId.HasValue == true
+                            ? $"/CloudMedia/File/{student.AvatarCloudFileId.Value}"
+                            : null)),
                 LastLoginAt = user?.LastLoginAt,
                 ManagedGradeLevel = user?.ManagedGradeLevel,
                 LinkedStudentId = student?.Id,

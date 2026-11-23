@@ -3,12 +3,14 @@ using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
@@ -17,13 +19,32 @@ namespace ManagerStudentCaltholic.Controllers
     [Authorize(Policy = "RequireStaff")]
     public class AbsenceController : Controller
     {
+        private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".pdf", ".jpg", ".jpeg", ".png", ".webp"
+        };
+
         private readonly ParishDbContext _context;
         private readonly ICacheService _cache;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly IImageOptimizationService _imageOptimizationService;
+        private readonly GoogleDriveOptions _driveOptions;
+        private readonly ILogger<AbsenceController> _logger;
 
-        public AbsenceController(ParishDbContext context, ICacheService cache)
+        public AbsenceController(
+            ParishDbContext context,
+            ICacheService cache,
+            IGoogleDriveStorageService storageService,
+            IImageOptimizationService imageOptimizationService,
+            IOptions<GoogleDriveOptions> driveOptions,
+            ILogger<AbsenceController> logger)
         {
             _context = context;
             _cache = cache;
+            _storageService = storageService;
+            _imageOptimizationService = imageOptimizationService;
+            _driveOptions = driveOptions.Value;
+            _logger = logger;
         }
 
         /// <summary>
@@ -37,9 +58,188 @@ namespace ManagerStudentCaltholic.Controllers
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)] // SEC-04 FIX 2: Chặn spam & brute-force SĐT
         public async Task<IActionResult> SubmitRequest([FromBody] SubmitAbsenceRequestDto dto)
         {
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Reason) || string.IsNullOrWhiteSpace(dto.ParentPhone))
+            var verification = await VerifyAbsenceSubmissionAsync(dto);
+            if (!verification.IsValid)
             {
-                return Json(new { success = false, message = "Vui lòng nhập đầy đủ Số điện thoại Phụ huynh và Lý do xin phép nghỉ." });
+                return Json(new { success = false, message = verification.ErrorMessage });
+            }
+
+            var newRequest = BuildAbsenceRequestEntity(dto, verification.Enrollment!.Id);
+
+            _context.AbsenceRequests.Add(newRequest);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, message = "Gửi đơn xin phép thành công! Giáo lý viên chủ nhiệm sẽ sớm xem và xác nhận." });
+        }
+
+        /// <summary>
+        /// 1b. Phụ huynh nộp đơn xin nghỉ kèm tệp minh chứng (giấy khám bệnh / đơn xin phép)
+        /// </summary>
+        [HttpPost]
+        [AllowAnonymous]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
+        public async Task<IActionResult> SubmitRequestWithFile([FromForm] SubmitAbsenceRequestDto dto, IFormFile? attachmentFile)
+        {
+            var verification = await VerifyAbsenceSubmissionAsync(dto);
+            if (!verification.IsValid)
+            {
+                return Json(new { success = false, message = verification.ErrorMessage });
+            }
+
+            Stream? preparedImageStream = null;
+            string? preparedFileName = null;
+            string? preparedContentType = null;
+            bool isPdfAttachment = false;
+
+            try
+            {
+                if (attachmentFile != null)
+                {
+                    if (attachmentFile.Length == 0 && !string.IsNullOrWhiteSpace(attachmentFile.FileName))
+                    {
+                        return Json(new { success = false, message = "Tệp đính kèm trống (0 byte). Vui lòng chọn lại tệp hợp lệ." });
+                    }
+
+                    if (attachmentFile.Length > 0)
+                    {
+                        var maxBytes = _driveOptions.MaxDocumentBytes > 0
+                            ? _driveOptions.MaxDocumentBytes
+                            : 10 * 1024 * 1024;
+
+                        if (attachmentFile.Length > maxBytes)
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                message = $"Tệp đính kèm vượt quá dung lượng tối đa {maxBytes / (1024 * 1024)} MB."
+                            });
+                        }
+
+                        var safeOriginalName = Path.GetFileName(attachmentFile.FileName);
+                        var ext = Path.GetExtension(safeOriginalName).ToLowerInvariant();
+                        if (!AllowedAttachmentExtensions.Contains(ext))
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                message = "Chỉ chấp nhận tệp đính kèm định dạng .pdf, .jpg, .jpeg, .png hoặc .webp."
+                            });
+                        }
+
+                        if (ext == ".pdf")
+                        {
+                            if (!await HasValidPdfMagicBytesAsync(attachmentFile))
+                            {
+                                return Json(new { success = false, message = "Tệp PDF đính kèm không hợp lệ hoặc đã bị hỏng." });
+                            }
+
+                            isPdfAttachment = true;
+                            preparedFileName = string.IsNullOrWhiteSpace(safeOriginalName) ? "minh_chung.pdf" : safeOriginalName;
+                            preparedContentType = "application/pdf";
+                        }
+                        else
+                        {
+                            try
+                            {
+                                await using var rawImageStream = attachmentFile.OpenReadStream();
+                                var optimized = await _imageOptimizationService.OptimizeToWebpAsync(
+                                    rawImageStream,
+                                    maxWidth: 1600,
+                                    maxHeight: 1600,
+                                    quality: 78);
+
+                                preparedImageStream = optimized.OptimizedStream;
+                                preparedFileName = Path.ChangeExtension(
+                                    string.IsNullOrWhiteSpace(safeOriginalName) ? "minh_chung.webp" : safeOriginalName,
+                                    optimized.FileExtension);
+                                preparedContentType = optimized.ContentType;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Từ chối hình ảnh đính kèm đơn xin nghỉ không hợp lệ.");
+                                return Json(new { success = false, message = "Hình ảnh đính kèm không hợp lệ hoặc đã bị hỏng." });
+                            }
+                        }
+                    }
+                }
+
+                var newRequest = BuildAbsenceRequestEntity(dto, verification.Enrollment!.Id);
+                _context.AbsenceRequests.Add(newRequest);
+                await _context.SaveChangesAsync();
+
+                bool hasAttachment = isPdfAttachment || preparedImageStream != null;
+                if (hasAttachment && attachmentFile != null)
+                {
+                    var currentYearName = !string.IsNullOrWhiteSpace(verification.CurrentYear?.Name)
+                        ? verification.CurrentYear.Name.Trim()
+                        : DateTime.UtcNow.Year.ToString();
+
+                    try
+                    {
+                        await using var pdfStream = isPdfAttachment ? attachmentFile.OpenReadStream() : null;
+                        var uploadStream = pdfStream ?? preparedImageStream!;
+
+                        await _storageService.UploadAsync(new CloudUploadRequest
+                        {
+                            Content = uploadStream,
+                            OriginalFileName = preparedFileName!,
+                            ContentType = preparedContentType!,
+                            Category = CloudMediaCategory.AbsenceDoc,
+                            EntityName = nameof(AbsenceRequest),
+                            EntityId = newRequest.Id,
+                            FolderSegments = new[] { currentYearName, "AbsenceRequests" },
+                            UploadedBy = $"Parent:{verification.Student!.StudentCode}",
+                            AllowLocalFallback = true
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex,
+                            "Đã lưu AbsenceRequest Id={RequestId} nhưng tải tệp đính kèm lên storage thất bại.",
+                            newRequest.Id);
+
+                        return Json(new
+                        {
+                            success = true,
+                            message = "Đã ghi nhận đơn xin phép nghỉ, tuy nhiên tệp đính kèm gặp sự cố khi lưu trữ."
+                        });
+                    }
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    message = hasAttachment
+                        ? "Gửi đơn xin phép (kèm tệp minh chứng) thành công! Giáo lý viên chủ nhiệm sẽ sớm xem và xác nhận."
+                        : "Gửi đơn xin phép thành công! Giáo lý viên chủ nhiệm sẽ sớm xem và xác nhận."
+                });
+            }
+            finally
+            {
+                if (preparedImageStream != null)
+                {
+                    await preparedImageStream.DisposeAsync();
+                }
+            }
+        }
+
+        private async Task<(bool IsValid, string? ErrorMessage, Student? Student, Enrollment? Enrollment, AcademicYear? CurrentYear)> VerifyAbsenceSubmissionAsync(
+            SubmitAbsenceRequestDto? dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.StudentCode) || string.IsNullOrWhiteSpace(dto.Reason) || string.IsNullOrWhiteSpace(dto.ParentPhone))
+            {
+                return (false, "Vui lòng nhập đầy đủ Số điện thoại Phụ huynh và Lý do xin phép nghỉ.", null, null, null);
+            }
+
+            if (dto.DateOfBirth == default || dto.AbsenceDate == default)
+            {
+                return (false, "Thông tin Ngày sinh hoặc Ngày xin nghỉ không hợp lệ.", null, null, null);
+            }
+
+            if (dto.Reason.Trim().Length > 500)
+            {
+                return (false, "Lý do xin phép nghỉ không được vượt quá 500 ký tự.", null, null, null);
             }
 
             var cleanCode = dto.StudentCode.Trim().ToUpperInvariant();
@@ -47,6 +247,7 @@ namespace ManagerStudentCaltholic.Controllers
             var endDob = startDob.AddDays(1);
 
             var student = await _context.Students
+                .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.StudentCode.ToUpper() == cleanCode &&
                                           s.DateOfBirth >= startDob && s.DateOfBirth < endDob &&
                                           s.IsActive);
@@ -57,33 +258,57 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (student == null || string.IsNullOrEmpty(recordPhoneDigits) || inputPhoneDigits != recordPhoneDigits)
             {
-                return Json(new { success = false, message = "Số điện thoại Phụ huynh không khớp với hồ sơ đã đăng ký của thiếu nhi!" });
+                return (false, "Số điện thoại Phụ huynh không khớp với hồ sơ đã đăng ký của thiếu nhi!", null, null, null);
             }
 
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
             var enrollment = await _context.Enrollments
+                .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.StudentId == student.Id && (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id));
 
             if (enrollment == null)
             {
-                return Json(new { success = false, message = "Thiếu nhi chưa được xếp vào lớp học trong năm nay." });
+                return (false, "Thiếu nhi chưa được xếp vào lớp học trong năm nay.", null, null, null);
             }
 
-            var newRequest = new AbsenceRequest
+            return (true, null, student, enrollment, currentYear);
+        }
+
+        private static AbsenceRequest BuildAbsenceRequestEntity(SubmitAbsenceRequestDto dto, long enrollmentId)
+        {
+            var normalizedSession = string.IsNullOrWhiteSpace(dto.SessionType)
+                ? "ALL"
+                : dto.SessionType.Trim().ToUpperInvariant();
+
+            if (normalizedSession is not ("ALL" or "MASS" or "CLASS"))
             {
-                EnrollmentId = enrollment.Id,
+                normalizedSession = "ALL";
+            }
+
+            return new AbsenceRequest
+            {
+                EnrollmentId = enrollmentId,
                 AbsenceDate = dto.AbsenceDate.Date,
-                SessionType = dto.SessionType,
+                SessionType = normalizedSession,
                 Reason = dto.Reason.Trim(),
                 ParentPhone = dto.ParentPhone?.Trim(),
                 Status = "PENDING",
                 CreatedAt = DateTime.UtcNow
             };
+        }
 
-            _context.AbsenceRequests.Add(newRequest);
-            await _context.SaveChangesAsync();
+        private static async Task<bool> HasValidPdfMagicBytesAsync(IFormFile file)
+        {
+            if (file.Length < 4)
+            {
+                return false;
+            }
 
-            return Json(new { success = true, message = "Gửi đơn xin phép thành công! Giáo lý viên chủ nhiệm sẽ sớm xem và xác nhận." });
+            byte[] header = new byte[4];
+            await using var stream = file.OpenReadStream();
+            int bytesRead = await stream.ReadAsync(header.AsMemory(0, header.Length));
+            return bytesRead >= 4
+                && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46;
         }
 
         /// <summary>
@@ -105,6 +330,7 @@ namespace ManagerStudentCaltholic.Controllers
             if (!authorizedClasses.Any())
             {
                 ViewBag.SelectedClassId = 0;
+                ViewBag.AbsenceAttachments = new Dictionary<long, List<CloudMediaSummaryDto>>();
                 return View(new List<AbsenceRequest>());
             }
 
@@ -126,6 +352,14 @@ namespace ManagerStudentCaltholic.Controllers
                 .OrderByDescending(r => r.CreatedAt)
                 .AsNoTracking()
                 .ToListAsync();
+
+            var requestIds = requests.Select(r => r.Id).ToList();
+            ViewBag.AbsenceAttachments = requestIds.Count > 0
+                ? await _storageService.GetMediaMapForEntitiesAsync(
+                    nameof(AbsenceRequest),
+                    requestIds,
+                    CloudMediaCategory.AbsenceDoc)
+                : new Dictionary<long, List<CloudMediaSummaryDto>>();
 
             return View(requests);
         }

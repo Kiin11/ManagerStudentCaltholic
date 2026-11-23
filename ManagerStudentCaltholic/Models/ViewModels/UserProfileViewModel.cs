@@ -67,6 +67,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? Address { get; set; }
 
         public string? AvatarUrl { get; set; }
+        public long? AvatarCloudFileId { get; set; }
+        public long? StudentAvatarCloudFileId { get; set; }
         public DateTime? LastLoginAt { get; set; }
 
         // TASK-813: Các lớp đang dạy trong niên khóa hiện tại
