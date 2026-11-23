@@ -82,6 +82,10 @@ namespace ManagerStudentCaltholic.Extensions
             services.Configure<GoogleDriveOptions>(configuration.GetSection(GoogleDriveOptions.SectionName));
             services.Configure<DriveLogUploadOptions>(configuration.GetSection(DriveLogUploadOptions.SectionName));
 
+            services.AddScoped<IDriveLogUploadService, DriveLogUploadService>();
+            services.AddHostedService<DriveLogUploadBackgroundService>();
+            services.AddScoped<ILocalMediaMigrationService, LocalMediaMigrationService>();
+
             return services.AddApplicationServices();
         }
 

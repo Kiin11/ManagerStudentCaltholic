@@ -1,12 +1,15 @@
 ﻿using System.Diagnostics;
 using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
 using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Options;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -17,6 +20,10 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly IDistributedCache? _distributedCache;
         private readonly SystemMetricsCollector? _metricsCollector;
+        private readonly IGoogleDriveStorageService? _driveStorageService;
+        private readonly IDriveLogUploadService? _driveLogUploadService;
+        private readonly ILocalMediaMigrationService? _localMediaMigrationService;
+        private readonly DriveLogUploadOptions _driveLogOptions;
         private readonly ILogger<LogsController> _logger;
 
         // Regex bóc tách chuẩn dòng Header của Serilog
@@ -42,13 +49,21 @@ namespace ManagerStudentCaltholic.Controllers
             ParishDbContext context,
             ILogger<LogsController> logger,
             IDistributedCache? distributedCache = null,
-            SystemMetricsCollector? metricsCollector = null)
+            SystemMetricsCollector? metricsCollector = null,
+            IGoogleDriveStorageService? driveStorageService = null,
+            IDriveLogUploadService? driveLogUploadService = null,
+            ILocalMediaMigrationService? localMediaMigrationService = null,
+            IOptions<DriveLogUploadOptions>? driveLogOptions = null)
         {
             _env = env;
             _context = context;
             _logger = logger;
             _distributedCache = distributedCache;
             _metricsCollector = metricsCollector;
+            _driveStorageService = driveStorageService;
+            _driveLogUploadService = driveLogUploadService;
+            _localMediaMigrationService = localMediaMigrationService;
+            _driveLogOptions = driveLogOptions?.Value ?? new DriveLogUploadOptions();
         }
 
         /// <summary>
@@ -133,6 +148,8 @@ namespace ManagerStudentCaltholic.Controllers
                 PageSize = pageSize,
                 Health = await CheckSystemHealthAsync(files.Count, totalLogsMb)
             };
+
+            await PopulateDriveStorageSectionAsync(model, HttpContext.RequestAborted);
 
             // Khởi tạo sẵn 24 mốc giờ cho biểu đồ
             var hourlyMap = Enumerable.Range(0, 24)
@@ -273,6 +290,178 @@ namespace ManagerStudentCaltholic.Controllers
 
             var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             return File(fileStream, "text/plain", safeFileName);
+        }
+
+        /// <summary>
+        /// 4. POST: /Admin/Logs/TriggerDriveLogUpload (Kích hoạt thủ công upload log cũ lên Google Drive)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/Logs/TriggerDriveLogUpload")]
+        public async Task<IActionResult> TriggerDriveLogUpload(CancellationToken ct = default)
+        {
+            if (_driveLogUploadService == null)
+            {
+                return StatusCode(500, new { success = false, message = "Dịch vụ upload log lên Google Drive chưa được đăng ký." });
+            }
+
+            try
+            {
+                var triggerSource = $"MANUAL:{User.Identity?.Name ?? "Admin"}";
+                var result = await _driveLogUploadService.RunUploadCycleAsync(triggerSource, ct);
+
+                _logger.LogInformation(
+                    "AUDIT DRIVE_LOG_UPLOAD_MANUAL: User={User}, Scanned={Scanned}, Uploaded={Uploaded}, DeletedLocal={Deleted}, Failed={Failed}, SkippedActive={Skipped}",
+                    User.Identity?.Name,
+                    result.ScannedFiles,
+                    result.UploadedCount,
+                    result.DeletedLocalCount,
+                    result.FailedCount,
+                    result.SkippedActiveCount);
+
+                bool isSuccess = result.FailedCount == 0;
+                string message = isSuccess
+                    ? $"Hoàn tất kiểm tra {result.ScannedFiles} tệp log cũ: đã upload {result.UploadedCount}, xóa cục bộ {result.DeletedLocalCount}, bỏ qua {result.SkippedActiveCount} tệp đang hoạt động."
+                    : $"Đã xử lý {result.ScannedFiles} tệp log: thành công {result.UploadedCount}, thất bại {result.FailedCount}. Vui lòng kiểm tra chi tiết bên dưới.";
+
+                return Json(new { success = isSuccess, message, data = result });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return StatusCode(499, new { success = false, message = "Yêu cầu đã bị hủy." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi chạy thủ công upload log lên Google Drive bởi {User}.", User.Identity?.Name);
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống khi upload log: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// 5. POST: /Admin/Logs/RetryFallbackSync (Đồng bộ lại toàn bộ các tệp LOCAL_FALLBACK lên Google Drive)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/Logs/RetryFallbackSync")]
+        public async Task<IActionResult> RetryFallbackSync(CancellationToken ct = default)
+        {
+            if (_driveStorageService == null)
+            {
+                return StatusCode(500, new { success = false, message = "Dịch vụ Google Drive Storage chưa được đăng ký." });
+            }
+
+            try
+            {
+                int syncedCount = await _driveStorageService.RetryAllPendingFallbackFilesAsync(ct);
+                var health = await _driveStorageService.GetHealthStatusAsync(ct);
+
+                _logger.LogInformation(
+                    "AUDIT DRIVE_RETRY_FALLBACK_SYNC: User={User}, SyncedCount={SyncedCount}, RemainingPending={Pending}",
+                    User.Identity?.Name,
+                    syncedCount,
+                    health.LocalFallbackPendingCount);
+
+                return Json(new
+                {
+                    success = true,
+                    message = $"Đã đồng bộ lại {syncedCount} tệp fallback lên Google Drive. Còn chờ: {health.LocalFallbackPendingCount} tệp.",
+                    data = new { syncedCount, health }
+                });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return StatusCode(499, new { success = false, message = "Yêu cầu đã bị hủy." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi đồng bộ lại các tệp LOCAL_FALLBACK bởi {User}.", User.Identity?.Name);
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống khi đồng bộ file fallback: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// 6. POST: /Admin/Logs/RunLocalMediaMigration (Kiểm tra / Di chuyển dữ liệu cục bộ cũ lên Google Drive)
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Route("Admin/Logs/RunLocalMediaMigration")]
+        public async Task<IActionResult> RunLocalMediaMigration(
+            [FromForm] bool dryRun = true,
+            [FromForm] bool deleteLocalAfterVerified = false,
+            CancellationToken ct = default)
+        {
+            if (_localMediaMigrationService == null)
+            {
+                return StatusCode(500, new { success = false, message = "Dịch vụ di chuyển dữ liệu cục bộ chưa được đăng ký." });
+            }
+
+            try
+            {
+                var report = await _localMediaMigrationService.RunMigrationAsync(
+                    dryRun,
+                    deleteLocalAfterVerified,
+                    User.Identity?.Name,
+                    ct);
+
+                _logger.LogInformation(
+                    "AUDIT LOCAL_MEDIA_MIGRATION: User={User}, DryRun={DryRun}, DeleteLocal={DeleteLocal}, Scanned={Scanned}, Migrated={Migrated}, FallbackRetried={Fallback}, Skipped={Skipped}, Failed={Failed}, FreedBytes={FreedBytes}",
+                    User.Identity?.Name,
+                    report.DryRun,
+                    report.DeleteLocalAfterVerified,
+                    report.ScannedFiles,
+                    report.MigratedCount,
+                    report.FallbackRetriedCount,
+                    report.SkippedCount,
+                    report.FailedCount,
+                    report.FreedBytes);
+
+                bool isSuccess = report.FailedCount == 0;
+                string message = report.DryRun
+                    ? $"[Dry-Run] Đã quét {report.ScannedFiles} mục cần kiểm tra (không thay đổi dữ liệu)."
+                    : $"Hoàn tất di chuyển: thành công {report.MigratedCount}, đồng bộ fallback {report.FallbackRetriedCount}, bỏ qua {report.SkippedCount}, thất bại {report.FailedCount}, giải phóng {Math.Round(report.FreedBytes / 1024.0, 2)} KB.";
+
+                return Json(new { success = isSuccess, message, data = report });
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return StatusCode(499, new { success = false, message = "Yêu cầu đã bị hủy." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi chạy di chuyển dữ liệu cũ lên Google Drive bởi {User}.", User.Identity?.Name);
+                return StatusCode(500, new { success = false, message = $"Lỗi hệ thống khi di chuyển dữ liệu cũ: {ex.Message}" });
+            }
+        }
+
+        private async Task PopulateDriveStorageSectionAsync(SystemLogsViewModel model, CancellationToken ct)
+        {
+            model.DriveLogEnabled = _driveLogOptions.Enabled;
+            model.DriveLogCronSchedule = _driveLogOptions.IntervalMinutes > 0
+                ? $"Mỗi {_driveLogOptions.IntervalMinutes} phút"
+                : (string.IsNullOrWhiteSpace(_driveLogOptions.CronExpression)
+                    ? "0 2 * * *"
+                    : _driveLogOptions.CronExpression.Trim());
+
+            try
+            {
+                if (_driveStorageService != null)
+                {
+                    model.CloudStorageHealth = await _driveStorageService.GetHealthStatusAsync(ct);
+                }
+
+                if (_driveLogUploadService != null)
+                {
+                    model.DriveLogUploads = await _driveLogUploadService.GetRecentLogUploadsAsync(30, ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không thể tải thông tin trạng thái Google Drive trên trang Admin/Logs.");
+            }
         }
 
         #region Helpers Phân tích Structured Log & Kiểm tra Sức khỏe Hạ tầng
