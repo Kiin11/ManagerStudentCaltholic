@@ -1,8 +1,11 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.AbsenceRequest>
+@using ManagerStudentCaltholic.Models.DTOs
 @{
     ViewData["Title"] = "Duyệt Đơn Xin Phép Nghỉ Học & Nghỉ Lễ";
     var classes = ViewBag.Classes as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
     var selectedClassId = ViewBag.SelectedClassId != null ? (int)ViewBag.SelectedClassId : 0;
+    var attachmentsMap = ViewBag.AbsenceAttachments as Dictionary<long, List<CloudMediaSummaryDto>>
+        ?? new Dictionary<long, List<CloudMediaSummaryDto>>();
 
     int totalCount = Model?.Count() ?? 0;
     int pendingCount = Model?.Count(r => r.Status == "PENDING") ?? 0;
@@ -132,7 +135,28 @@
                                 <td>
                                     <span class="badge border @sessionBadge.Item2 px-2 py-1">@sessionBadge.Item1</span>
                                 </td>
-                                <td class="text-break" style="max-width: 280px;">@req.Reason</td>
+                                <td class="text-break" style="max-width: 280px;">
+                                    <div>@req.Reason</div>
+                                    @if (attachmentsMap.TryGetValue(req.Id, out var reqAttachments) && reqAttachments.Any())
+                                    {
+                                        <div class="d-flex flex-wrap gap-1 mt-2">
+                                            @foreach (var att in reqAttachments)
+                                            {
+                                                var isPdf = att.OriginalFileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+                                                    || string.Equals(att.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+                                                <a href="/CloudMedia/File/@att.Id"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   class="btn btn-light btn-sm border rounded-pill py-1 px-2 d-inline-flex align-items-center gap-1 text-primary fw-semibold"
+                                                   style="font-size: 0.75rem;"
+                                                   title="Mở tệp minh chứng: @att.OriginalFileName">
+                                                    <i class="bi @(isPdf ? "bi-file-earmark-pdf-fill text-danger" : "bi-file-earmark-image-fill text-primary")"></i>
+                                                    <span class="text-truncate" style="max-width: 150px;">@att.OriginalFileName</span>
+                                                </a>
+                                            }
+                                        </div>
+                                    }
+                                </td>
                                 <td>
                                     @if (!string.IsNullOrWhiteSpace(req.ParentPhone))
                                     {
