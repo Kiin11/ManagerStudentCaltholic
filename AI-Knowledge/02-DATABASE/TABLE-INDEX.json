@@ -21,6 +21,7 @@
                                                            "CatechistPromiseDate",
                                                            "ParentPhone",
                                                            "IsActive",
+                                                           "AvatarCloudFileId",
                                                            "IsDeleted",
                                                            "DeletedAt"
                                                        ],
@@ -28,7 +29,11 @@
                                                                "Id"
                                                            ],
                                            "foreignKeys":  [
-
+                                                               {
+                                                                   "column":  "AvatarCloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
+                                                               }
                                                            ],
                                            "indexes":  [
                                                            "IsDeleted",
@@ -36,7 +41,8 @@
                                                            "LastName, FirstName",
                                                            "ChristianName",
                                                            "BaoDongPromiseDate",
-                                                           "CatechistPromiseDate"
+                                                           "CatechistPromiseDate",
+                                                           "AvatarCloudFileId"
                                                        ]
                                        },
                                        {
@@ -252,6 +258,7 @@
                                                            "DateOfBirth",
                                                            "Address",
                                                            "AvatarUrl",
+                                                           "AvatarCloudFileId",
                                                            "ManagedGradeLevel",
                                                            "ClassTeacherId",
                                                            "StudentId",
@@ -275,6 +282,11 @@
                                                                    "column":  "LinkedStudentId",
                                                                    "principalTable":  "Students",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "AvatarCloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
@@ -283,7 +295,8 @@
                                                            "PhoneNumber",
                                                            "Role",
                                                            "ManagedGradeLevel",
-                                                           "LinkedStudentId"
+                                                           "LinkedStudentId",
+                                                           "AvatarCloudFileId"
                                                        ]
                                        },
                                        {
@@ -403,7 +416,8 @@
                                                            "Status",
                                                            "ReportedAt",
                                                            "ResolvedAt",
-                                                           "ResolutionNotes"
+                                                           "ResolutionNotes",
+                                                           "CloudImageFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -418,11 +432,17 @@
                                                                    "column":  "ReporterUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudImageFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassRoomLocationId, Status",
-                                                           "ReporterUserId"
+                                                           "ReporterUserId",
+                                                           "CloudImageFileId"
                                                        ]
                                        },
                                        {
@@ -542,7 +562,8 @@
                                                            "FileSize",
                                                            "Description",
                                                            "UploadedBy",
-                                                           "UploadedAt"
+                                                           "UploadedAt",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -557,10 +578,15 @@
                                                                    "column":  "ClassRoomId",
                                                                    "principalTable":  "Classes",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
-
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -584,7 +610,8 @@
                                                            "UpdatedBy",
                                                            "UpdatedByUserId",
                                                            "UpdatedAt",
-                                                           "IsActive"
+                                                           "IsActive",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -609,11 +636,17 @@
                                                                    "column":  "UpdatedByUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassRoomId, AcademicYearId",
-                                                           "AcademicYearId"
+                                                           "AcademicYearId",
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -632,7 +665,8 @@
                                                            "ContentType",
                                                            "CreatedBy",
                                                            "CreatedByUserId",
-                                                           "CreatedAt"
+                                                           "CreatedAt",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -647,11 +681,17 @@
                                                                    "column":  "CreatedByUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassCurriculumDocumentId, VersionNumber",
-                                                           "CreatedAt"
+                                                           "CreatedAt",
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -1448,6 +1488,48 @@
                                                            ],
                                            "indexes":  [
                                                            "OptionCode"
+                                                       ]
+                                       },
+                                       {
+                                           "tableName":  "CloudMediaFiles",
+                                           "columns":  [
+                                                           "Id",
+                                                           "Category",
+                                                           "EntityName",
+                                                           "EntityId",
+                                                           "OriginalFileName",
+                                                           "StoredFileName",
+                                                           "ContentType",
+                                                           "FileSize",
+                                                           "Sha256Hash",
+                                                           "StorageProvider",
+                                                           "ExternalFileId",
+                                                           "ExternalFolderId",
+                                                           "DriveFolderPath",
+                                                           "LocalFallbackPath",
+                                                           "SyncStatus",
+                                                           "RetryCount",
+                                                           "LastError",
+                                                           "UploadedBy",
+                                                           "UploadedByUserId",
+                                                           "CreatedAt",
+                                                           "UpdatedAt",
+                                                           "SyncedAt",
+                                                           "IsDeleted",
+                                                           "DeletedAt"
+                                                       ],
+                                           "primaryKeys":  [
+                                                               "Id"
+                                                           ],
+                                           "foreignKeys":  [
+
+                                                           ],
+                                           "indexes":  [
+                                                           "Category, SyncStatus, CreatedAt",
+                                                           "EntityName, EntityId",
+                                                           "ExternalFileId",
+                                                           "StorageProvider, SyncStatus",
+                                                           "IsDeleted"
                                                        ]
                                        }
                                    ]

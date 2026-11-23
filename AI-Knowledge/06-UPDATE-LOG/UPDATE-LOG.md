@@ -2,6 +2,35 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Hoàn tất `FEAT-P5-08` — Lưu trữ Google Drive, Tối ưu ảnh WebP, Backjob Nén Log & Di chuyển Dữ liệu Cục bộ (`TASK-P5-08.0` ➔ `08.8`)
+- **Thời gian cập nhật:** `2026-11-23T10:06:00+07:00`
+- **Commit nguồn (`Phase-F5.8`):** `4589783` (hợp nhất từ `ed1518d`, `186cb6c`, `c7e53a8`, `6ca8177`, `d0c1fd5`)
+- **Mục tiêu:** Đồng bộ tài liệu kiến trúc, cơ sở dữ liệu, tích hợp API, chỉ mục mã nguồn và đặc tả tính năng cho toàn bộ 9 sub-tasks của `FEAT-P5-08`.
+- **Nội dung mã nguồn đã triển khai & xác minh (`50` files trong phạm vi `7e73fcb..4589783`):**
+  1. **Hạ tầng lõi & Auth Proxy (`TASK-P5-08.0`):** `Google.Apis.Drive.v3` (`1.69.0.3769`), `Google.Apis.Auth` (`1.78.0`), `SixLabors.ImageSharp` (`3.1.12`); nâng giới hạn `KestrelServerOptions.Limits.MaxRequestBodySize` & `FormOptions.MultipartBodyLengthLimit` lên `30 MB`; `Dockerfile` tạo thư mục `PrivateUploads/{cloud_fallback,cloud_tmp,tmp_logs}`; `GoogleDriveOptions`, `CloudMediaFile` (`ISoftDelete`), `CloudMediaDtos`, `ParishDbContext` + `script/20261123_CloudMediaFiles_GoogleDrive_FeatP5_08.sql`, `GoogleDriveStorageService` (Resumable Upload, Shared Drive, `LOCAL_FALLBACK`), `ImageOptimizationService` (magic bytes, `Image.IdentifyAsync`, WebP lossy, strip EXIF/IPTC/XMP), `CloudMediaController` (`/CloudMedia/File/{id}` Auth Proxy theo 7 `Category`).
+  2. **Giáo án & Cơ sở vật chất (`TASK-P5-08.1`, `08.2`):** `LessonPlansController` (`UploadDocument`, `DownloadDocument`, `DeleteDocument`), `ClassCurriculumService` (`SaveCurriculumAsync`, `GetVersionFileAsync`), `FacilitiesController.ReportIncident` (nén WebP `1600x1600` q78, `RoomIncidentReport.CloudImageFileId`).
+  3. **Ảnh đại diện & Chứng nhận Bí tích (`TASK-P5-08.3`):** `AccountController.UploadAvatar` (WebP `512x512` q82, đồng bộ `LinkedStudentId`/`StudentId`), `StudentsController.UploadAvatar` / `PrintBadges` / `Details`, `ProfileHistoryService`, `SacramentsController` (`UploadCertificate`, `DeleteCertificate`, `GetRecords` gắn `Certificates`).
+  4. **Bảng tin & Đơn xin phép nghỉ học (`TASK-P5-08.4`):** `AnnouncementsController` (`Index`, `Create` tối đa 5 tệp, `Delete`), `AbsenceController` (`SubmitRequestWithFile` `[AllowAnonymous]` + RateLimit, `Manage` gắn `AbsenceAttachments`), `Views/Lookup/Result.cshtml`.
+  5. **Backjob Log, Admin UI & Di chuyển dữ liệu cũ (`TASK-P5-08.5` ➔ `08.8`):** `DriveLogUploadOptions`, `DriveLogUploadService` (`SemaphoreSlim`, bảo vệ file `.log` đang ghi theo `LocalRetentionDays`, nén GZip streaming `ArrayPool<byte>`, `AllowLocalFallback = false`), `DriveLogUploadBackgroundService` & `CronScheduleCalculator` (Cron múi giờ Việt Nam), `LogsController` (`TriggerDriveLogUpload`, `RetryFallbackSync`, `RunLocalMediaMigration`), `LocalMediaMigrationService` (4 bước A..D hỗ trợ `DryRun` & `DeleteLocalAfterVerified`), `Views/Logs/Index.cshtml`.
+- **Danh sách tài liệu `AI-Knowledge` tạo mới / cập nhật:**
+  - `AI-Knowledge/05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md` *(NEW FILE)*
+  - `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md`
+  - `AI-Knowledge/00-OVERVIEW/TECH-STACK.md`
+  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md`
+  - `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md`
+  - `AI-Knowledge/02-DATABASE/TABLE-INDEX.json`
+  - `AI-Knowledge/04-INTEGRATIONS/INTEGRATION-OVERVIEW.md`
+  - `AI-Knowledge/04-INTEGRATIONS/EXTERNAL-APIS.md`
+  - `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+  - `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`
+- **Ghi chú:** Kiểm định JSON/JSONL hợp lệ trên toàn bộ tệp JSON/JSONL cập nhật; giữ `lastIndexedCommit` ở `2a3263d` trong `KNOWLEDGE-BASELINE.json` và ghi `lastFeatureSyncCommit = 4589783` do các commit trung gian Phase 6/7 chưa quét lại toàn bộ `03-CODE-INDEX/`.
+
+---
+
 ### Phiên cập nhật: Hoàn tất Phase 6 — `TASK-03` (Quản lý Lớp Chiều & Tuyển hứa) & `TASK-04` (Profile Lịch sử Kép)
 - **Thời gian cập nhật:** `2026-11-20T14:07:00+07:00`
 - **Mục tiêu:** Triển khai `7` sub-tasks còn lại của Phase 6 (`TASK-03.1` ➔ `TASK-04.3`), nâng tổng tiến độ lên `14/14` (`100,0%` — `10.50` ngày công) trên Google Sheet và đồng bộ trạng thái `COMPLETED` vào `AI-Knowledge/`.

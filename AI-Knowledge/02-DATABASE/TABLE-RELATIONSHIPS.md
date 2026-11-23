@@ -46,6 +46,16 @@ Quan hệ giữa các bảng được xác minh qua Fluent API cấu hình trong
 - **ClassLessonPlans ↔ Classes, AcademicYears (n-1):** DeleteBehavior: `Cascade`. Khóa ngoại `AssignedTeacherUserId` → `Users` (`SetNull`). Index trên `(ClassRoomId, LessonDate)`, `AcademicYearId`, `AssignedTeacherUserId`.
 - **ClassLessonPlans ↔ ClassCurriculumDocuments (n-1):** Khóa ngoại `CurriculumDocumentId`. DeleteBehavior: `SetNull`. Index trên `CurriculumDocumentId`.
 
+## 8. Cloud Media Storage (`FEAT-P5-08` - Google Drive & Local Fallback)
+- **CloudMediaFiles (Bảng trung tâm lưu vết tệp):** Khóa chính `Id`, áp dụng `ISoftDelete` (`!e.IsDeleted`), 5 index: `(Category, SyncStatus, CreatedAt)`, `(EntityName, EntityId)`, `ExternalFileId`, `(StorageProvider, SyncStatus)`, `IsDeleted`.
+- **ClassLessonDocuments ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `CloudFileId`. DeleteBehavior: `SetNull`. Index trên `CloudFileId`.
+- **ClassCurriculumDocuments ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `CloudFileId`. DeleteBehavior: `SetNull`. Index trên `CloudFileId`.
+- **ClassCurriculumVersions ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `CloudFileId`. DeleteBehavior: `SetNull`. Index trên `CloudFileId`.
+- **RoomIncidentReports ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `CloudImageFileId`. DeleteBehavior: `SetNull`. Index trên `CloudImageFileId`.
+- **Students ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `AvatarCloudFileId`. DeleteBehavior: `SetNull`. Index trên `AvatarCloudFileId`.
+- **Users ↔ CloudMediaFiles (n-1, Optional):** Khóa ngoại `AvatarCloudFileId`. DeleteBehavior: `SetNull`. Index trên `AvatarCloudFileId`.
+- **Liên kết đa hình theo `(EntityName, EntityId)` (không có FK cứng ở DB):** Phục vụ tệp đính kèm của `Announcement` (`ANNOUNCEMENT_DOC`), `StudentSacramentRecord` (`SACRAMENT_DOC`), `AbsenceRequest` (`ABSENCE_DOC`), `SystemLog` (`SYSTEM_LOG`) và `LegacyOrphan` (`LESSON_PLAN`).
+
 ```mermaid
 erDiagram
     Students ||--o| Users : "1-1 (LinkedStudentId)"
@@ -68,6 +78,12 @@ erDiagram
     ClassCurriculumDocuments ||--o{ ClassCurriculumVersions : "1-N"
     ClassCurriculumDocuments ||--o{ ClassLessonPlans : "1-N"
     Classes ||--o{ ClassLessonPlans : "1-N"
+    CloudMediaFiles ||--o{ ClassLessonDocuments : "CloudFileId (SetNull)"
+    CloudMediaFiles ||--o{ ClassCurriculumDocuments : "CloudFileId (SetNull)"
+    CloudMediaFiles ||--o{ ClassCurriculumVersions : "CloudFileId (SetNull)"
+    CloudMediaFiles ||--o{ RoomIncidentReports : "CloudImageFileId (SetNull)"
+    CloudMediaFiles ||--o{ Students : "AvatarCloudFileId (SetNull)"
+    CloudMediaFiles ||--o{ Users : "AvatarCloudFileId (SetNull)"
 ```
 
 ### 3. TABLE-INDEX.json
@@ -95,6 +111,7 @@ erDiagram
                                                            "CatechistPromiseDate",
                                                            "ParentPhone",
                                                            "IsActive",
+                                                           "AvatarCloudFileId",
                                                            "IsDeleted",
                                                            "DeletedAt"
                                                        ],
@@ -102,7 +119,11 @@ erDiagram
                                                                "Id"
                                                            ],
                                            "foreignKeys":  [
-
+                                                               {
+                                                                   "column":  "AvatarCloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
+                                                               }
                                                            ],
                                            "indexes":  [
                                                            "IsDeleted",
@@ -110,7 +131,8 @@ erDiagram
                                                            "LastName, FirstName",
                                                            "ChristianName",
                                                            "BaoDongPromiseDate",
-                                                           "CatechistPromiseDate"
+                                                           "CatechistPromiseDate",
+                                                           "AvatarCloudFileId"
                                                        ]
                                        },
                                        {
@@ -326,6 +348,7 @@ erDiagram
                                                            "DateOfBirth",
                                                            "Address",
                                                            "AvatarUrl",
+                                                           "AvatarCloudFileId",
                                                            "ManagedGradeLevel",
                                                            "ClassTeacherId",
                                                            "StudentId",
@@ -349,6 +372,11 @@ erDiagram
                                                                    "column":  "LinkedStudentId",
                                                                    "principalTable":  "Students",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "AvatarCloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
@@ -357,7 +385,8 @@ erDiagram
                                                            "PhoneNumber",
                                                            "Role",
                                                            "ManagedGradeLevel",
-                                                           "LinkedStudentId"
+                                                           "LinkedStudentId",
+                                                           "AvatarCloudFileId"
                                                        ]
                                        },
                                        {
@@ -477,7 +506,8 @@ erDiagram
                                                            "Status",
                                                            "ReportedAt",
                                                            "ResolvedAt",
-                                                           "ResolutionNotes"
+                                                           "ResolutionNotes",
+                                                           "CloudImageFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -492,11 +522,17 @@ erDiagram
                                                                    "column":  "ReporterUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudImageFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassRoomLocationId, Status",
-                                                           "ReporterUserId"
+                                                           "ReporterUserId",
+                                                           "CloudImageFileId"
                                                        ]
                                        },
                                        {
@@ -616,7 +652,8 @@ erDiagram
                                                            "FileSize",
                                                            "Description",
                                                            "UploadedBy",
-                                                           "UploadedAt"
+                                                           "UploadedAt",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -631,10 +668,15 @@ erDiagram
                                                                    "column":  "ClassRoomId",
                                                                    "principalTable":  "Classes",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
-
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -658,7 +700,8 @@ erDiagram
                                                            "UpdatedBy",
                                                            "UpdatedByUserId",
                                                            "UpdatedAt",
-                                                           "IsActive"
+                                                           "IsActive",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -683,11 +726,17 @@ erDiagram
                                                                    "column":  "UpdatedByUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassRoomId, AcademicYearId",
-                                                           "AcademicYearId"
+                                                           "AcademicYearId",
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -706,7 +755,8 @@ erDiagram
                                                            "ContentType",
                                                            "CreatedBy",
                                                            "CreatedByUserId",
-                                                           "CreatedAt"
+                                                           "CreatedAt",
+                                                           "CloudFileId"
                                                        ],
                                            "primaryKeys":  [
                                                                "Id"
@@ -721,11 +771,17 @@ erDiagram
                                                                    "column":  "CreatedByUserId",
                                                                    "principalTable":  "Users",
                                                                    "principalColumn":  "Id"
+                                                               },
+                                                               {
+                                                                   "column":  "CloudFileId",
+                                                                   "principalTable":  "CloudMediaFiles",
+                                                                   "principalColumn":  "Id"
                                                                }
                                                            ],
                                            "indexes":  [
                                                            "ClassCurriculumDocumentId, VersionNumber",
-                                                           "CreatedAt"
+                                                           "CreatedAt",
+                                                           "CloudFileId"
                                                        ]
                                        },
                                        {
@@ -1522,6 +1578,48 @@ erDiagram
                                                            ],
                                            "indexes":  [
                                                            "OptionCode"
+                                                       ]
+                                       },
+                                       {
+                                           "tableName":  "CloudMediaFiles",
+                                           "columns":  [
+                                                           "Id",
+                                                           "Category",
+                                                           "EntityName",
+                                                           "EntityId",
+                                                           "OriginalFileName",
+                                                           "StoredFileName",
+                                                           "ContentType",
+                                                           "FileSize",
+                                                           "Sha256Hash",
+                                                           "StorageProvider",
+                                                           "ExternalFileId",
+                                                           "ExternalFolderId",
+                                                           "DriveFolderPath",
+                                                           "LocalFallbackPath",
+                                                           "SyncStatus",
+                                                           "RetryCount",
+                                                           "LastError",
+                                                           "UploadedBy",
+                                                           "UploadedByUserId",
+                                                           "CreatedAt",
+                                                           "UpdatedAt",
+                                                           "SyncedAt",
+                                                           "IsDeleted",
+                                                           "DeletedAt"
+                                                       ],
+                                           "primaryKeys":  [
+                                                               "Id"
+                                                           ],
+                                           "foreignKeys":  [
+
+                                                           ],
+                                           "indexes":  [
+                                                           "Category, SyncStatus, CreatedAt",
+                                                           "EntityName, EntityId",
+                                                           "ExternalFileId",
+                                                           "StorageProvider, SyncStatus",
+                                                           "IsDeleted"
                                                        ]
                                        }
                                    ]
