@@ -3,10 +3,12 @@ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace ManagerStudentCaltholic.Controllers
 {
@@ -15,15 +17,21 @@ namespace ManagerStudentCaltholic.Controllers
     {
         private readonly ParishDbContext _context;
         private readonly IClassCurriculumService _curriculumService;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly GoogleDriveOptions _driveOptions;
         private readonly ILogger<LessonPlansController> _logger;
 
         public LessonPlansController(
             ParishDbContext context,
             IClassCurriculumService curriculumService,
+            IGoogleDriveStorageService storageService,
+            IOptions<GoogleDriveOptions> driveOptions,
             ILogger<LessonPlansController> logger)
         {
             _context = context;
             _curriculumService = curriculumService;
+            _storageService = storageService;
+            _driveOptions = driveOptions.Value;
             _logger = logger;
         }
 
@@ -108,8 +116,9 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            // 2. Lấy danh sách tài liệu đính kèm truyền thống
+            // 2. Lấy danh sách tài liệu đính kèm truyền thống (kèm CloudFile để hiển thị trạng thái đồng bộ Drive)
             var legacyDocs = await _context.ClassLessonDocuments
+                .Include(d => d.CloudFile)
                 .Where(d => d.ClassRoomId == selectedClassId && d.AcademicYearId == yearId)
                 .OrderByDescending(d => d.UploadedAt)
                 .AsNoTracking()
@@ -312,7 +321,13 @@ namespace ManagerStudentCaltholic.Controllers
 
             byte[] header = new byte[8];
             await using var stream = file.OpenReadStream();
-            int bytesRead = await stream.ReadAsync(header, 0, header.Length);
+            int bytesRead = 0;
+            while (bytesRead < header.Length)
+            {
+                int read = await stream.ReadAsync(header.AsMemory(bytesRead, header.Length - bytesRead));
+                if (read == 0) break;
+                bytesRead += read;
+            }
             if (bytesRead < 4) return false;
 
             return ext switch
@@ -324,6 +339,55 @@ namespace ManagerStudentCaltholic.Controllers
                                     header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1,
                 _ => false
             };
+        }
+
+        private static string ResolveLessonDocumentContentType(string ext, string? rawContentType)
+        {
+            if (!string.IsNullOrWhiteSpace(rawContentType) && rawContentType.Trim().Length <= 100)
+            {
+                return rawContentType.Trim();
+            }
+
+            return ext switch
+            {
+                ".pdf" => "application/pdf",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".doc" => "application/msword",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".xls" => "application/vnd.ms-excel",
+                _ => "application/octet-stream"
+            };
+        }
+
+        private static string TruncateValue(string value, int maxLength)
+            => value.Length <= maxLength ? value : value[..maxLength];
+
+        private IActionResult FileStreamResponse(Stream stream, string contentType, string fileName, bool inline)
+        {
+            if (inline && string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers["Content-Disposition"] = $"inline; filename=\"{Uri.EscapeDataString(fileName)}\"";
+                return File(stream, contentType);
+            }
+
+            return File(stream, contentType, fileName);
+        }
+
+        private static void DeleteLegacyFileIfContained(string rootDirectory, string safeStoredName)
+        {
+            if (string.IsNullOrWhiteSpace(safeStoredName)) return;
+
+            var fullRoot = Path.GetFullPath(rootDirectory);
+            if (!fullRoot.EndsWith(Path.DirectorySeparatorChar))
+            {
+                fullRoot += Path.DirectorySeparatorChar;
+            }
+
+            var physicalPath = Path.GetFullPath(Path.Combine(fullRoot, safeStoredName));
+            if (physicalPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(physicalPath))
+            {
+                try { System.IO.File.Delete(physicalPath); } catch { }
+            }
         }
 
         [HttpPost]
@@ -338,20 +402,25 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Vui lòng chọn file kế hoạch để tải lên." });
                 }
 
-                const long maxFileSize = 15 * 1024 * 1024;
+                var maxFileSize = _driveOptions.MaxLessonPlanBytes > 0
+                    ? _driveOptions.MaxLessonPlanBytes
+                    : 25L * 1024 * 1024;
                 if (file.Length > maxFileSize)
                 {
-                    return Json(new { success = false, message = "Dung lượng file vượt quá giới hạn 15MB." });
+                    var maxMb = Math.Round(maxFileSize / (1024d * 1024d), 1);
+                    return Json(new { success = false, message = $"Dung lượng file vượt quá giới hạn {maxMb:0.#} MB." });
                 }
 
                 var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
                 var allowedExtensions = new[] { ".pdf", ".docx", ".doc", ".xlsx", ".xls" };
                 if (!allowedExtensions.Contains(ext) || !await HasValidMagicBytesAsync(file, ext))
                 {
-                    return Json(new { success = false, message = "Định dạng hoặc cấu trúc tệp không hợp lệ! Chỉ chấp nhận tệp chuẩn .pdf, .docx, .xlsx." });
+                    return Json(new { success = false, message = "Định dạng hoặc cấu trúc tệp không hợp lệ! Chỉ chấp nhận tệp chuẩn .pdf, .docx, .doc, .xlsx, .xls." });
                 }
 
-                var targetClass = await _context.Classes.FindAsync(classRoomId);
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .FirstOrDefaultAsync(c => c.Id == classRoomId);
                 if (targetClass == null)
                 {
                     return Json(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
@@ -362,40 +431,76 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Bạn không có thẩm quyền tải giáo án lên lớp học này!" });
                 }
 
-                var privateFolder = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"));
-                Directory.CreateDirectory(privateFolder);
-
-                var storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
-                var physicalPath = Path.Combine(privateFolder, storedFileName);
-
-                await using (var stream = new FileStream(physicalPath, FileMode.Create))
+                var safeOriginalName = TruncateValue(Path.GetFileName(file.FileName), 255);
+                if (string.IsNullOrWhiteSpace(safeOriginalName))
                 {
-                    await file.CopyToAsync(stream);
+                    safeOriginalName = $"lesson_plan{ext}";
                 }
 
-                var safeOriginalName = Path.GetFileName(file.FileName);
-                var doc = new ClassLessonDocument
+                var storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
+                var safeContentType = ResolveLessonDocumentContentType(ext, file.ContentType);
+                var safeDescription = TruncateValue(
+                    string.IsNullOrWhiteSpace(description) ? safeOriginalName : description.Trim(),
+                    500);
+                var safeUploadedBy = TruncateValue(User.Identity?.Name ?? "GLV", 100);
+                var yearName = !string.IsNullOrWhiteSpace(targetClass.AcademicYear?.Name)
+                    ? targetClass.AcademicYear.Name
+                    : $"Year_{targetClass.AcademicYearId}";
+
+                var strategy = _context.Database.CreateExecutionStrategy();
+                var savedDoc = await strategy.ExecuteAsync(async () =>
                 {
-                    ClassRoomId = targetClass.Id,
-                    AcademicYearId = targetClass.AcademicYearId,
-                    FileName = safeOriginalName,
-                    StoredFileName = storedFileName,
-                    FilePath = string.Empty,
-                    ContentType = file.ContentType,
-                    FileSize = file.Length,
-                    Description = string.IsNullOrWhiteSpace(description) ? safeOriginalName : description.Trim(),
-                    UploadedBy = User.Identity?.Name ?? "GLV",
-                    UploadedAt = DateTime.UtcNow
-                };
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+                    try
+                    {
+                        var doc = new ClassLessonDocument
+                        {
+                            ClassRoomId = targetClass.Id,
+                            AcademicYearId = targetClass.AcademicYearId,
+                            FileName = safeOriginalName,
+                            StoredFileName = storedFileName,
+                            FilePath = "/LessonPlans/DownloadDocument/0",
+                            ContentType = safeContentType,
+                            FileSize = file.Length,
+                            Description = safeDescription,
+                            UploadedBy = safeUploadedBy,
+                            UploadedAt = DateTime.UtcNow
+                        };
 
-                _context.ClassLessonDocuments.Add(doc);
-                await _context.SaveChangesAsync();
+                        _context.ClassLessonDocuments.Add(doc);
+                        await _context.SaveChangesAsync();
 
-                doc.FilePath = $"/LessonPlans/DownloadDocument/{doc.Id}";
-                await _context.SaveChangesAsync();
+                        await using var uploadStream = file.OpenReadStream();
+                        var media = await _storageService.UploadAsync(new CloudUploadRequest
+                        {
+                            Content = uploadStream,
+                            OriginalFileName = safeOriginalName,
+                            ContentType = safeContentType,
+                            Category = CloudMediaCategory.LessonPlan,
+                            EntityName = nameof(ClassLessonDocument),
+                            EntityId = doc.Id,
+                            FolderSegments = new[] { yearName, "LessonPlans" },
+                            UploadedBy = User.Identity?.Name,
+                            UploadedByUserId = CurrentUserId > 0 ? CurrentUserId : null
+                        });
 
-                _logger.LogInformation("Người dùng {User} đã upload tài liệu {FileName} cho lớp {ClassId}",
-                    User.Identity?.Name, safeOriginalName, classRoomId);
+                        doc.CloudFileId = media.Id;
+                        doc.StoredFileName = TruncateValue(media.StoredFileName, 255);
+                        doc.FilePath = $"/LessonPlans/DownloadDocument/{doc.Id}";
+                        await _context.SaveChangesAsync();
+
+                        await transaction.CommitAsync();
+                        return doc;
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
+
+                _logger.LogInformation("Người dùng {User} đã upload tài liệu {FileName} (DocId={DocId}, CloudFileId={CloudFileId}) cho lớp {ClassId}",
+                    User.Identity?.Name, safeOriginalName, savedDoc.Id, savedDoc.CloudFileId, classRoomId);
 
                 return Json(new { success = true, message = $"Đã tải lên và lưu file '{safeOriginalName}' an toàn!" });
             }
@@ -421,28 +526,43 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid();
             }
 
-            var safeStoredName = Path.GetFileName(doc.StoredFileName);
-            var privatePath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans", safeStoredName));
-            var legacyPublicPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans", safeStoredName));
+            var isPdf = string.Equals(Path.GetExtension(doc.FileName), ".pdf", StringComparison.OrdinalIgnoreCase);
 
-            string? targetPath = System.IO.File.Exists(privatePath)
-                ? privatePath
-                : (System.IO.File.Exists(legacyPublicPath) ? legacyPublicPath : null);
+            if (doc.CloudFileId.HasValue)
+            {
+                var cloudResult = await _storageService.DownloadAsync(doc.CloudFileId.Value);
+                if (cloudResult != null)
+                {
+                    var cloudContentType = isPdf
+                        ? "application/pdf"
+                        : (!string.IsNullOrWhiteSpace(cloudResult.ContentType)
+                            ? cloudResult.ContentType
+                            : (string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType));
+                    var downloadName = string.IsNullOrWhiteSpace(doc.FileName) ? cloudResult.FileName : doc.FileName;
+                    return FileStreamResponse(cloudResult.ContentStream, cloudContentType, downloadName, inline);
+                }
+            }
+
+            var safeStoredName = Path.GetFileName(doc.StoredFileName);
+            string? targetPath = null;
+            if (!string.IsNullOrWhiteSpace(safeStoredName))
+            {
+                var privatePath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans", safeStoredName));
+                var legacyPublicPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans", safeStoredName));
+
+                targetPath = System.IO.File.Exists(privatePath)
+                    ? privatePath
+                    : (System.IO.File.Exists(legacyPublicPath) ? legacyPublicPath : null);
+            }
 
             if (targetPath == null) return NotFound("Không tìm thấy tệp giáo án trên máy chủ.");
 
-            var contentType = Path.GetExtension(safeStoredName).ToLowerInvariant() == ".pdf"
+            var contentType = (isPdf || string.Equals(Path.GetExtension(safeStoredName), ".pdf", StringComparison.OrdinalIgnoreCase))
                 ? "application/pdf"
                 : (string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType);
 
             var fileStream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (inline && contentType == "application/pdf")
-            {
-                Response.Headers["Content-Disposition"] = $"inline; filename=\"{Uri.EscapeDataString(doc.FileName)}\"";
-                return File(fileStream, contentType);
-            }
-
-            return File(fileStream, contentType, doc.FileName);
+            return FileStreamResponse(fileStream, contentType, doc.FileName, inline);
         }
 
         [HttpPost]
@@ -461,24 +581,22 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Bạn không có quyền xóa tài liệu của khối/lớp khác!" });
             }
 
-            var uploadsRoot = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"));
-            if (!uploadsRoot.EndsWith(Path.DirectorySeparatorChar))
-            {
-                uploadsRoot += Path.DirectorySeparatorChar;
-            }
-
+            var cloudFileId = doc.CloudFileId;
             var safeStoredName = Path.GetFileName(doc.StoredFileName);
-            if (!string.IsNullOrWhiteSpace(safeStoredName))
-            {
-                var physicalPath = Path.GetFullPath(Path.Combine(uploadsRoot, safeStoredName));
-                if (physicalPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(physicalPath))
-                {
-                    try { System.IO.File.Delete(physicalPath); } catch { }
-                }
-            }
 
             _context.ClassLessonDocuments.Remove(doc);
             await _context.SaveChangesAsync();
+
+            if (cloudFileId.HasValue)
+            {
+                await _storageService.DeleteAsync(cloudFileId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(safeStoredName))
+            {
+                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"), safeStoredName);
+                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"), safeStoredName);
+            }
 
             return Json(new { success = true, message = "Đã xóa tài liệu kế hoạch thành công!" });
         }
