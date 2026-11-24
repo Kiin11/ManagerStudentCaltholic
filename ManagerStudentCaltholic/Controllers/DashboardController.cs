@@ -27,14 +27,42 @@ namespace ManagerStudentCaltholic.Controllers
             User.IsInRole(UserRole.SpiritualDirector) ||
             User.IsInRole(UserRole.ExecutiveBoard);
 
+        private static string NormalizeAllowedGrade(string? gradeLevel)
+        {
+            if (string.IsNullOrWhiteSpace(gradeLevel))
+            {
+                return "ALL";
+            }
+
+            var trimmed = gradeLevel.Trim();
+            if (string.Equals(trimmed, "ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                return "ALL";
+            }
+
+            var matchedStandard = StandardGrades.FirstOrDefault(g =>
+                string.Equals(g, trimmed, StringComparison.OrdinalIgnoreCase));
+            if (matchedStandard != null)
+            {
+                return matchedStandard;
+            }
+
+            if (GradeLevel.IsProbationaryGrade(trimmed))
+            {
+                return GradeLevel.DuBi;
+            }
+
+            return "ALL";
+        }
+
         /// <summary>
         /// 1. GET: /Dashboard/Index (Màn hình Executive Dashboard cho Cha Xứ & BĐH - FEAT-P3-08)
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Index(int? academicYearId, string? gradeLevel, int? month)
         {
-            // Kiểm tra phạm vi nếu là Trưởng khối (BranchHead - Fail-Closed)
-            string effectiveGrade = string.IsNullOrWhiteSpace(gradeLevel) ? "ALL" : gradeLevel.Trim();
+            // Kiểm tra phạm vi nếu là Trưởng khối (BranchHead - Fail-Closed) và kiểm tra allow-list khối
+            string effectiveGrade = NormalizeAllowedGrade(gradeLevel);
             bool isGradeLocked = false;
 
             if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
@@ -44,7 +72,7 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     return Forbid();
                 }
-                effectiveGrade = managedGrade;
+                effectiveGrade = managedGrade.Trim();
                 isGradeLocked = true;
             }
 
@@ -62,7 +90,7 @@ namespace ManagerStudentCaltholic.Controllers
         {
             try
             {
-                string effectiveGrade = string.IsNullOrWhiteSpace(gradeLevel) ? "ALL" : gradeLevel.Trim();
+                string effectiveGrade = NormalizeAllowedGrade(gradeLevel);
                 if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
                 {
                     var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
@@ -70,7 +98,7 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         return Forbid();
                     }
-                    effectiveGrade = managedGrade;
+                    effectiveGrade = managedGrade.Trim();
                 }
 
                 var data = await BuildExecutiveDashboardDataAsync(academicYearId, effectiveGrade, month);

@@ -218,20 +218,18 @@ namespace ManagerStudentCaltholic.Services
                 };
             }
 
-            var maxLessonPlanBytes = _driveOptions.MaxLessonPlanBytes > 0
-                ? _driveOptions.MaxLessonPlanBytes
-                : 25L * 1024 * 1024;
-            if (file.Length > maxLessonPlanBytes)
+            const long maxParseBytes = 15L * 1024 * 1024;
+            if (file.Length > maxParseBytes)
             {
-                var maxMb = Math.Round(maxLessonPlanBytes / (1024d * 1024d), 1);
                 return new CurriculumParseResultDto
                 {
                     Success = false,
-                    Message = $"Dung lượng file vượt quá giới hạn {maxMb:0.#} MB."
+                    Message = "Dung lượng file vượt quá giới hạn 15 MB."
                 };
             }
 
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var safeOriginalName = Path.GetFileName(file.FileName);
+            var ext = Path.GetExtension(safeOriginalName).ToLowerInvariant();
             var allowed = new[] { ".xlsx", ".xls", ".docx", ".csv", ".md", ".pdf" };
             if (!allowed.Contains(ext))
             {
@@ -246,6 +244,16 @@ namespace ManagerStudentCaltholic.Services
             {
                 using var stream = new MemoryStream();
                 await file.CopyToAsync(stream);
+                stream.Position = 0;
+
+                if (!await FileUploadSecurityHelper.ValidateStreamMagicBytesAsync(stream, ext))
+                {
+                    return new CurriculumParseResultDto
+                    {
+                        Success = false,
+                        Message = "Nội dung tệp không đúng chữ ký định dạng hợp lệ hoặc tệp đã bị hỏng."
+                    };
+                }
                 stream.Position = 0;
 
                 List<CurriculumItemDto> items = ext switch
@@ -270,19 +278,19 @@ namespace ManagerStudentCaltholic.Services
                 return new CurriculumParseResultDto
                 {
                     Success = true,
-                    Message = $"Nạp thành công {items.Count} tuần học từ file '{file.FileName}'!",
-                    OriginalFileName = file.FileName,
+                    Message = $"Nạp thành công {items.Count} tuần học từ file '{safeOriginalName}'!",
+                    OriginalFileName = safeOriginalName,
                     TotalItemsParsed = items.Count,
                     Items = items
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi khi phân tích file kế hoạch {FileName}", file.FileName);
+                _logger.LogError(ex, "Lỗi khi phân tích file kế hoạch {FileName}", safeOriginalName);
                 return new CurriculumParseResultDto
                 {
                     Success = false,
-                    Message = $"Lỗi khi đọc file: {ex.Message}"
+                    Message = "Không thể đọc nội dung tệp. Vui lòng kiểm tra lại định dạng và cấu trúc file mẫu."
                 };
             }
         }
@@ -314,7 +322,7 @@ namespace ManagerStudentCaltholic.Services
                     if (DateTime.TryParseExact(item.LessonDateStr.Trim(), new[] { "dd/MM/yyyy", "d/M/yyyy", "yyyy-MM-dd" },
                         CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
                     {
-                        item.LessonDate = DateTime.SpecifyKind(d.Date, DateTimeKind.Utc);
+                        item.LessonDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(d);
                     }
                 }
 
@@ -349,9 +357,9 @@ namespace ManagerStudentCaltholic.Services
                     string cleanClassName = Regex.Replace(cls.Name, @"[^a-zA-Z0-9_\-]", "");
                     if (string.IsNullOrWhiteSpace(cleanClassName)) cleanClassName = $"Class{cls.Id}";
 
-                    string dateStamp = DateTime.UtcNow.ToString("yyyyMMdd");
+                    string dateStamp = VietnamTimeHelper.Today.ToString("yyyyMMdd");
                     string generatedFileName = $"KeHoach_{cleanClassName}_{versionTag}_{dateStamp}.xlsx";
-                    string storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.xlsx";
+                    string storedFileName = $"{VietnamTimeHelper.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.xlsx";
 
                     // 1. Tự động sinh file Excel vào MemoryStream (tránh ghi trùng file cục bộ khi dùng Google Drive)
                     await using var excelStream = GenerateExcelToMemoryStream(cls.Name, cls.GradeLevel, year.Name, versionTag, items);
@@ -456,8 +464,8 @@ namespace ManagerStudentCaltholic.Services
                     foreach (var it in items)
                     {
                         DateTime lDate = it.LessonDate.HasValue
-                            ? DateTime.SpecifyKind(it.LessonDate.Value.Date, DateTimeKind.Utc)
-                            : DateTime.UtcNow.Date;
+                            ? VietnamTimeHelper.NormalizeBusinessDateUtcKind(it.LessonDate.Value)
+                            : VietnamTimeHelper.TodayUtcKind;
 
                         _context.ClassLessonPlans.Add(new ClassLessonPlan
                         {
@@ -492,7 +500,7 @@ namespace ManagerStudentCaltholic.Services
                 {
                     await transaction.RollbackAsync();
                     _logger.LogError(ex, "Lỗi khi lưu kế hoạch lớp {ClassId}", request.ClassRoomId);
-                    return (false, $"Lỗi hệ thống khi lưu kế hoạch: {ex.Message}", null);
+                    return (false, "Đã xảy ra lỗi hệ thống khi lưu kế hoạch. Vui lòng thử lại.", null);
                 }
             });
         }
@@ -516,17 +524,19 @@ namespace ManagerStudentCaltholic.Services
                 }
                 catch (Exception ex)
                 {
-                    return (false, $"Không thể đọc dữ liệu bản chụp của phiên bản: {ex.Message}", null);
+                    _logger.LogWarning(ex, "Không thể đọc ContentJson khi rollback VersionId={VersionId}", versionId);
+                    return (false, "Không thể đọc dữ liệu bản chụp của phiên bản.", null);
                 }
             }
 
+            var createdAtVn = VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(ver.CreatedAt, DateTimeKind.Utc));
             var saveRequest = new SaveCurriculumRequestDto
             {
                 ClassRoomId = doc.ClassRoomId,
                 AcademicYearId = doc.AcademicYearId,
                 Title = doc.Title,
                 Description = doc.Description,
-                ChangeSummary = $"Khôi phục về {ver.VersionTag} (Lưu lúc {ver.CreatedAt:dd/MM/yyyy HH:mm} bởi {ver.CreatedBy})",
+                ChangeSummary = $"Khôi phục về {ver.VersionTag} (Lưu lúc {createdAtVn:dd/MM/yyyy HH:mm} bởi {ver.CreatedBy})",
                 Items = items
             };
 
@@ -539,6 +549,7 @@ namespace ManagerStudentCaltholic.Services
             var doc = await _context.ClassCurriculumDocuments
                 .Include(d => d.ClassRoom)
                 .Include(d => d.AcademicYear)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == documentId);
 
             if (doc == null)
@@ -551,14 +562,23 @@ namespace ManagerStudentCaltholic.Services
 
             if (versionId.HasValue && versionId.Value > 0)
             {
-                var ver = await _context.ClassCurriculumVersions.FindAsync(versionId.Value);
-                if (ver != null)
+                var ver = await _context.ClassCurriculumVersions
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(v => v.Id == versionId.Value);
+                if (ver == null)
                 {
-                    versionTag = ver.VersionTag;
-                    if (!string.IsNullOrWhiteSpace(ver.ContentJson))
-                    {
-                        try { items = JsonSerializer.Deserialize<List<CurriculumItemDto>>(ver.ContentJson) ?? new(); } catch { }
-                    }
+                    throw new FileNotFoundException("Không tìm thấy phiên bản kế hoạch yêu cầu.");
+                }
+
+                if (ver.ClassCurriculumDocumentId != documentId)
+                {
+                    throw new UnauthorizedAccessException("Phiên bản được yêu cầu không thuộc tài liệu kế hoạch này.");
+                }
+
+                versionTag = ver.VersionTag;
+                if (!string.IsNullOrWhiteSpace(ver.ContentJson))
+                {
+                    try { items = JsonSerializer.Deserialize<List<CurriculumItemDto>>(ver.ContentJson) ?? new(); } catch { }
                 }
             }
 
@@ -568,13 +588,13 @@ namespace ManagerStudentCaltholic.Services
             }
 
             string cleanClassName = Regex.Replace(doc.ClassRoom?.Name ?? "Lop", @"[^a-zA-Z0-9_\-]", "");
-            string downloadName = $"KeHoach_{cleanClassName}_{versionTag}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+            string downloadName = $"KeHoach_{cleanClassName}_{versionTag}_{VietnamTimeHelper.Today:yyyyMMdd}.xlsx";
             var bytes = GenerateExcelFileBytes(doc.ClassRoom?.Name ?? "", doc.ClassRoom?.GradeLevel ?? "", doc.AcademicYear?.Name ?? "", versionTag, items);
 
             return (bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", downloadName);
         }
 
-        public async Task<(byte[] FileBytes, string ContentType, string DownloadFileName)?> GetVersionFileAsync(long versionId)
+        public async Task<(Stream FileStream, string ContentType, string DownloadFileName)?> GetVersionFileAsync(long versionId)
         {
             var ver = await _context.ClassCurriculumVersions
                 .Include(v => v.CurriculumDocument)
@@ -593,26 +613,25 @@ namespace ManagerStudentCaltholic.Services
                 var cloudResult = await _storageService.DownloadAsync(ver.CloudFileId.Value);
                 if (cloudResult != null)
                 {
-                    await using var contentStream = cloudResult.ContentStream;
-                    using var ms = new MemoryStream();
-                    await contentStream.CopyToAsync(ms);
                     var downloadName = string.IsNullOrWhiteSpace(ver.FileName) ? cloudResult.FileName : ver.FileName;
                     var resolvedType = !string.IsNullOrWhiteSpace(ver.ContentType)
                         ? ver.ContentType
                         : (!string.IsNullOrWhiteSpace(cloudResult.ContentType) ? cloudResult.ContentType : defaultExcelContentType);
-                    return (ms.ToArray(), resolvedType, downloadName);
+                    return (cloudResult.ContentStream, resolvedType, downloadName);
                 }
             }
 
-            var safeStored = Path.GetFileName(ver.StoredFileName);
-            if (!string.IsNullOrWhiteSpace(safeStored))
+            if (FileUploadSecurityHelper.TryResolveContainedPath(_storageFolder, ver.StoredFileName, out var path)
+                && File.Exists(path))
             {
-                var path = Path.Combine(_storageFolder, safeStored);
-                if (File.Exists(path))
-                {
-                    var fileData = await File.ReadAllBytesAsync(path);
-                    return (fileData, contentType, ver.FileName);
-                }
+                var fileStream = new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 65536,
+                    options: FileOptions.Asynchronous);
+                return (fileStream, contentType, ver.FileName);
             }
 
             // Nếu file trên Cloud/cục bộ bị thiếu, tái tạo tức thì từ snapshot ContentJson
@@ -625,8 +644,8 @@ namespace ManagerStudentCaltholic.Services
             var className = ver.CurriculumDocument?.ClassRoom?.Name ?? "Lớp";
             var gradeLevel = ver.CurriculumDocument?.ClassRoom?.GradeLevel ?? string.Empty;
             var yearName = ver.CurriculumDocument?.AcademicYear?.Name ?? string.Empty;
-            var bytes = GenerateExcelFileBytes(className, gradeLevel, yearName, ver.VersionTag, items);
-            return (bytes, contentType, ver.FileName);
+            var excelStream = GenerateExcelToMemoryStream(className, gradeLevel, yearName, ver.VersionTag, items);
+            return (excelStream, contentType, ver.FileName);
         }
 
         // =========================================================================
@@ -1041,7 +1060,7 @@ namespace ManagerStudentCaltholic.Services
                 .Font.SetFontColor(primaryColor)
                 .Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
 
-            string classSubtitle = $"Lớp: {className} ({gradeLevel}) | Niên khóa: {academicYearName} | Phiên bản: {versionTag} | Ngày xuất: {DateTime.UtcNow:dd/MM/yyyy}";
+            string classSubtitle = $"Lớp: {className} ({gradeLevel}) | Niên khóa: {academicYearName} | Phiên bản: {versionTag} | Ngày xuất: {VietnamTimeHelper.Today:dd/MM/yyyy}";
             ws.Cell(3, 1).Value = classSubtitle;
             ws.Range(3, 1, 3, 9).Merge().Style
                 .Font.SetItalic(true)

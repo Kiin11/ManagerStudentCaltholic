@@ -47,33 +47,74 @@ namespace ManagerStudentCaltholic.Controllers
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                query = !string.IsNullOrWhiteSpace(managedGrade)
-                    ? query.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId))
-                    : query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId));
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return new List<ClassRoom>();
+                }
+
+                var trimmedGrade = managedGrade.Trim();
+                query = query.Where(c =>
+                    c.GradeLevel == trimmedGrade ||
+                    c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId && (currentYearId == 0 || ct.AcademicYearId == currentYearId)));
+            }
+            else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                query = query.Where(c =>
+                    c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId && (currentYearId == 0 || ct.AcademicYearId == currentYearId)));
             }
             else
             {
-                query = query.Where(c => c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId));
+                return new List<ClassRoom>();
             }
 
-            return await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+            var classes = await query.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).AsNoTracking().ToListAsync();
+            if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                classes = classes.Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel)).ToList();
+            }
+
+            return classes;
         }
 
         private async Task<bool> CanAccessClassAsync(ClassRoom classRoom)
         {
             if (IsLeadership) return true;
 
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(classRoom.Session, classRoom.GradeLevel))
+            {
+                return false;
+            }
+
+            var currentYearId = await _context.AcademicYears
+                .AsNoTracking()
+                .Where(y => y.IsCurrent)
+                .Select(y => y.Id)
+                .FirstOrDefaultAsync();
+
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(classRoom.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return false;
+                }
+
+                if ((currentYearId == 0 || classRoom.AcademicYearId == currentYearId) &&
+                    string.Equals(classRoom.GradeLevel?.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
             }
 
-            return await _context.ClassTeachers.AnyAsync(ct => ct.ClassRoomId == classRoom.Id && ct.UserId == CurrentUserId);
+            if (CurrentUserId <= 0) return false;
+
+            return await _context.ClassTeachers
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == classRoom.Id &&
+                                ct.UserId == CurrentUserId &&
+                                ct.AcademicYearId == classRoom.AcademicYearId &&
+                                (currentYearId == 0 || ct.AcademicYearId == currentYearId));
         }
 
         private async Task EnsureDefaultTemplatesSeededAsync()
@@ -315,9 +356,10 @@ namespace ManagerStudentCaltholic.Controllers
             if (!await CanAccessClassAsync(enrollment.ClassRoom))
                 return Forbid();
 
-            string dateDisplay = DateTime.TryParse(attendanceDate, out var parsedDt)
-                ? parsedDt.ToString("dd/MM/yyyy")
-                : DateTime.Now.ToString("dd/MM/yyyy");
+            var targetDate = DateTime.TryParse(attendanceDate, out var parsedDt)
+                ? parsedDt
+                : VietnamTimeHelper.Today;
+            string dateDisplay = targetDate.ToString("dd/MM/yyyy");
 
             var studentFullName = $"{enrollment.Student.ChristianName} {enrollment.Student.FirstName} {enrollment.Student.LastName}".Trim();
             var teacherContact = await GetCurrentStaffContactInfoAsync();
@@ -332,7 +374,7 @@ namespace ManagerStudentCaltholic.Controllers
                 issues.Add("đi tham dự Thánh Lễ trễ");
             }
 
-            if (parsedDt.DayOfWeek == DayOfWeek.Sunday)
+            if (targetDate.DayOfWeek == DayOfWeek.Sunday)
             {
                 if (!classAttended)
                 {
@@ -432,7 +474,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             string dateStr = !string.IsNullOrWhiteSpace(customDate) && DateTime.TryParse(customDate, out var dt)
                 ? dt.ToString("dd/MM/yyyy")
-                : DateTime.Now.ToString("dd/MM/yyyy");
+                : VietnamTimeHelper.Today.ToString("dd/MM/yyyy");
 
             string staffContact = await GetCurrentStaffContactInfoAsync();
 

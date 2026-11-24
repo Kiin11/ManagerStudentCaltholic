@@ -19,6 +19,11 @@ namespace ManagerStudentCaltholic.Controllers
     [Authorize(Policy = "RequireStaff")]
     public class AbsenceController : Controller
     {
+        private const int MaxFailedAttempts = 5;
+        private const int MaxPendingRequestsPerEnrollment = 5;
+        private const string GenericVerificationError =
+            "Thông tin Mã thiếu nhi, Ngày sinh, SĐT Phụ huynh không chính xác hoặc thiếu nhi chưa đủ điều kiện gửi đơn trong năm học hiện tại.";
+
         private static readonly HashSet<string> AllowedAttachmentExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".webp"
@@ -47,24 +52,52 @@ namespace ManagerStudentCaltholic.Controllers
             _logger = logger;
         }
 
+        private bool IsLeadership =>
+            User.IsInRole(UserRole.Admin) ||
+            User.IsInRole(UserRole.SpiritualDirector) ||
+            User.IsInRole(UserRole.ExecutiveBoard);
+
         /// <summary>
         /// 1. Phụ huynh nộp đơn xin nghỉ trực tuyến (Public không cần đăng nhập)
         /// </summary>
-        /// <param name="dto"></param>
-        /// <returns></returns>
         [HttpPost]
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)] // SEC-04 FIX 2: Chặn spam & brute-force SĐT
-        public async Task<IActionResult> SubmitRequest([FromBody] SubmitAbsenceRequestDto dto)
+        public async Task<IActionResult> SubmitRequest([FromBody] SubmitAbsenceRequestDto? dto)
         {
+            if (dto != null && !string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
+            {
+                _logger.LogWarning("SECURITY: Honeypot triggered on Absence SubmitRequest from IP {IP}", GetNormalizedClientIp());
+                return BadRequest(new { success = false, message = "Yêu cầu không hợp lệ." });
+            }
+
+            var clientIp = GetNormalizedClientIp();
+            var cleanCode = (dto?.StudentCode ?? string.Empty).Trim().ToUpperInvariant();
+            var (isLockedOut, ipFailed, ipCodeFailed) = await CheckAbsenceLockoutAsync(clientIp, cleanCode);
+            if (isLockedOut)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    success = false,
+                    message = "Thiết bị này đã nhập sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!"
+                });
+            }
+
             var verification = await VerifyAbsenceSubmissionAsync(dto);
             if (!verification.IsValid)
             {
+                if (verification.CountAsAuthFailure)
+                {
+                    await RecordAbsenceFailureAsync(clientIp, cleanCode, ipFailed, ipCodeFailed);
+                }
+
                 return Json(new { success = false, message = verification.ErrorMessage });
             }
 
-            var newRequest = BuildAbsenceRequestEntity(dto, verification.Enrollment!.Id);
+            await ClearAbsenceFailuresAsync(clientIp, cleanCode);
+
+            var newRequest = BuildAbsenceRequestEntity(dto!, verification.Enrollment!.Id);
 
             _context.AbsenceRequests.Add(newRequest);
             await _context.SaveChangesAsync();
@@ -79,13 +112,38 @@ namespace ManagerStudentCaltholic.Controllers
         [AllowAnonymous]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
-        public async Task<IActionResult> SubmitRequestWithFile([FromForm] SubmitAbsenceRequestDto dto, IFormFile? attachmentFile)
+        public async Task<IActionResult> SubmitRequestWithFile([FromForm] SubmitAbsenceRequestDto? dto, IFormFile? attachmentFile)
         {
+            if (dto != null && !string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
+            {
+                _logger.LogWarning("SECURITY: Honeypot triggered on Absence SubmitRequestWithFile from IP {IP}", GetNormalizedClientIp());
+                return BadRequest(new { success = false, message = "Yêu cầu không hợp lệ." });
+            }
+
+            var clientIp = GetNormalizedClientIp();
+            var cleanCode = (dto?.StudentCode ?? string.Empty).Trim().ToUpperInvariant();
+            var (isLockedOut, ipFailed, ipCodeFailed) = await CheckAbsenceLockoutAsync(clientIp, cleanCode);
+            if (isLockedOut)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    success = false,
+                    message = "Thiết bị này đã nhập sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!"
+                });
+            }
+
             var verification = await VerifyAbsenceSubmissionAsync(dto);
             if (!verification.IsValid)
             {
+                if (verification.CountAsAuthFailure)
+                {
+                    await RecordAbsenceFailureAsync(clientIp, cleanCode, ipFailed, ipCodeFailed);
+                }
+
                 return Json(new { success = false, message = verification.ErrorMessage });
             }
+
+            await ClearAbsenceFailuresAsync(clientIp, cleanCode);
 
             Stream? preparedImageStream = null;
             string? preparedFileName = null;
@@ -129,14 +187,14 @@ namespace ManagerStudentCaltholic.Controllers
 
                         if (ext == ".pdf")
                         {
-                            if (!await HasValidPdfMagicBytesAsync(attachmentFile))
+                            if (!await FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync(attachmentFile, ext))
                             {
                                 return Json(new { success = false, message = "Tệp PDF đính kèm không hợp lệ hoặc đã bị hỏng." });
                             }
 
                             isPdfAttachment = true;
                             preparedFileName = string.IsNullOrWhiteSpace(safeOriginalName) ? "minh_chung.pdf" : safeOriginalName;
-                            preparedContentType = "application/pdf";
+                            preparedContentType = FileUploadSecurityHelper.GetSafeMimeType(ext);
                         }
                         else
                         {
@@ -164,7 +222,7 @@ namespace ManagerStudentCaltholic.Controllers
                     }
                 }
 
-                var newRequest = BuildAbsenceRequestEntity(dto, verification.Enrollment!.Id);
+                var newRequest = BuildAbsenceRequestEntity(dto!, verification.Enrollment!.Id);
                 _context.AbsenceRequests.Add(newRequest);
                 await _context.SaveChangesAsync();
 
@@ -173,7 +231,7 @@ namespace ManagerStudentCaltholic.Controllers
                 {
                     var currentYearName = !string.IsNullOrWhiteSpace(verification.CurrentYear?.Name)
                         ? verification.CurrentYear.Name.Trim()
-                        : DateTime.UtcNow.Year.ToString();
+                        : VietnamTimeHelper.Today.Year.ToString();
 
                     try
                     {
@@ -224,26 +282,34 @@ namespace ManagerStudentCaltholic.Controllers
             }
         }
 
-        private async Task<(bool IsValid, string? ErrorMessage, Student? Student, Enrollment? Enrollment, AcademicYear? CurrentYear)> VerifyAbsenceSubmissionAsync(
+        private async Task<(bool IsValid, string? ErrorMessage, Student? Student, Enrollment? Enrollment, AcademicYear? CurrentYear, bool CountAsAuthFailure)> VerifyAbsenceSubmissionAsync(
             SubmitAbsenceRequestDto? dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.StudentCode) || string.IsNullOrWhiteSpace(dto.Reason) || string.IsNullOrWhiteSpace(dto.ParentPhone))
             {
-                return (false, "Vui lòng nhập đầy đủ Số điện thoại Phụ huynh và Lý do xin phép nghỉ.", null, null, null);
+                return (false, "Vui lòng nhập đầy đủ Số điện thoại Phụ huynh và Lý do xin phép nghỉ.", null, null, null, false);
             }
 
             if (dto.DateOfBirth == default || dto.AbsenceDate == default)
             {
-                return (false, "Thông tin Ngày sinh hoặc Ngày xin nghỉ không hợp lệ.", null, null, null);
+                return (false, "Thông tin Ngày sinh hoặc Ngày xin nghỉ không hợp lệ.", null, null, null, false);
             }
 
             if (dto.Reason.Trim().Length > 500)
             {
-                return (false, "Lý do xin phép nghỉ không được vượt quá 500 ký tự.", null, null, null);
+                return (false, "Lý do xin phép nghỉ không được vượt quá 500 ký tự.", null, null, null, false);
+            }
+
+            var absenceBusinessDate = dto.AbsenceDate.Date;
+            var minAllowedDate = VietnamTimeHelper.Today.AddDays(-7);
+            var maxAllowedDate = VietnamTimeHelper.Today.AddDays(60);
+            if (absenceBusinessDate < minAllowedDate || absenceBusinessDate > maxAllowedDate)
+            {
+                return (false, "Ngày xin phép nghỉ chỉ được phép trong khoảng từ 7 ngày trước đến 60 ngày tới.", null, null, null, false);
             }
 
             var cleanCode = dto.StudentCode.Trim().ToUpperInvariant();
-            var startDob = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc);
+            var startDob = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.DateOfBirth);
             var endDob = startDob.AddDays(1);
 
             var student = await _context.Students
@@ -258,7 +324,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (student == null || string.IsNullOrEmpty(recordPhoneDigits) || inputPhoneDigits != recordPhoneDigits)
             {
-                return (false, "Số điện thoại Phụ huynh không khớp với hồ sơ đã đăng ký của thiếu nhi!", null, null, null);
+                return (false, GenericVerificationError, null, null, null, true);
             }
 
             var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
@@ -268,28 +334,49 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (enrollment == null)
             {
-                return (false, "Thiếu nhi chưa được xếp vào lớp học trong năm nay.", null, null, null);
+                return (false, GenericVerificationError, null, null, null, true);
             }
 
-            return (true, null, student, enrollment, currentYear);
+            int pendingCount = await _context.AbsenceRequests
+                .AsNoTracking()
+                .CountAsync(r => r.EnrollmentId == enrollment.Id && r.Status == "PENDING");
+            if (pendingCount >= MaxPendingRequestsPerEnrollment)
+            {
+                return (false, "Hồ sơ đang có tối đa 5 đơn xin phép chờ duyệt. Vui lòng chờ Giáo lý viên xử lý trước khi gửi thêm.", null, null, null, false);
+            }
+
+            var normalizedAbsenceDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.AbsenceDate);
+            var normalizedSession = NormalizeSessionType(dto.SessionType);
+            bool duplicatePending = await _context.AbsenceRequests
+                .AsNoTracking()
+                .AnyAsync(r => r.EnrollmentId == enrollment.Id &&
+                               r.AbsenceDate == normalizedAbsenceDate &&
+                               r.SessionType == normalizedSession &&
+                               r.Status == "PENDING");
+            if (duplicatePending)
+            {
+                return (false, $"Gia đình đã gửi đơn xin phép cho ngày {normalizedAbsenceDate:dd/MM/yyyy} và đang chờ Giáo lý viên xác nhận.", null, null, null, false);
+            }
+
+            return (true, null, student, enrollment, currentYear, false);
+        }
+
+        private static string NormalizeSessionType(string? rawSessionType)
+        {
+            var normalizedSession = string.IsNullOrWhiteSpace(rawSessionType)
+                ? "ALL"
+                : rawSessionType.Trim().ToUpperInvariant();
+
+            return normalizedSession is "ALL" or "MASS" or "CLASS" ? normalizedSession : "ALL";
         }
 
         private static AbsenceRequest BuildAbsenceRequestEntity(SubmitAbsenceRequestDto dto, long enrollmentId)
         {
-            var normalizedSession = string.IsNullOrWhiteSpace(dto.SessionType)
-                ? "ALL"
-                : dto.SessionType.Trim().ToUpperInvariant();
-
-            if (normalizedSession is not ("ALL" or "MASS" or "CLASS"))
-            {
-                normalizedSession = "ALL";
-            }
-
             return new AbsenceRequest
             {
                 EnrollmentId = enrollmentId,
-                AbsenceDate = dto.AbsenceDate.Date,
-                SessionType = normalizedSession,
+                AbsenceDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.AbsenceDate),
+                SessionType = NormalizeSessionType(dto.SessionType),
                 Reason = dto.Reason.Trim(),
                 ParentPhone = dto.ParentPhone?.Trim(),
                 Status = "PENDING",
@@ -297,18 +384,43 @@ namespace ManagerStudentCaltholic.Controllers
             };
         }
 
-        private static async Task<bool> HasValidPdfMagicBytesAsync(IFormFile file)
+        private string GetNormalizedClientIp()
         {
-            if (file.Length < 4)
-            {
-                return false;
-            }
+            var ip = HttpContext.Connection.RemoteIpAddress;
+            if (ip == null) return "unknown_ip";
+            return ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4().ToString() : ip.ToString();
+        }
 
-            byte[] header = new byte[4];
-            await using var stream = file.OpenReadStream();
-            int bytesRead = await stream.ReadAsync(header.AsMemory(0, header.Length));
-            return bytesRead >= 4
-                && header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46;
+        private static string GetIpLockoutKey(string clientIp) => $"absence:fail:ip:{clientIp}";
+
+        private static string GetIpCodeLockoutKey(string clientIp, string cleanCode) =>
+            $"absence:fail:ip_code:{clientIp}:{cleanCode}";
+
+        private async Task<(bool IsLockedOut, int IpFailed, int IpCodeFailed)> CheckAbsenceLockoutAsync(string clientIp, string cleanCode)
+        {
+            int ipFailed = await _cache.GetAsync<int>(GetIpLockoutKey(clientIp));
+            int ipCodeFailed = string.IsNullOrEmpty(cleanCode)
+                ? 0
+                : await _cache.GetAsync<int>(GetIpCodeLockoutKey(clientIp, cleanCode));
+            return (ipFailed >= MaxFailedAttempts || ipCodeFailed >= MaxFailedAttempts, ipFailed, ipCodeFailed);
+        }
+
+        private async Task RecordAbsenceFailureAsync(string clientIp, string cleanCode, int currentIpFailed, int currentIpCodeFailed)
+        {
+            await _cache.SetAsync(GetIpLockoutKey(clientIp), currentIpFailed + 1, TimeSpan.FromMinutes(15));
+            if (!string.IsNullOrEmpty(cleanCode))
+            {
+                await _cache.SetAsync(GetIpCodeLockoutKey(clientIp, cleanCode), currentIpCodeFailed + 1, TimeSpan.FromMinutes(30));
+            }
+        }
+
+        private async Task ClearAbsenceFailuresAsync(string clientIp, string cleanCode)
+        {
+            await _cache.RemoveAsync(GetIpLockoutKey(clientIp));
+            if (!string.IsNullOrEmpty(cleanCode))
+            {
+                await _cache.RemoveAsync(GetIpCodeLockoutKey(clientIp, cleanCode));
+            }
         }
 
         /// <summary>
@@ -372,8 +484,13 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost]
         [Authorize(Roles = $"{UserRole.Admin},{UserRole.ExecutiveBoard},{UserRole.BranchHead},{UserRole.Teacher}")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Review([FromBody] ReviewAbsenceRequestDto dto)
+        public async Task<IActionResult> Review([FromBody] ReviewAbsenceRequestDto? dto)
         {
+            if (dto == null || dto.RequestId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Dữ liệu duyệt đơn không hợp lệ." });
+            }
+
             var req = await _context.AbsenceRequests
                 .Include(r => r.Enrollment)
                     .ThenInclude(e => e.ClassRoom)
@@ -382,12 +499,27 @@ namespace ManagerStudentCaltholic.Controllers
             if (req == null)
                 return Json(new { success = false, message = "Không tìm thấy đơn." });
 
+            long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerUserId);
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, req.Enrollment.StudentId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Bạn không được phép tự duyệt đơn xin phép cho chính hồ sơ thiếu nhi của mình!"
+                });
+            }
+
             // SEC-04 FIX 4: Kiểm tra người duyệt có quyền trên lớp của học sinh này không
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
             var authorizedClasses = await GetAuthorizedClassesAsync(currentYear?.Id ?? 0);
             if (!authorizedClasses.Any(c => c.Id == req.Enrollment.ClassRoomId))
             {
-                return Json(new { success = false, message = "Bạn không có thẩm quyền duyệt đơn xin phép của lớp này!" });
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Bạn không có thẩm quyền duyệt đơn xin phép của lớp này!"
+                });
             }
 
             var fullName = User.FindFirst("FullName")?.Value;
@@ -404,7 +536,7 @@ namespace ManagerStudentCaltholic.Controllers
             // Nếu DUYỆT: Tự động cập nhật Attendance sang vắng có phép + Ghi Audit Log
             if (dto.IsApproved)
             {
-                var attDate = req.AbsenceDate.Date;
+                var attDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(req.AbsenceDate);
                 var att = await _context.Attendances
                     .FirstOrDefaultAsync(a => a.EnrollmentId == req.EnrollmentId && a.AttendanceDate == attDate);
 
@@ -453,7 +585,7 @@ namespace ManagerStudentCaltholic.Controllers
                         NewValues = RedisAttendanceService.FormatStateSnapshot(att.AttendedMass, att.MassStatus, att.ClassAttended, att.ClassStatus, att.Note),
                         ModifiedBy = RedisAttendanceService.SafeTruncate(operatorName, 100) ?? "GLV",
                         Reason = RedisAttendanceService.SafeTruncate($"Duyệt đơn xin phép ({req.SessionType}): {req.Reason}", 255),
-                        IpAddress = RedisAttendanceService.SafeTruncate(HttpContext.Connection.RemoteIpAddress?.ToString(), 45),
+                        IpAddress = RedisAttendanceService.SafeTruncate(GetNormalizedClientIp(), 45),
                         CreatedAt = DateTime.UtcNow
                     });
                 }
@@ -463,7 +595,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (dto.IsApproved)
             {
-                var attDateUtc = DateTime.SpecifyKind(req.AbsenceDate.Date, DateTimeKind.Utc);
+                var attDateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(req.AbsenceDate);
                 await _cache.RemoveAsync(RedisAttendanceKeys.ClassSheet(req.Enrollment.ClassRoomId, attDateUtc));
                 await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(req.Enrollment.ClassRoomId, attDateUtc));
                 await _cache.RemoveAsync($"staff_lookup:student_360:{req.Enrollment.StudentId}");
@@ -480,38 +612,56 @@ namespace ManagerStudentCaltholic.Controllers
             var classesQuery = _context.Classes
                 .Where(c => currentYearId == 0 || c.AcademicYearId == currentYearId);
 
-            // Nếu là Trưởng khối: Chỉ lấy các lớp thuộc khối mình phụ trách
-            if (User.IsInRole(UserRole.BranchHead))
+            if (!IsLeadership)
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
+                // Nếu là Trưởng khối: Chỉ lấy các lớp thuộc khối mình phụ trách (fail-closed nếu trống)
+                if (User.IsInRole(UserRole.BranchHead))
                 {
-                    // SEC-08 FIX: Trưởng khối chưa được phân công khối nào thì không trả về dữ liệu toàn trường
-                    classesQuery = classesQuery.Where(_ => false);
+                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                    if (string.IsNullOrWhiteSpace(managedGrade))
+                    {
+                        return new List<ClassRoom>();
+                    }
+
+                    var trimmedGrade = managedGrade.Trim();
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == trimmedGrade);
+                }
+                // Nếu là Giáo lý viên / GLV Dự Bị: Chỉ lấy các lớp được phân công đứng lớp
+                else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
+                {
+                    var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (!long.TryParse(userIdStr, out var currentUserId) || currentUserId <= 0)
+                    {
+                        return new List<ClassRoom>();
+                    }
+
+                    var assignedClassIds = await _context.ClassTeachers
+                        .AsNoTracking()
+                        .Where(ct => ct.UserId == currentUserId && (currentYearId == 0 || ct.AcademicYearId == currentYearId))
+                        .Select(ct => ct.ClassRoomId)
+                        .ToListAsync();
+
+                    classesQuery = classesQuery.Where(c => assignedClassIds.Contains(c.Id));
                 }
                 else
                 {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
+                    return new List<ClassRoom>();
                 }
             }
-            // Nếu là Giáo lý viên: Chỉ lấy các lớp được phân công đứng lớp
-            else if (User.IsInRole(UserRole.Teacher))
-            {
-                var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                long.TryParse(userIdStr, out var currentUserId);
 
-                var assignedClassIds = await _context.ClassTeachers
-                    .Where(ct => ct.UserId == currentUserId && (currentYearId == 0 || ct.AcademicYearId == currentYearId))
-                    .Select(ct => ct.ClassRoomId)
-                    .ToListAsync();
-
-                classesQuery = classesQuery.Where(c => assignedClassIds.Contains(c.Id));
-            }
-
-            return await classesQuery
+            var classes = await classesQuery
                 .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
+
+            if (!IsLeadership && User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                classes = classes
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
+
+            return classes;
         }
     }
 }

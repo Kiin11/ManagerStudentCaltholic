@@ -1,8 +1,10 @@
 using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Extensions;
+using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -13,18 +15,30 @@ namespace ManagerStudentCaltholic.Controllers
     [AllowAnonymous]
     public class PublicRegistrationController : Controller
     {
+        private const int MaxFailedAttempts = 5;
+        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
+        private static readonly HashSet<string> AllowedCertExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".pdf"
+        };
+
         private readonly ParishDbContext _context;
         private readonly IWebHostEnvironment _env;
+        private readonly ICacheService _cache;
+        private readonly IImageOptimizationService _imageOptimizationService;
         private readonly ILogger<PublicRegistrationController> _logger;
-        private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
 
         public PublicRegistrationController(
             ParishDbContext context,
             IWebHostEnvironment env,
+            ICacheService cache,
+            IImageOptimizationService imageOptimizationService,
             ILogger<PublicRegistrationController> logger)
         {
             _context = context;
             _env = env;
+            _cache = cache;
+            _imageOptimizationService = imageOptimizationService;
             _logger = logger;
         }
 
@@ -35,7 +49,7 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(y => y.IsCurrent);
 
-            ViewBag.CurrentYearName = currentYear?.Name ?? DateTime.Now.Year.ToString();
+            ViewBag.CurrentYearName = currentYear?.Name ?? VietnamTimeHelper.Today.Year.ToString();
             return View();
         }
 
@@ -50,8 +64,7 @@ namespace ManagerStudentCaltholic.Controllers
             // 1. Chống Bot tự động bằng Honeypot field
             if (!string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
             {
-                _logger.LogWarning("SECURITY: Honeypot triggered on PublicRegistration from IP {IP}",
-                    HttpContext.Connection.RemoteIpAddress);
+                _logger.LogWarning("SECURITY: Honeypot triggered on PublicRegistration from IP {IP}", GetNormalizedClientIp());
                 return Json(new { success = true, message = "Hồ sơ đã được ghi nhận." });
             }
 
@@ -69,12 +82,14 @@ namespace ManagerStudentCaltholic.Controllers
             string cleanPhone = Regex.Replace(dto.ParentPhone.Trim(), @"\s+", "");
             string cleanFirstName = dto.FirstName.Trim();
             string cleanLastName = dto.LastName.Trim();
+            var dobStartUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.DateOfBirth);
+            var dobEndUtc = dobStartUtc.AddDays(1);
 
             // 2. Kiểm tra trùng đơn đang chờ duyệt (PENDING) hoặc đã duyệt trong cùng niên khóa
             var duplicateExists = await _context.Set<StudentRegistrationRequest>()
                 .AsNoTracking()
                 .AnyAsync(r => r.ParentPhone == cleanPhone &&
-                               r.DateOfBirth.Date == dto.DateOfBirth.Date &&
+                               r.DateOfBirth >= dobStartUtc && r.DateOfBirth < dobEndUtc &&
                                r.LastName.ToLower() == cleanLastName.ToLower() &&
                                r.Status != "REJECTED" &&
                                (currentYear == null || r.AcademicYearId == currentYear.Id));
@@ -88,37 +103,17 @@ namespace ManagerStudentCaltholic.Controllers
                 });
             }
 
-            // 3. Kiểm tra & Lưu file ảnh/PDF Giấy Rửa Tội vào PrivateUploads (ngoài wwwroot)
+            // 3. Kiểm tra & Lưu file ảnh/PDF Giấy Rửa Tội vào PrivateUploads (ảnh JPEG/PNG re-encode WebP để xóa EXIF/polyglot)
             string? savedFileName = null;
             if (dto.CertificateFile != null && dto.CertificateFile.Length > 0)
             {
-                if (dto.CertificateFile.Length > MaxFileSize)
+                var uploadResult = await SaveValidatedCertificateFileAsync(dto.CertificateFile);
+                if (!uploadResult.Success)
                 {
-                    return BadRequest(new { success = false, message = "Kích thước ảnh Giấy Rửa Tội không được vượt quá 5MB." });
+                    return BadRequest(new { success = false, message = uploadResult.ErrorMessage });
                 }
 
-                var ext = Path.GetExtension(dto.CertificateFile.FileName).ToLowerInvariant();
-                var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
-                if (!allowedExts.Contains(ext))
-                {
-                    return BadRequest(new { success = false, message = "Chỉ chấp nhận tệp định dạng JPG, PNG hoặc PDF." });
-                }
-
-                if (!await IsValidMagicBytesAsync(dto.CertificateFile, ext))
-                {
-                    _logger.LogWarning("SECURITY: Invalid file magic bytes uploaded from IP {IP}",
-                        HttpContext.Connection.RemoteIpAddress);
-                    return BadRequest(new { success = false, message = "Nội dung tệp tải lên không hợp lệ hoặc bị hỏng." });
-                }
-
-                var privateUploadDir = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
-                Directory.CreateDirectory(privateUploadDir);
-
-                savedFileName = $"cert_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}{ext}";
-                var fullSavePath = Path.Combine(privateUploadDir, savedFileName);
-
-                await using var fileStream = new FileStream(fullSavePath, FileMode.Create);
-                await dto.CertificateFile.CopyToAsync(fileStream);
+                savedFileName = uploadResult.SavedFileName;
             }
 
             var requestEntity = new StudentRegistrationRequest
@@ -127,9 +122,9 @@ namespace ManagerStudentCaltholic.Controllers
                 FirstName = cleanFirstName,
                 LastName = cleanLastName,
                 Gender = dto.Gender == "Nữ" ? "Nữ" : "Nam",
-                DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc),
+                DateOfBirth = dobStartUtc,
                 BaptismDate = dto.BaptismDate.HasValue
-                    ? DateTime.SpecifyKind(dto.BaptismDate.Value.Date, DateTimeKind.Utc)
+                    ? VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.BaptismDate.Value)
                     : null,
                 BaptismParish = dto.BaptismParish?.Trim(),
                 ParentFullName = dto.ParentFullName.Trim(),
@@ -184,21 +179,40 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!string.IsNullOrWhiteSpace(phone) && dob.HasValue)
             {
-                vm.HasSearched = true;
+                string clientIp = GetNormalizedClientIp();
                 string cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
-                var targetDob = dob.Value.Date;
+
+                var (isLockedOut, ipFailed, ipKeyFailed) = await CheckLockoutAsync(clientIp, cleanPhone);
+                if (isLockedOut)
+                {
+                    TempData["ErrorMessage"] = "Thiết bị này đã tra cứu sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!";
+                    return View(vm);
+                }
+
+                vm.HasSearched = true;
+                var targetDobStart = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dob.Value);
+                var targetDobEnd = targetDobStart.AddDays(1);
 
                 vm.Results = await _context.Set<StudentRegistrationRequest>()
                     .Include(r => r.CreatedStudent)
                     .Include(r => r.AssignedClass)
                     .Include(r => r.AcademicYear)
-                    .Where(r => r.ParentPhone == cleanPhone && r.DateOfBirth.Date == targetDob)
+                    .Where(r => r.ParentPhone == cleanPhone && r.DateOfBirth >= targetDobStart && r.DateOfBirth < targetDobEnd)
                     .OrderByDescending(r => r.CreatedAt)
                     .AsNoTracking()
                     .ToListAsync();
+
+                if (vm.Results.Count == 0)
+                {
+                    await RecordFailedAttemptAsync(clientIp, cleanPhone, ipFailed, ipKeyFailed);
+                }
+                else
+                {
+                    await ClearFailedAttemptsAsync(clientIp, cleanPhone);
+                }
             }
 
-                return View(vm);
+            return View(vm);
         }
 
         /// <summary>
@@ -214,30 +228,43 @@ namespace ManagerStudentCaltholic.Controllers
                 return RedirectToAction("CheckStatus");
             }
 
+            string clientIp = GetNormalizedClientIp();
             string cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
-            var targetDob = dob.Value.Date;
+            var (isLockedOut, ipFailed, ipKeyFailed) = await CheckLockoutAsync(clientIp, cleanPhone);
+            if (isLockedOut)
+            {
+                TempData["ErrorMessage"] = "Thiết bị này đã nhập sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!";
+                return RedirectToAction("CheckStatus");
+            }
+
+            var targetDobStart = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dob.Value);
+            var targetDobEnd = targetDobStart.AddDays(1);
 
             var req = await _context.Set<StudentRegistrationRequest>()
                 .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == id && r.ParentPhone == cleanPhone && r.DateOfBirth.Date == targetDob);
+                .FirstOrDefaultAsync(r => r.Id == id && r.ParentPhone == cleanPhone &&
+                                          r.DateOfBirth >= targetDobStart && r.DateOfBirth < targetDobEnd);
 
             if (req == null)
             {
+                await RecordFailedAttemptAsync(clientIp, cleanPhone, ipFailed, ipKeyFailed);
                 TempData["ErrorMessage"] = "Không tìm thấy hồ sơ cần bổ sung hoặc thông tin xác thực không khớp.";
-                return RedirectToAction("CheckStatus", new { phone = cleanPhone, dob = targetDob.ToString("yyyy-MM-dd") });
+                return RedirectToAction("CheckStatus");
             }
+
+            await ClearFailedAttemptsAsync(clientIp, cleanPhone);
 
             if (req.Status == "APPROVED")
             {
-                TempData["ErrorMessage"] = $"Hồ sơ #{req.Id} đã được phê duyệt và xếp lớp chính thức, không thể chỉnh sửa.";
-                return RedirectToAction("CheckStatus", new { phone = cleanPhone, dob = targetDob.ToString("yyyy-MM-dd") });
+                TempData["ErrorMessage"] = "Hồ sơ này đã được phê duyệt chính thức, không thể chỉnh sửa.";
+                return RedirectToAction("CheckStatus", new { phone = cleanPhone, dob = targetDobStart.ToString("yyyy-MM-dd") });
             }
 
             var currentYear = await _context.AcademicYears
                 .AsNoTracking()
                 .FirstOrDefaultAsync(y => y.IsCurrent);
 
-            ViewBag.CurrentYearName = currentYear?.Name ?? DateTime.Now.Year.ToString();
+            ViewBag.CurrentYearName = currentYear?.Name ?? VietnamTimeHelper.Today.Year.ToString();
 
             var model = new PublicRegistrationResubmitDto
             {
@@ -278,8 +305,7 @@ namespace ManagerStudentCaltholic.Controllers
         {
             if (!string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
             {
-                _logger.LogWarning("SECURITY: Honeypot triggered on SubmitResubmit from IP {IP}",
-                    HttpContext.Connection.RemoteIpAddress);
+                _logger.LogWarning("SECURITY: Honeypot triggered on SubmitResubmit from IP {IP}", GetNormalizedClientIp());
                 return Json(new { success = true, message = "Hồ sơ đã được cập nhật." });
             }
 
@@ -290,20 +316,36 @@ namespace ManagerStudentCaltholic.Controllers
                 return BadRequest(new { success = false, message = firstErr });
             }
 
+            string clientIp = GetNormalizedClientIp();
             string cleanOrigPhone = Regex.Replace((dto.OriginalParentPhone ?? string.Empty).Trim(), @"\s+", "");
-            var origDob = dto.OriginalDateOfBirth.Date;
+            var (isLockedOut, ipFailed, ipKeyFailed) = await CheckLockoutAsync(clientIp, cleanOrigPhone);
+            if (isLockedOut)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    success = false,
+                    message = "Thiết bị này đã nhập sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!"
+                });
+            }
+
+            var origDobStart = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.OriginalDateOfBirth);
+            var origDobEnd = origDobStart.AddDays(1);
 
             var req = await _context.Set<StudentRegistrationRequest>()
-                .FirstOrDefaultAsync(r => r.Id == dto.Id && r.ParentPhone == cleanOrigPhone && r.DateOfBirth.Date == origDob);
+                .FirstOrDefaultAsync(r => r.Id == dto.Id && r.ParentPhone == cleanOrigPhone &&
+                                          r.DateOfBirth >= origDobStart && r.DateOfBirth < origDobEnd);
 
             if (req == null)
             {
-                return NotFound(new
+                await RecordFailedAttemptAsync(clientIp, cleanOrigPhone, ipFailed, ipKeyFailed);
+                return BadRequest(new
                 {
                     success = false,
                     message = "Không tìm thấy hồ sơ cần cập nhật hoặc thông tin xác thực không hợp lệ."
                 });
             }
+
+            await ClearFailedAttemptsAsync(clientIp, cleanOrigPhone);
 
             if (req.Status == "APPROVED")
             {
@@ -317,48 +359,24 @@ namespace ManagerStudentCaltholic.Controllers
             // Kiểm tra & Lưu file ảnh/PDF Giấy Rửa Tội mới nếu phụ huynh tải lên thay thế
             if (dto.CertificateFile != null && dto.CertificateFile.Length > 0)
             {
-                if (dto.CertificateFile.Length > MaxFileSize)
+                var uploadResult = await SaveValidatedCertificateFileAsync(dto.CertificateFile);
+                if (!uploadResult.Success)
                 {
-                    return BadRequest(new { success = false, message = "Kích thước ảnh Giấy Rửa Tội không được vượt quá 5MB." });
-                }
-
-                var ext = Path.GetExtension(dto.CertificateFile.FileName).ToLowerInvariant();
-                var allowedExts = new[] { ".jpg", ".jpeg", ".png", ".pdf" };
-                if (!allowedExts.Contains(ext))
-                {
-                    return BadRequest(new { success = false, message = "Chỉ chấp nhận tệp định dạng JPG, PNG hoặc PDF." });
-                }
-
-                if (!await IsValidMagicBytesAsync(dto.CertificateFile, ext))
-                {
-                    _logger.LogWarning("SECURITY: Invalid file magic bytes uploaded on SubmitResubmit from IP {IP}",
-                        HttpContext.Connection.RemoteIpAddress);
-                    return BadRequest(new { success = false, message = "Nội dung tệp tải lên không hợp lệ hoặc bị hỏng." });
-                }
-
-                var privateUploadDir = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
-                Directory.CreateDirectory(privateUploadDir);
-
-                var savedFileName = $"cert_{DateTime.UtcNow:yyyyMMddHHmmss}_{Guid.NewGuid():N}{ext}";
-                var fullSavePath = Path.Combine(privateUploadDir, savedFileName);
-
-                await using (var fileStream = new FileStream(fullSavePath, FileMode.Create))
-                {
-                    await dto.CertificateFile.CopyToAsync(fileStream);
+                    return BadRequest(new { success = false, message = uploadResult.ErrorMessage });
                 }
 
                 // Xóa tệp cũ nếu có để tiết kiệm dung lượng đĩa
                 if (!string.IsNullOrWhiteSpace(req.BaptismCertificatePath))
                 {
-                    var oldSafeFile = Path.GetFileName(req.BaptismCertificatePath);
-                    var oldFullPath = Path.Combine(privateUploadDir, oldSafeFile);
-                    if (System.IO.File.Exists(oldFullPath))
+                    var privateUploadDir = GetCertificatesDirectory();
+                    if (FileUploadSecurityHelper.TryResolveContainedPath(privateUploadDir, req.BaptismCertificatePath, out var oldFullPath)
+                        && System.IO.File.Exists(oldFullPath))
                     {
                         try { System.IO.File.Delete(oldFullPath); } catch { /* Bỏ qua lỗi xóa file cũ */ }
                     }
                 }
 
-                req.BaptismCertificatePath = savedFileName;
+                req.BaptismCertificatePath = uploadResult.SavedFileName;
             }
 
             string cleanNewPhone = Regex.Replace(dto.ParentPhone.Trim(), @"\s+", "");
@@ -367,9 +385,9 @@ namespace ManagerStudentCaltholic.Controllers
             req.FirstName = dto.FirstName.Trim();
             req.LastName = dto.LastName.Trim();
             req.Gender = dto.Gender == "Nữ" ? "Nữ" : "Nam";
-            req.DateOfBirth = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc);
+            req.DateOfBirth = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.DateOfBirth);
             req.BaptismDate = dto.BaptismDate.HasValue
-                ? DateTime.SpecifyKind(dto.BaptismDate.Value.Date, DateTimeKind.Utc)
+                ? VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.BaptismDate.Value)
                 : null;
             req.BaptismParish = dto.BaptismParish?.Trim();
             req.ParentFullName = dto.ParentFullName.Trim();
@@ -417,55 +435,158 @@ namespace ManagerStudentCaltholic.Controllers
                 return NotFound();
             }
 
+            string clientIp = GetNormalizedClientIp();
             string cleanPhone = Regex.Replace(phone.Trim(), @"\s+", "");
-            var targetDob = dob.Value.Date;
+            var (isLockedOut, ipFailed, ipKeyFailed) = await CheckLockoutAsync(clientIp, cleanPhone);
+            if (isLockedOut)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests);
+            }
+
+            var targetDobStart = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dob.Value);
+            var targetDobEnd = targetDobStart.AddDays(1);
 
             var req = await _context.Set<StudentRegistrationRequest>()
                 .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Id == id && r.ParentPhone == cleanPhone && r.DateOfBirth.Date == targetDob);
+                .FirstOrDefaultAsync(r => r.Id == id && r.ParentPhone == cleanPhone &&
+                                          r.DateOfBirth >= targetDobStart && r.DateOfBirth < targetDobEnd);
 
-            if (req == null || string.IsNullOrWhiteSpace(req.BaptismCertificatePath))
+            if (req == null)
+            {
+                await RecordFailedAttemptAsync(clientIp, cleanPhone, ipFailed, ipKeyFailed);
+                return NotFound();
+            }
+
+            await ClearFailedAttemptsAsync(clientIp, cleanPhone);
+
+            if (string.IsNullOrWhiteSpace(req.BaptismCertificatePath))
             {
                 return NotFound();
             }
 
-            string safeFileName = Path.GetFileName(req.BaptismCertificatePath);
-            string fullPath = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs", safeFileName);
-
-            if (!System.IO.File.Exists(fullPath))
+            string privateUploadDir = GetCertificatesDirectory();
+            if (!FileUploadSecurityHelper.TryResolveContainedPath(privateUploadDir, req.BaptismCertificatePath, out string fullPath)
+                || !System.IO.File.Exists(fullPath))
             {
                 return NotFound();
             }
 
+            string safeFileName = Path.GetFileName(fullPath);
             string ext = Path.GetExtension(safeFileName).ToLowerInvariant();
-            string contentType = ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".png" => "image/png",
-                _ => "image/jpeg"
-            };
+            string contentType = FileUploadSecurityHelper.GetSafeMimeType(ext);
 
-            var fileBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
-            return File(fileBytes, contentType);
+            if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers["Content-Security-Policy"] = "sandbox";
+                return PhysicalFile(fullPath, contentType, safeFileName);
+            }
+
+            return PhysicalFile(fullPath, contentType);
         }
 
-        /// <summary>
-        /// Kiểm tra chữ ký số (Magic Bytes) của file JPEG, PNG, PDF
-        /// </summary>
-        private static async Task<bool> IsValidMagicBytesAsync(IFormFile file, string ext)
-        {
-            var header = new byte[8];
-            await using var stream = file.OpenReadStream();
-            int bytesRead = await stream.ReadAsync(header, 0, header.Length);
-            if (bytesRead < 4) return false;
+        private string GetCertificatesDirectory() =>
+            Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
 
-            return ext switch
+        private async Task<(bool Success, string? SavedFileName, string? ErrorMessage)> SaveValidatedCertificateFileAsync(IFormFile file)
+        {
+            if (file.Length > MaxFileSize)
             {
-                ".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
-                ".png" => header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47,
-                ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
-                _ => false
-            };
+                return (false, null, "Kích thước ảnh Giấy Rửa Tội không được vượt quá 5MB.");
+            }
+
+            var ext = Path.GetExtension(Path.GetFileName(file.FileName)).ToLowerInvariant();
+            if (!AllowedCertExtensions.Contains(ext))
+            {
+                return (false, null, "Chỉ chấp nhận tệp định dạng JPG, PNG hoặc PDF.");
+            }
+
+            if (!await FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync(file, ext))
+            {
+                _logger.LogWarning("SECURITY: Invalid file magic bytes uploaded to PublicRegistration from IP {IP}", GetNormalizedClientIp());
+                return (false, null, "Nội dung tệp tải lên không hợp lệ hoặc bị hỏng.");
+            }
+
+            var privateUploadDir = GetCertificatesDirectory();
+            Directory.CreateDirectory(privateUploadDir);
+
+            if (ext == ".pdf")
+            {
+                var pdfFileName = $"cert_{VietnamTimeHelper.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}.pdf";
+                if (!FileUploadSecurityHelper.TryResolveContainedPath(privateUploadDir, pdfFileName, out var fullPdfPath))
+                {
+                    return (false, null, "Đường dẫn lưu tệp không hợp lệ.");
+                }
+
+                await using var inputStream = file.OpenReadStream();
+                await using var fileStream = new FileStream(fullPdfPath, FileMode.Create);
+                await inputStream.CopyToAsync(fileStream);
+                return (true, pdfFileName, null);
+            }
+
+            try
+            {
+                await using var rawImageStream = file.OpenReadStream();
+                var optimized = await _imageOptimizationService.OptimizeToWebpAsync(
+                    rawImageStream,
+                    maxWidth: 1600,
+                    maxHeight: 1600,
+                    quality: 78);
+
+                await using var optimizedStream = optimized.OptimizedStream;
+                var webpFileName = $"cert_{VietnamTimeHelper.Now:yyyyMMddHHmmss}_{Guid.NewGuid():N}{optimized.FileExtension}";
+                if (!FileUploadSecurityHelper.TryResolveContainedPath(privateUploadDir, webpFileName, out var fullImagePath))
+                {
+                    return (false, null, "Đường dẫn lưu tệp không hợp lệ.");
+                }
+
+                await using var fileStream = new FileStream(fullImagePath, FileMode.Create);
+                await optimizedStream.CopyToAsync(fileStream);
+                return (true, webpFileName, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "SECURITY: Failed to re-encode certificate image from IP {IP}", GetNormalizedClientIp());
+                return (false, null, "Nội dung tệp tải lên không hợp lệ hoặc bị hỏng.");
+            }
+        }
+
+        private string GetNormalizedClientIp()
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress;
+            if (ip == null) return "unknown_ip";
+            return ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4().ToString() : ip.ToString();
+        }
+
+        private static string GetIpLockoutKey(string clientIp) => $"pubreg:fail:ip:{clientIp}";
+
+        private static string GetIpKeyLockoutKey(string clientIp, string key) =>
+            $"pubreg:fail:ip_key:{clientIp}:{key}";
+
+        private async Task<(bool IsLockedOut, int IpFailed, int IpKeyFailed)> CheckLockoutAsync(string clientIp, string scopeKey)
+        {
+            int ipFailed = await _cache.GetAsync<int>(GetIpLockoutKey(clientIp));
+            int ipKeyFailed = string.IsNullOrEmpty(scopeKey)
+                ? 0
+                : await _cache.GetAsync<int>(GetIpKeyLockoutKey(clientIp, scopeKey));
+            return (ipFailed >= MaxFailedAttempts || ipKeyFailed >= MaxFailedAttempts, ipFailed, ipKeyFailed);
+        }
+
+        private async Task RecordFailedAttemptAsync(string clientIp, string scopeKey, int currentIpFailed, int currentIpKeyFailed)
+        {
+            await _cache.SetAsync(GetIpLockoutKey(clientIp), currentIpFailed + 1, TimeSpan.FromMinutes(15));
+            if (!string.IsNullOrEmpty(scopeKey))
+            {
+                await _cache.SetAsync(GetIpKeyLockoutKey(clientIp, scopeKey), currentIpKeyFailed + 1, TimeSpan.FromMinutes(30));
+            }
+        }
+
+        private async Task ClearFailedAttemptsAsync(string clientIp, string scopeKey)
+        {
+            await _cache.RemoveAsync(GetIpLockoutKey(clientIp));
+            if (!string.IsNullOrEmpty(scopeKey))
+            {
+                await _cache.RemoveAsync(GetIpKeyLockoutKey(clientIp, scopeKey));
+            }
         }
     }
 }

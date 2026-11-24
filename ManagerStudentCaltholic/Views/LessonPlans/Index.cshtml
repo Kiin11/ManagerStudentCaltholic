@@ -1,5 +1,6 @@
 @model ManagerStudentCaltholic.Models.ViewModels.LessonPlanWorkspaceViewModel
 @using ManagerStudentCaltholic.Models.Entities
+@using ManagerStudentCaltholic.Services
 @using System.Text.Encodings.Web
 @{
     ViewData["Title"] = "Kế Hoạch Lớp & Phân Phối Chương Trình";
@@ -63,7 +64,7 @@
                         @RenderStorageBadge(doc.CloudFileId, doc.StorageProvider, doc.SyncStatus)
                     }
                     <span class="text-muted small ms-2">
-                        <i class="bi bi-person me-1"></i>Sửa bởi <strong>@doc.UpdatedBy</strong> lúc @doc.UpdatedAt.ToString("dd/MM/yyyy HH:mm")
+                        <i class="bi bi-person me-1"></i>Sửa bởi <strong>@doc.UpdatedBy</strong> lúc @VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(doc.UpdatedAt, DateTimeKind.Utc)).ToString("dd/MM/yyyy HH:mm")
                     </span>
                 }
             </p>
@@ -324,8 +325,11 @@
                                             }
                                         </td>
                                         <td>
-                                            <div class="fw-semibold text-dark">@v.CreatedAt.ToString("dd/MM/yyyy")</div>
-                                            <small class="text-muted">@v.CreatedAt.ToString("HH:mm:ss")</small>
+                                            @{
+                                                var createdVn = VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(v.CreatedAt, DateTimeKind.Utc));
+                                            }
+                                            <div class="fw-semibold text-dark">@createdVn.ToString("dd/MM/yyyy")</div>
+                                            <small class="text-muted">@createdVn.ToString("HH:mm:ss")</small>
                                         </td>
                                         <td>
                                             <i class="bi bi-person-fill text-secondary me-1"></i>@v.CreatedBy
@@ -352,7 +356,7 @@
                                         </td>
                                         <td class="text-end pe-3">
                                             <div class="btn-group">
-                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewVersionDetail(@v.Id, '@v.VersionTag', '@v.FileName')">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewVersionDetail(@v.Id, '@JavaScriptEncoder.Default.Encode(v.VersionTag)', '@JavaScriptEncoder.Default.Encode(v.FileName)')">
                                                     <i class="bi bi-eye-fill me-1"></i> Xem
                                                 </button>
                                                 <a href="/LessonPlans/DownloadCurriculumVersion/@v.Id" class="btn btn-sm btn-outline-success" download title="Tải file của ngày sửa này">
@@ -360,7 +364,7 @@
                                                 </a>
                                                 @if (canManage && !isCurrent)
                                                 {
-                                                    <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="rollbackVersion(@doc?.Id, @v.Id, '@v.VersionTag')" title="Khôi phục về bản này">
+                                                    <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="rollbackVersion(@doc?.Id, @v.Id, '@JavaScriptEncoder.Default.Encode(v.VersionTag)')" title="Khôi phục về bản này">
                                                         <i class="bi bi-arrow-counterclockwise"></i> Khôi phục
                                                     </button>
                                                 }
@@ -440,7 +444,7 @@
                                             <div class="mt-1">@RenderStorageBadge(d.CloudFileId, d.CloudFile?.StorageProvider, d.CloudFile?.SyncStatus)</div>
                                         </td>
                                         <td>@d.UploadedBy</td>
-                                        <td>@d.UploadedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td>@VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(d.UploadedAt, DateTimeKind.Utc)).ToString("dd/MM/yyyy HH:mm")</td>
                                         <td class="text-end pe-3">
                                             <div class="btn-group">
                                                 <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewDocumentOnline('@d.FilePath', '@JavaScriptEncoder.Default.Encode(d.FileName)', '@ext')">
@@ -536,7 +540,7 @@
                 <p class="text-muted small mb-3">
                     Khi lưu, hệ thống sẽ tự động:
                     <br />1. Tăng số thứ tự phiên bản (VD: <code>v@( (doc?.VersionNumber ?? 0) + 1 )</code>).
-                    <br />2. Tự động kết xuất thành file Excel đính kèm: <code>KeHoach_@(selectedClassName)_v@( (doc?.VersionNumber ?? 0) + 1 )_@(DateTime.UtcNow.ToString("yyyyMMdd")).xlsx</code>.
+                    <br />2. Tự động kết xuất thành file Excel đính kèm: <code>KeHoach_@(selectedClassName)_v@( (doc?.VersionNumber ?? 0) + 1 )_@(VietnamTimeHelper.Today.ToString("yyyyMMdd")).xlsx</code>.
                     <br />3. Đồng bộ danh sách bài học tuần vào hệ thống điểm danh và bài giảng.
                 </p>
 
@@ -738,9 +742,7 @@
             if (rows.length > 0) {
                 const lastRowDate = rows[rows.length - 1].querySelector('.row-date').value;
                 if (lastRowDate) {
-                    const d = new Date(lastRowDate);
-                    d.setDate(d.getDate() + 7);
-                    prevDateStr = d.toISOString().split('T')[0];
+                    prevDateStr = addDaysLocalIso(lastRowDate, 7);
                 }
             }
 
@@ -762,10 +764,10 @@
             tr.setAttribute('data-index', nextIdx);
             tr.innerHTML = `
                 <td class="text-center">
-                    <input type="number" class="form-control form-control-sm text-center fw-bold row-week" value="${week}" min="1" max="60" />
+                    <input type="number" class="form-control form-control-sm text-center fw-bold row-week" value="${escapeHtml(week)}" min="1" max="60" />
                 </td>
                 <td>
-                    <input type="date" class="form-control form-control-sm row-date" value="${dateVal}" />
+                    <input type="date" class="form-control form-control-sm row-date" value="${escapeHtml(dateVal)}" />
                 </td>
                 <td>
                     <input type="text" class="form-control form-control-sm row-liturgical" value="${escapeHtml(liturgical)}" placeholder="CN 24 TN..." />
@@ -824,6 +826,22 @@
             });
         }
 
+        function formatLocalIsoDate(d) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function addDaysLocalIso(isoDateStr, days) {
+            if (!isoDateStr) return '';
+            const parts = String(isoDateStr).split('-').map(Number);
+            if (parts.length !== 3 || parts.some(Number.isNaN)) return '';
+            const d = new Date(parts[0], parts[1] - 1, parts[2]);
+            d.setDate(d.getDate() + days);
+            return formatLocalIsoDate(d);
+        }
+
         function autoFillConsecutiveSundays() {
             const rows = document.querySelectorAll('#curriculumTableBody tr.curriculum-row');
             if (rows.length === 0) {
@@ -838,11 +856,10 @@
                 return;
             }
 
-            let cur = new Date(firstDateInput.value);
+            let curDateStr = firstDateInput.value;
             for (let i = 1; i < rows.length; i++) {
-                cur.setDate(cur.getDate() + 7);
-                const iso = cur.toISOString().split('T')[0];
-                rows[i].querySelector('.row-date').value = iso;
+                curDateStr = addDaysLocalIso(curDateStr, 7);
+                rows[i].querySelector('.row-date').value = curDateStr;
             }
             alert(`Đã tự động tính chuỗi Chúa Nhật cho ${rows.length} tuần học!`);
         }
@@ -860,8 +877,13 @@
         }
 
         function escapeHtml(text) {
-            if (!text) return '';
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            if (text === null || text === undefined) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
         }
 
         // =========================================================================
@@ -1006,9 +1028,9 @@
 
         async function viewVersionDetail(versionId, versionTag, fileName) {
             document.getElementById('versionDetailTitle').innerHTML = `
-                <i class="bi bi-clock-history me-2"></i>Bản Chụp Phiên Bản: <span class="badge bg-primary ms-1">${versionTag}</span> (${fileName})
+                <i class="bi bi-clock-history me-2"></i>Bản Chụp Phiên Bản: <span class="badge bg-primary ms-1">${escapeHtml(versionTag)}</span> (${escapeHtml(fileName)})
             `;
-            document.getElementById('versionDetailDownloadBtn').href = `/LessonPlans/DownloadCurriculumVersion/${versionId}`;
+            document.getElementById('versionDetailDownloadBtn').href = `/LessonPlans/DownloadCurriculumVersion/${encodeURIComponent(versionId)}`;
 
             const tbody = document.getElementById('versionDetailTableBody');
             tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
@@ -1016,7 +1038,7 @@
             bootstrap.Modal.getOrCreateInstance(document.getElementById('versionDetailModal')).show();
 
             try {
-                const res = await fetch(`/LessonPlans/GetVersionDetail/${versionId}`);
+                const res = await fetch(`/LessonPlans/GetVersionDetail/${encodeURIComponent(versionId)}`);
                 const data = await res.json();
                 if (data.success && data.data && data.data.items) {
                     tbody.innerHTML = '';
@@ -1025,18 +1047,20 @@
                         if (it.isExamDay) tr.className = 'table-danger-subtle';
                         else if (it.isDayOff) tr.className = 'table-warning-subtle';
 
+                        const safeLessonDate = escapeHtml(it.lessonDateStr || (it.lessonDate ? String(it.lessonDate).substring(0, 10) : ''));
+
                         tr.innerHTML = `
-                            <td class="text-center fw-bold">${it.weekNumber}</td>
-                            <td>${it.lessonDateStr || (it.lessonDate ? it.lessonDate.substring(0, 10) : '')}</td>
-                            <td>${it.liturgicalDay || 'Chúa Nhật'}</td>
-                            <td class="fw-semibold text-primary">${it.lessonCode || ''}</td>
-                            <td class="fw-bold">${it.topicTitle || ''}</td>
-                            <td class="small text-muted">${it.keyPoints || ''}</td>
-                            <td>${it.assignedTeacherName || ''}</td>
+                            <td class="text-center fw-bold">${escapeHtml(it.weekNumber)}</td>
+                            <td>${safeLessonDate}</td>
+                            <td>${escapeHtml(it.liturgicalDay || 'Chúa Nhật')}</td>
+                            <td class="fw-semibold text-primary">${escapeHtml(it.lessonCode || '')}</td>
+                            <td class="fw-bold">${escapeHtml(it.topicTitle || '')}</td>
+                            <td class="small text-muted">${escapeHtml(it.keyPoints || '')}</td>
+                            <td>${escapeHtml(it.assignedTeacherName || '')}</td>
                             <td class="text-center">
                                 ${it.isExamDay ? '<span class="badge bg-danger">Kiểm Tra</span>' : (it.isDayOff ? '<span class="badge bg-warning text-dark">Nghỉ Lễ</span>' : '<span class="badge bg-light text-secondary border">Học</span>')}
                             </td>
-                            <td class="small">${it.eventNotes || ''}</td>
+                            <td class="small">${escapeHtml(it.eventNotes || '')}</td>
                         `;
                         tbody.appendChild(tr);
                     });
@@ -1044,7 +1068,7 @@
                     tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Không thể tải nội dung phiên bản này.</td></tr>`;
                 }
             } catch (err) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Lỗi kết nối: ${err.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">Lỗi kết nối: ${escapeHtml(err?.message || '')}</td></tr>`;
             }
         }
 

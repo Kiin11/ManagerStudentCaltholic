@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using ManagerStudentCaltholic.Services;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
@@ -12,7 +13,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [Required(ErrorMessage = "Vui lòng nhập Ngày sinh của em")]
         [DataType(DataType.Date)]
         [Display(Name = "Ngày Sinh")]
-        public DateTime DateOfBirth { get; set; } = DateTime.Today.AddYears(-10);
+        public DateTime DateOfBirth { get; set; } = VietnamTimeHelper.Today.AddYears(-10);
 
         [Required(ErrorMessage = "Vui lòng nhập 4 số cuối SĐT Phụ huynh đã đăng ký")]
         [RegularExpression(@"^\d{4}$", ErrorMessage = "Vui lòng nhập đúng 4 chữ số cuối của SĐT Phụ huynh")]
@@ -20,6 +21,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string PhoneLast4Digits { get; set; } = string.Empty;
 
         public bool RememberOnDevice { get; set; } = true;
+
+        public string? WebsiteUrlHoneypot { get; set; }
     }
 
     public class StudentLookupResultViewModel
@@ -210,6 +213,8 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [Required(ErrorMessage = "Vui lòng mô tả chi tiết lý do báo sai sót")]
         [MaxLength(500)]
         public string Reason { get; set; } = string.Empty;
+
+        public string? WebsiteUrlHoneypot { get; set; }
     }
 
     public class ReviewAttendanceDisputeRequestDto
