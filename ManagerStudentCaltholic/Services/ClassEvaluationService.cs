@@ -111,9 +111,10 @@ namespace ManagerStudentCaltholic.Services
 
             var classRoom = await _context.Classes
                 .AsNoTracking()
+                .Include(c => c.AcademicYear)
                 .FirstOrDefaultAsync(c => c.Id == classId);
 
-            if (classRoom == null)
+            if (classRoom == null || classRoom.AcademicYear == null || !classRoom.AcademicYear.IsCurrent)
                 return false;
 
             // TASK-02.3: Chặn GLV Dự Bị xét duyệt/đánh giá các lớp Ca Chiều (Bao Đồng, Dự Bị)
@@ -126,19 +127,21 @@ namespace ManagerStudentCaltholic.Services
             if (user.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(managedGrade.Trim(), classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                    return false;
+
+                return string.Equals(managedGrade.Trim(), classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase);
             }
 
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (long.TryParse(userIdStr, out long userId))
+            if (long.TryParse(userIdStr, out long userId) && userId > 0)
             {
                 return await _context.ClassTeachers
                     .AsNoTracking()
-                    .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == userId);
+                    .AnyAsync(ct => ct.ClassRoomId == classId
+                                 && ct.UserId == userId
+                                 && ct.AcademicYearId == classRoom.AcademicYearId
+                                 && ct.ClassRoom.AcademicYear.IsCurrent);
             }
 
             return false;
@@ -355,159 +358,225 @@ namespace ManagerStudentCaltholic.Services
             ClaimsPrincipal user,
             string ipAddress)
         {
+            if (dto == null || dto.ClassId <= 0 || dto.Items == null)
+                return (false, "Dữ liệu xét duyệt không hợp lệ.", null);
+
+            if (dto.Items.Any(i => i.EnrollmentId <= 0))
+                return (false, "Mã hồ sơ học sinh trong danh sách xét duyệt không hợp lệ.", null);
+
+            var duplicateIds = dto.Items.GroupBy(i => i.EnrollmentId).Any(g => g.Count() > 1);
+            if (duplicateIds)
+                return (false, "Danh sách xét duyệt chứa học sinh bị trùng lặp.", null);
+
+            foreach (var item in dto.Items)
+            {
+                var normalized = (item.ProposalStatus ?? string.Empty).Trim().ToUpperInvariant();
+                if (normalized != "PROPOSED_PASS" && normalized != "PROPOSED_SPECIAL" && normalized != "PROPOSED_RETAIN")
+                {
+                    return (false, "Trạng thái đề xuất xét duyệt không hợp lệ.", null);
+                }
+            }
+
             if (!await CanUserEvaluateClassAsync(user, dto.ClassId))
                 return (false, "Bạn không có quyền thực hiện xét duyệt trên lớp này.", null);
 
-            var sheet = await BuildEvaluationSheetAsync(dto.ClassId);
-            var descriptor = sheet.Descriptor;
             var operatorName = user.FindFirst("FullName")?.Value ?? user.Identity?.Name ?? "Giáo lý viên";
+            var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            long.TryParse(userIdStr, out var callerUserId);
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
 
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
+            (bool Success, string Message, long? BatchId) outcome = (false, "Đã xảy ra lỗi khi lưu danh sách xét duyệt. Vui lòng thử lại.", null);
+
             try
             {
-                var enrollments = await _context.Enrollments
-                    .Where(e => e.ClassRoomId == dto.ClassId)
-                    .ToDictionaryAsync(e => e.Id);
-
-                var itemMap = dto.Items.ToDictionary(i => i.EnrollmentId);
-                int passCount = 0;
-                int specialCount = 0;
-                int retainCount = 0;
-
-                foreach (var studentRow in sheet.Students)
+                await strategy.ExecuteAsync(async () =>
                 {
-                    if (!enrollments.TryGetValue(studentRow.EnrollmentId, out var env))
-                        continue;
+                    _context.ChangeTracker.Clear();
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                    string status = studentRow.IsAutoEligible ? "PROPOSED_PASS" : "PROPOSED_RETAIN";
-                    string? note = null;
-                    string? godparent = null;
+                    var classRoom = await _context.Classes
+                        .Include(c => c.AcademicYear)
+                        .FirstOrDefaultAsync(c => c.Id == dto.ClassId);
 
-                    if (itemMap.TryGetValue(env.Id, out var submitted))
+                    if (classRoom == null)
                     {
-                        var normalized = (submitted.ProposalStatus ?? string.Empty).Trim().ToUpperInvariant();
-                        if (normalized == "PROPOSED_PASS" || normalized == "PROPOSED_SPECIAL" || normalized == "PROPOSED_RETAIN")
-                        {
-                            status = normalized;
-                        }
-                        note = string.IsNullOrWhiteSpace(submitted.ProposalNote) ? null : submitted.ProposalNote.Trim();
-                        godparent = string.IsNullOrWhiteSpace(submitted.GodparentName) ? null : submitted.GodparentName.Trim();
+                        outcome = (false, "Không tìm thấy thông tin lớp học.", null);
+                        return;
                     }
 
-                    // Nếu học sinh chưa đủ điều kiện tự động nhưng GLV chọn cho qua -> bắt buộc chuyển thành PROPOSED_SPECIAL (Đặc cách)
-                    if (!studentRow.IsAutoEligible && status == "PROPOSED_PASS")
+                    if (!await CanUserEvaluateClassAsync(user, dto.ClassId))
                     {
-                        status = "PROPOSED_SPECIAL";
+                        outcome = (false, "Bạn không có quyền thực hiện xét duyệt trên lớp này.", null);
+                        return;
                     }
 
-                    env.EvaluationActionType = descriptor.ActionType;
-                    env.TeacherProposalStatus = status;
-                    env.TeacherProposalNote = note;
-                    env.ProposedGodparentName = godparent;
-                    env.ProposedBy = operatorName;
-                    env.ProposedAt = DateTime.UtcNow;
-                    env.IsPassed = (status == "PROPOSED_PASS" || status == "PROPOSED_SPECIAL");
-
-                    if (status == "PROPOSED_PASS") passCount++;
-                    else if (status == "PROPOSED_SPECIAL") specialCount++;
-                    else retainCount++;
-                }
-
-                long? syncedBatchId = null;
-
-                // Nếu là lớp xét Bí tích (RL2, TS3) hoặc Xét Tuyên hứa (BĐ3, DB4) -> Đồng bộ thẳng sang Tờ trình SacramentApprovalBatches (FEAT-P3-04)
-                if (descriptor.SacramentType.HasValue)
-                {
-                    var existingBatch = await _context.SacramentApprovalBatches
-                        .Include(b => b.Items)
-                        .FirstOrDefaultAsync(b => b.AcademicYearId == sheet.AcademicYearId
-                                               && b.ClassRoomId == sheet.ClassId
-                                               && b.SacramentType == descriptor.SacramentType.Value
-                                               && b.Status == "DRAFT");
-
-                    if (existingBatch == null)
+                    if (classRoom.AcademicYear == null || !classRoom.AcademicYear.IsCurrent)
                     {
-                        existingBatch = new SacramentApprovalBatch
-                        {
-                            AcademicYearId = sheet.AcademicYearId,
-                            GradeLevel = sheet.GradeLevel,
-                            ClassRoomId = sheet.ClassId,
-                            SacramentType = descriptor.SacramentType.Value,
-                            Title = $"{descriptor.ButtonLabel} - Lớp {sheet.ClassName} ({sheet.AcademicYearName})",
-                            MinYearAverage = sheet.MinYearAverage,
-                            MinAttendanceRate = sheet.MinAttendanceRate,
-                            RequireSacramentExam = true,
-                            MinSacramentExamScore = sheet.MinSacramentExamScore,
-                            PlannedCeremonyDate = DateTime.UtcNow.AddDays(30).Date,
-                            Status = "DRAFT",
-                            CreatedBy = operatorName,
-                            CreatedAt = DateTime.UtcNow,
-                            Notes = $"Đề xuất từ Sổ điểm lớp {sheet.ClassName} bởi {operatorName}"
-                        };
-                        _context.SacramentApprovalBatches.Add(existingBatch);
-                        await _context.SaveChangesAsync();
-                    }
-                    else
-                    {
-                        existingBatch.Notes = $"Cập nhật từ Sổ điểm lớp {sheet.ClassName} bởi {operatorName} lúc {DateTime.UtcNow.AddHours(7):dd/MM/yyyy HH:mm}";
-                        _context.SacramentApprovalItems.RemoveRange(existingBatch.Items);
+                        outcome = (false, "Chỉ được phép xét duyệt lớp thuộc niên khóa hiện hành.", null);
+                        return;
                     }
 
-                    foreach (var s in sheet.Students)
+                    if (classRoom.IsGradeLocked)
                     {
-                        if (!enrollments.TryGetValue(s.EnrollmentId, out var env))
+                        outcome = (false, "Sổ điểm lớp này đã bị khóa bởi Ban Điều Hành!", null);
+                        return;
+                    }
+
+                    var enrollments = await _context.Enrollments
+                        .Where(e => e.ClassRoomId == dto.ClassId)
+                        .ToDictionaryAsync(e => e.Id);
+
+                    if (dto.Items.Any(i => !enrollments.ContainsKey(i.EnrollmentId)))
+                    {
+                        outcome = (false, "Danh sách chứa học sinh không thuộc lớp học đang xét duyệt.", null);
+                        return;
+                    }
+
+                    var sheet = await BuildEvaluationSheetAsync(dto.ClassId);
+                    var descriptor = sheet.Descriptor;
+
+                    if (linkedStudentId.HasValue &&
+                        (dto.Items.Any(i => enrollments.TryGetValue(i.EnrollmentId, out var env) &&
+                                            StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, env.StudentId)) ||
+                         sheet.Students.Any(s => StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, s.StudentId))))
+                    {
+                        outcome = (false, "Không được phép tự xét duyệt cho chính mình.", null);
+                        return;
+                    }
+
+                    var itemMap = dto.Items.ToDictionary(i => i.EnrollmentId);
+                    int passCount = 0;
+                    int specialCount = 0;
+                    int retainCount = 0;
+
+                    foreach (var studentRow in sheet.Students)
+                    {
+                        if (!enrollments.TryGetValue(studentRow.EnrollmentId, out var env))
                             continue;
 
-                        bool isSpecial = env.TeacherProposalStatus == "PROPOSED_SPECIAL";
-                        bool isApproved = env.TeacherProposalStatus == "PROPOSED_PASS" || isSpecial;
+                        string status = studentRow.IsAutoEligible ? "PROPOSED_PASS" : "PROPOSED_RETAIN";
+                        string? note = null;
+                        string? godparent = null;
 
-                        _context.SacramentApprovalItems.Add(new SacramentApprovalItem
+                        if (itemMap.TryGetValue(env.Id, out var submitted))
                         {
-                            BatchId = existingBatch.Id,
-                            StudentId = s.StudentId,
-                            EnrollmentId = s.EnrollmentId,
-                            ClassName = sheet.ClassName,
-                            Semester1Average = s.Semester1Avg,
-                            Semester2Average = s.Semester2Avg,
-                            YearAverage = s.YearAvg,
-                            SacramentExamScore = s.SacramentExamScore,
-                            MassAttendanceRate = s.MassAttendanceRate,
-                            ClassAttendanceRate = s.ClassAttendanceRate,
-                            CombinedAttendanceRate = s.CombinedAttendanceRate,
-                            IsSystemEligible = s.IsAutoEligible,
-                            IsSpecialExemption = isSpecial,
-                            IsApprovedForSacrament = isApproved,
-                            GodparentName = env.ProposedGodparentName,
-                            EvaluationNote = !string.IsNullOrWhiteSpace(env.TeacherProposalNote)
-                                ? env.TeacherProposalNote
-                                : s.AutoIneligibleReason
-                        });
+                            var normalized = (submitted.ProposalStatus ?? string.Empty).Trim().ToUpperInvariant();
+                            if (normalized == "PROPOSED_PASS" || normalized == "PROPOSED_SPECIAL" || normalized == "PROPOSED_RETAIN")
+                            {
+                                status = normalized;
+                            }
+                            note = string.IsNullOrWhiteSpace(submitted.ProposalNote) ? null : submitted.ProposalNote.Trim();
+                            godparent = string.IsNullOrWhiteSpace(submitted.GodparentName) ? null : submitted.GodparentName.Trim();
+                        }
+
+                        // Nếu học sinh chưa đủ điều kiện tự động nhưng GLV chọn cho qua -> bắt buộc chuyển thành PROPOSED_SPECIAL (Đặc cách)
+                        if (!studentRow.IsAutoEligible && status == "PROPOSED_PASS")
+                        {
+                            status = "PROPOSED_SPECIAL";
+                        }
+
+                        env.EvaluationActionType = descriptor.ActionType;
+                        env.TeacherProposalStatus = status;
+                        env.TeacherProposalNote = note;
+                        env.ProposedGodparentName = godparent;
+                        env.ProposedBy = operatorName;
+                        env.ProposedAt = DateTime.UtcNow;
+                        env.IsPassed = (status == "PROPOSED_PASS" || status == "PROPOSED_SPECIAL");
+
+                        if (status == "PROPOSED_PASS") passCount++;
+                        else if (status == "PROPOSED_SPECIAL") specialCount++;
+                        else retainCount++;
                     }
 
-                    syncedBatchId = existingBatch.Id;
-                }
+                    long? syncedBatchId = null;
 
-                //_context.AuditLogs.Add(new AuditLog
-                //{
-                //    Username = user.Identity?.Name ?? operatorName,
-                //    Action = $"SUBMIT_{descriptor.ActionType}",
-                //    Details = $"GLV {operatorName} trình kết quả '{descriptor.ButtonLabel}' cho lớp {sheet.ClassName}: Đạt chuẩn={passCount}, Đề xuất đặc cách={specialCount}, Chưa đạt={retainCount}.",
-                //    IpAddress = ipAddress,
-                //    Timestamp = DateTime.UtcNow
-                //});
+                    // Nếu là lớp xét Bí tích (RL2, TS3) hoặc Xét Tuyên hứa (BĐ3, DB4) -> Đồng bộ thẳng sang Tờ trình SacramentApprovalBatches (FEAT-P3-04)
+                    if (descriptor.SacramentType.HasValue)
+                    {
+                        var existingBatch = await _context.SacramentApprovalBatches
+                            .Include(b => b.Items)
+                            .FirstOrDefaultAsync(b => b.AcademicYearId == sheet.AcademicYearId
+                                                   && b.ClassRoomId == sheet.ClassId
+                                                   && b.SacramentType == descriptor.SacramentType.Value
+                                                   && b.Status == "DRAFT");
 
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
+                        if (existingBatch == null)
+                        {
+                            existingBatch = new SacramentApprovalBatch
+                            {
+                                AcademicYearId = sheet.AcademicYearId,
+                                GradeLevel = sheet.GradeLevel,
+                                ClassRoomId = sheet.ClassId,
+                                SacramentType = descriptor.SacramentType.Value,
+                                Title = $"{descriptor.ButtonLabel} - Lớp {sheet.ClassName} ({sheet.AcademicYearName})",
+                                MinYearAverage = sheet.MinYearAverage,
+                                MinAttendanceRate = sheet.MinAttendanceRate,
+                                RequireSacramentExam = true,
+                                MinSacramentExamScore = sheet.MinSacramentExamScore,
+                                PlannedCeremonyDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(VietnamTimeHelper.Today.AddDays(30)),
+                                Status = "DRAFT",
+                                CreatedBy = operatorName,
+                                CreatedAt = DateTime.UtcNow,
+                                Notes = $"Đề xuất từ Sổ điểm lớp {sheet.ClassName} bởi {operatorName}"
+                            };
+                            _context.SacramentApprovalBatches.Add(existingBatch);
+                            await _context.SaveChangesAsync();
+                        }
+                        else
+                        {
+                            existingBatch.Notes = $"Cập nhật từ Sổ điểm lớp {sheet.ClassName} bởi {operatorName} lúc {VietnamTimeHelper.Now:dd/MM/yyyy HH:mm}";
+                            _context.SacramentApprovalItems.RemoveRange(existingBatch.Items);
+                        }
 
-                string summaryMsg = descriptor.SacramentType.HasValue
-                    ? $"Đã lưu kết quả {descriptor.ButtonLabel} cho lớp {sheet.ClassName} (Đạt: {passCount}, Đặc cách: {specialCount}, Chưa đạt: {retainCount}) và đồng bộ sang Tờ trình trình Trưởng khối / Cha Xứ."
-                    : $"Đã lưu đề xuất Xét lên lớp cho lớp {sheet.ClassName} (Lên lớp: {passCount + specialCount}, Lưu ban: {retainCount}).";
+                        foreach (var s in sheet.Students)
+                        {
+                            if (!enrollments.TryGetValue(s.EnrollmentId, out var env))
+                                continue;
 
-                return (true, summaryMsg, syncedBatchId);
+                            bool isSpecial = env.TeacherProposalStatus == "PROPOSED_SPECIAL";
+                            bool isApproved = env.TeacherProposalStatus == "PROPOSED_PASS" || isSpecial;
+
+                            _context.SacramentApprovalItems.Add(new SacramentApprovalItem
+                            {
+                                BatchId = existingBatch.Id,
+                                StudentId = s.StudentId,
+                                EnrollmentId = s.EnrollmentId,
+                                ClassName = sheet.ClassName,
+                                Semester1Average = s.Semester1Avg,
+                                Semester2Average = s.Semester2Avg,
+                                YearAverage = s.YearAvg,
+                                SacramentExamScore = s.SacramentExamScore,
+                                MassAttendanceRate = s.MassAttendanceRate,
+                                ClassAttendanceRate = s.ClassAttendanceRate,
+                                CombinedAttendanceRate = s.CombinedAttendanceRate,
+                                IsSystemEligible = s.IsAutoEligible,
+                                IsSpecialExemption = isSpecial,
+                                IsApprovedForSacrament = isApproved,
+                                GodparentName = env.ProposedGodparentName,
+                                EvaluationNote = !string.IsNullOrWhiteSpace(env.TeacherProposalNote)
+                                    ? env.TeacherProposalNote
+                                    : s.AutoIneligibleReason
+                            });
+                        }
+
+                        syncedBatchId = existingBatch.Id;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    string summaryMsg = descriptor.SacramentType.HasValue
+                        ? $"Đã lưu kết quả {descriptor.ButtonLabel} cho lớp {sheet.ClassName} (Đạt: {passCount}, Đặc cách: {specialCount}, Chưa đạt: {retainCount}) và đồng bộ sang Tờ trình trình Trưởng khối / Cha Xứ."
+                        : $"Đã lưu đề xuất Xét lên lớp cho lớp {sheet.ClassName} (Lên lớp: {passCount + specialCount}, Lưu ban: {retainCount}).";
+
+                    outcome = (true, summaryMsg, syncedBatchId);
+                });
+
+                return outcome;
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
                 _logger.LogError(ex, "Lỗi khi lưu xét duyệt cấp lớp ClassId={ClassId}", dto.ClassId);
                 return (false, "Đã xảy ra lỗi khi lưu danh sách xét duyệt. Vui lòng thử lại.", null);
             }
@@ -535,7 +604,7 @@ namespace ManagerStudentCaltholic.Services
             }
 
             if (totalWeights == 0) return null;
-            return Math.Round(totalWeighted / totalWeights, 2);
+            return Math.Round(totalWeighted / totalWeights, 2, MidpointRounding.AwayFromZero);
         }
 
         private static (double MassRate, double ClassRate, double CombinedRate) CalculateAttendanceRates(

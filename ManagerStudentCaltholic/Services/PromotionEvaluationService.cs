@@ -149,7 +149,12 @@ namespace ManagerStudentCaltholic.Services
                 .AsNoTracking()
                 .ToListAsync();
 
-            var totalSessions = Math.Max(1, attendances.Select(a => a.AttendanceDate.Date).Distinct().Count());
+            var totalMassSessions = attendances.Select(a => a.AttendanceDate.Date).Distinct().Count();
+            var totalClassSessions = attendances
+                .Where(a => a.DayOfWeek == DayOfWeek.Sunday)
+                .Select(a => a.AttendanceDate.Date)
+                .Distinct()
+                .Count();
 
             // Kiểm tra những học sinh nào đã được xếp lớp ở niên khóa mới (tránh kết chuyển trùng)
             var existingTargetEnrollments = await _context.Enrollments
@@ -184,12 +189,26 @@ namespace ManagerStudentCaltholic.Services
                 // Tính % chuyên cần kết hợp (Lễ + Học Giáo lý)
                 var studentAtts = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
                 double attRate = 100.0;
-                if (attendances.Any())
+                if (totalMassSessions > 0 || totalClassSessions > 0)
                 {
-                    var classPresent = studentAtts.Count(a => a.ClassAttended && (a.ClassStatus == "PRESENT" || a.ClassStatus == "LATE" || a.ClassStatus == "EXCUSED"));
-                    var massPresent = studentAtts.Count(a => a.AttendedMass && (a.MassStatus == "PRESENT" || a.MassStatus == "LATE" || a.MassStatus == "EXCUSED"));
-                    double classRate = (classPresent / (double)totalSessions) * 100.0;
-                    double massRate = (massPresent / (double)totalSessions) * 100.0;
+                    var classPresent = studentAtts.Count(a =>
+                        a.DayOfWeek == DayOfWeek.Sunday &&
+                        ((a.ClassAttended && (a.ClassStatus == AttendanceStatus.Present ||
+                                              a.ClassStatus == AttendanceStatus.Late ||
+                                              a.ClassStatus == AttendanceStatus.LinedUp)) ||
+                         a.ClassStatus == AttendanceStatus.AbsentPermitted));
+                    var massPresent = studentAtts.Count(a =>
+                        (a.AttendedMass && (a.MassStatus == AttendanceStatus.Present ||
+                                            a.MassStatus == AttendanceStatus.Late ||
+                                            a.MassStatus == AttendanceStatus.LinedUp)) ||
+                        a.MassStatus == AttendanceStatus.AbsentPermitted);
+
+                    double classRate = totalClassSessions > 0
+                        ? Math.Min(100.0, (classPresent / (double)totalClassSessions) * 100.0)
+                        : 100.0;
+                    double massRate = totalMassSessions > 0
+                        ? Math.Min(100.0, (massPresent / (double)totalMassSessions) * 100.0)
+                        : 100.0;
                     attRate = Math.Round((classRate + massRate) / 2.0, 1);
                 }
 
@@ -205,7 +224,7 @@ namespace ManagerStudentCaltholic.Services
 
                     if (sacScores.Any())
                     {
-                        sacramentScore = Math.Round(sacScores.Average(), 2);
+                        sacramentScore = Math.Round(sacScores.Average(), 2, MidpointRounding.AwayFromZero);
                     }
                 }
 
