@@ -691,6 +691,14 @@
 
 @section Scripts {
     <script>
+        function getLocalTodayIsoDate() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
         function onFilterChange() {
             const classId = document.getElementById('selectClass').value;
             const date = document.getElementById('inputDate').value;
@@ -807,6 +815,19 @@
                         note: item.note
                     })
                 });
+
+                if (res.status === 403 || res.status === 400) {
+                    let errMsg = res.status === 403
+                        ? 'Bạn không có quyền thực hiện thao tác điểm danh này.'
+                        : 'Dữ liệu điểm danh không hợp lệ.';
+                    try {
+                        const errJson = await res.json();
+                        if (errJson && errJson.message) errMsg = errJson.message;
+                    } catch {}
+                    setRowSaveBadge(row, enrollmentId, 'error', 'Không được phép!');
+                    showAlert(errMsg, false);
+                    return;
+                }
 
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -958,7 +979,11 @@
             });
 
             if (typeof ParishOfflineEngine !== 'undefined' && domStudents.length > 0) {
-                ParishOfflineEngine.cacheStudentsFromDomTable(@Model.ClassId, '@Html.Raw(Model.ClassName)', '@Html.Raw(Model.GradeLevel)', domStudents);
+                ParishOfflineEngine.cacheStudentsFromDomTable(
+                    @Model.ClassId,
+                    @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClassName ?? string.Empty)),
+                    @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.GradeLevel ?? string.Empty)),
+                    domStudents);
             }
         });
 
@@ -1177,7 +1202,7 @@
             list.innerHTML = '';
 
             // P2-LOG-12 FIX: Đọc đúng ID '#inputDate' trên thanh chọn ngày điểm danh
-            const selectedDate = document.getElementById('inputDate')?.value || new Date().toISOString().split('T')[0];
+            const selectedDate = document.getElementById('inputDate')?.value || getLocalTodayIsoDate();
 
             fetch(`/Attendance/GetAuditHistory?studentId=${studentId}&date=${encodeURIComponent(selectedDate)}`)
                 .then(res => res.json())
@@ -1268,7 +1293,7 @@
         async function quickCopyAbsenceMessageFromRow(btn) {
             const row = btn.closest('[data-enrollment-id]');
             const enrollmentId = parseInt(btn.getAttribute('data-enrollment-id'));
-            const date = document.getElementById('inputDate')?.value || new Date().toISOString().split('T')[0];
+            const date = document.getElementById('inputDate')?.value || getLocalTodayIsoDate();
 
             const chkMass = row.querySelector('.chk-mass');
             const selMass = row.querySelector('.select-mass-status');
@@ -1297,7 +1322,8 @@
 
                 // Fallback tự sinh nội dung ngay tại Client nếu thiết bị đang ở chế độ Offline
                 if (!compiledText) {
-                    compiledText = `Kính chào Quý Phụ huynh em ${studentName} (Mã TN: ${studentCode} - Lớp @Html.Raw(Model.ClassName)). Ngày ${date}, Ban Giáo Lý ghi nhận em vắng mặt trong buổi sinh hoạt Giáo lý. Kính mong Quý Phụ huynh phản hồi lý do cho GLV phụ trách. Xin cảm ơn Quý Phụ huynh!`;
+                    const currentClassName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ClassName ?? string.Empty));
+                    compiledText = `Kính chào Quý Phụ huynh em ${studentName} (Mã TN: ${studentCode} - Lớp ${currentClassName}). Ngày ${date}, Ban Giáo Lý ghi nhận em vắng mặt trong buổi sinh hoạt Giáo lý. Kính mong Quý Phụ huynh phản hồi lý do cho GLV phụ trách. Xin cảm ơn Quý Phụ huynh!`;
                 }
 
                 await navigator.clipboard.writeText(compiledText);
@@ -1376,36 +1402,78 @@
                 tbody.innerHTML = '';
                 result.data.forEach(item => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>
-                            <div class="fw-bold text-primary font-monospace">${item.studentCode}</div>
-                            <div class="fw-semibold text-dark">${item.studentName}</div>
-                        </td>
-                        <td>
-                            <div class="fw-bold">${item.attendanceDate}</div>
-                            <span class="badge bg-info-subtle text-primary border">${item.sessionScopeLabel}</span>
-                        </td>
-                        <td class="text-center">
-                            <span class="badge bg-secondary">${item.currentStatusLabel}</span>
-                            <i class="bi bi-arrow-right mx-1"></i>
-                            <span class="badge bg-success">${item.requestedStatusLabel}</span>
-                        </td>
-                        <td class="text-break">${item.reason}</td>
-                        <td>
-                            <input type="text" class="form-control form-control-sm mb-1" id="disp-note-${item.id}"
-                                   placeholder="Ghi chú phản hồi PH..." />
-                            <div class="d-flex gap-1">
-                                <button type="button" class="btn btn-success btn-sm w-50 fw-bold"
-                                        onclick="reviewParentDispute(${item.id}, 'APPROVED')">
-                                    ✔ Duyệt
-                                </button>
-                                <button type="button" class="btn btn-outline-danger btn-sm w-50 fw-bold"
-                                        onclick="reviewParentDispute(${item.id}, 'REJECTED')">
-                                    ✘ Từ chối
-                                </button>
-                            </div>
-                        </td>
-                    `;
+                    const disputeId = Number(item.id) || 0;
+
+                    const tdStudent = document.createElement('td');
+                    const codeDiv = document.createElement('div');
+                    codeDiv.className = 'fw-bold text-primary font-monospace';
+                    codeDiv.textContent = item.studentCode || '';
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'fw-semibold text-dark';
+                    nameDiv.textContent = item.studentName || '';
+                    tdStudent.appendChild(codeDiv);
+                    tdStudent.appendChild(nameDiv);
+
+                    const tdDateScope = document.createElement('td');
+                    const dateDiv = document.createElement('div');
+                    dateDiv.className = 'fw-bold';
+                    dateDiv.textContent = item.attendanceDateDisplay || item.attendanceDate || '';
+                    const scopeBadge = document.createElement('span');
+                    scopeBadge.className = 'badge bg-info-subtle text-primary border';
+                    scopeBadge.textContent = item.sessionScopeLabel || '';
+                    tdDateScope.appendChild(dateDiv);
+                    tdDateScope.appendChild(scopeBadge);
+
+                    const tdStatus = document.createElement('td');
+                    tdStatus.className = 'text-center';
+                    const currBadge = document.createElement('span');
+                    currBadge.className = 'badge bg-secondary';
+                    currBadge.textContent = item.currentStatusLabel || '';
+                    const arrowIcon = document.createElement('i');
+                    arrowIcon.className = 'bi bi-arrow-right mx-1';
+                    const reqBadge = document.createElement('span');
+                    reqBadge.className = 'badge bg-success';
+                    reqBadge.textContent = item.requestedStatusLabel || '';
+                    tdStatus.appendChild(currBadge);
+                    tdStatus.appendChild(arrowIcon);
+                    tdStatus.appendChild(reqBadge);
+
+                    const tdReason = document.createElement('td');
+                    tdReason.className = 'text-break';
+                    tdReason.textContent = item.reason || '';
+
+                    const tdAction = document.createElement('td');
+                    const noteInput = document.createElement('input');
+                    noteInput.type = 'text';
+                    noteInput.className = 'form-control form-control-sm mb-1';
+                    noteInput.id = `disp-note-${disputeId}`;
+                    noteInput.placeholder = 'Ghi chú phản hồi PH...';
+
+                    const btnWrap = document.createElement('div');
+                    btnWrap.className = 'd-flex gap-1';
+
+                    const btnApprove = document.createElement('button');
+                    btnApprove.type = 'button';
+                    btnApprove.className = 'btn btn-success btn-sm w-50 fw-bold';
+                    btnApprove.textContent = '✔ Duyệt';
+                    btnApprove.addEventListener('click', () => reviewParentDispute(disputeId, 'APPROVED'));
+
+                    const btnReject = document.createElement('button');
+                    btnReject.type = 'button';
+                    btnReject.className = 'btn btn-outline-danger btn-sm w-50 fw-bold';
+                    btnReject.textContent = '✘ Từ chối';
+                    btnReject.addEventListener('click', () => reviewParentDispute(disputeId, 'REJECTED'));
+
+                    btnWrap.appendChild(btnApprove);
+                    btnWrap.appendChild(btnReject);
+                    tdAction.appendChild(noteInput);
+                    tdAction.appendChild(btnWrap);
+
+                    tr.appendChild(tdStudent);
+                    tr.appendChild(tdDateScope);
+                    tr.appendChild(tdStatus);
+                    tr.appendChild(tdReason);
+                    tr.appendChild(tdAction);
                     tbody.appendChild(tr);
                 });
             } catch (err) {
