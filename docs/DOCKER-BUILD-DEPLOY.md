@@ -18,7 +18,7 @@ All production and staging images follow the exact naming contract tracked in `S
   - Example: `ghcr.io/kiin11/parish-app:parish-app-v1.26.inf.1`
 - **Target Platform:** `linux/amd64` (Azure Standard B2ats v2 VM)
 - **Target Runtime Size:** `< 250 MB` (`mcr.microsoft.com/dotnet/aspnet:8.0-alpine` with `tzdata`, `icu-libs`, `icu-data-full`, `fontconfig`, `ttf-dejavu`)
-- **Container Runtime Contract:** non-root `$APP_UID`, internal port `8080` (`ASPNETCORE_HTTP_PORTS=8080`, compose service `dotnet_app`), mounted paths `/app/dataprotection-keys`, `/app/logs`, `/app/secrets`, `/app/wwwroot/uploads/lesson_plans`.
+- **Container Runtime Contract:** non-root `$APP_UID`, internal port `8080` (`ASPNETCORE_HTTP_PORTS=8080`, standardized compose service name `dotnet_app`), HTTP healthcheck `GET /health`, mounted persistent paths `/app/PrivateUploads`, `/app/dataprotection-keys`, `/app/logs`, `/app/secrets`, `/app/wwwroot/uploads/lesson_plans`.
 
 ---
 
@@ -115,3 +115,26 @@ To roll back to the previous known-good image in `< 30s`:
 ```bash
 ./scripts/rollback.sh
 ```
+
+---
+
+## 6. Production Security & Persistence Hardening (`parish-infra-config`)
+
+When configuring `docker-compose.yml` and `.env` in `parish-infra-config`:
+
+1. **Standardized Compose Service Name:** Always name the application service `dotnet_app` (never `app`).
+2. **Mandatory Persistence Volume Mounts:**
+   - `/app/PrivateUploads` (exports, fallback cloud storage, lesson plans, temp directories)
+   - `/app/dataprotection-keys` (Cookie & Anti-CSRF key ring persistence)
+   - `/app/logs` (Serilog rolling logs)
+   - `/app/secrets` (Google Drive service account JSON mounted read-only)
+   - `/app/wwwroot/uploads/lesson_plans`
+3. **PostgreSQL TLS Verification:**
+   - Configure `SSL Mode=VerifyCA` or `SSL Mode=VerifyFull` with your CA certificate in `ConnectionStrings__DefaultConnection`.
+   - **Do NOT** use `Trust Server Certificate=true` in Production (bypasses server certificate validation and enables MITM).
+4. **Redis Authentication & Network Isolation:**
+   - Start Redis with `--requirepass ${REDIS_PASSWORD}` and include `,password=${REDIS_PASSWORD}` in `ConnectionStrings__RedisConnection`.
+   - **Do NOT** publish/expose port `6379` on the public host interface (`ports: ["6379:6379"]`); keep Redis reachable only on the internal Docker bridge network.
+5. **Container Healthcheck & Reverse Proxy:**
+   - The Dockerfile defines `HEALTHCHECK` against `GET http://127.0.0.1:8080/health`.
+   - Configure `ReverseProxy:ForwardLimit`, `ReverseProxy:KnownProxies`, and `ReverseProxy:KnownNetworks` narrowly to match your Nginx container/network.

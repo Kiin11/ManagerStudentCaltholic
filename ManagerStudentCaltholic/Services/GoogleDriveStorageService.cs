@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,9 +25,11 @@ namespace ManagerStudentCaltholic.Services
         private const int MemoryDownloadThresholdBytes = 2 * 1024 * 1024; // 2 MB
         private const int MaxDriveChunkBytes = 2 * 1024 * 1024; // 2 MB
         private const int DriveChunkStepBytes = ResumableUpload.MinimumChunkSize; // 256 KB
+        private const long MaxUploadBytes = 30L * 1024 * 1024; // 30 MB hard cap
+        private const int FolderLockStripeCount = 64;
         private static readonly TimeSpan FolderCacheTtl = TimeSpan.FromMinutes(30);
 
-        private static readonly ConcurrentDictionary<string, SemaphoreSlim> FolderLocks = new(StringComparer.Ordinal);
+        private static readonly SemaphoreSlim[] FolderLockStripes = CreateFolderLockStripes();
         private static readonly object ServiceCacheLock = new();
         private static string? _cachedKeyPath;
         private static DateTime _cachedKeyWriteTimeUtc;
@@ -888,7 +889,7 @@ namespace ManagerStudentCaltholic.Services
                 return cachedFolderId;
             }
 
-            var gate = FolderLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
+            var gate = GetFolderLock(cacheKey);
             await gate.WaitAsync(ct);
             try
             {
@@ -1044,6 +1045,22 @@ namespace ManagerStudentCaltholic.Services
             return Math.Max(DriveChunkStepBytes, aligned);
         }
 
+        private static SemaphoreSlim[] CreateFolderLockStripes()
+        {
+            var stripes = new SemaphoreSlim[FolderLockStripeCount];
+            for (int i = 0; i < stripes.Length; i++)
+            {
+                stripes[i] = new SemaphoreSlim(1, 1);
+            }
+            return stripes;
+        }
+
+        private static SemaphoreSlim GetFolderLock(string cacheKey)
+        {
+            int index = (cacheKey.GetHashCode(StringComparison.Ordinal) & 0x7FFFFFFF) % FolderLockStripeCount;
+            return FolderLockStripes[index];
+        }
+
         private static async Task<(long FileSize, string Sha256Hash)> SpoolToTempFileAndComputeSha256Async(
             Stream source,
             string tempFilePath,
@@ -1052,6 +1069,10 @@ namespace ManagerStudentCaltholic.Services
             if (source.CanSeek)
             {
                 source.Position = 0;
+                if (source.Length > MaxUploadBytes)
+                {
+                    throw new InvalidOperationException($"Dung lượng tệp tải lên vượt quá giới hạn tối đa {MaxUploadBytes / (1024 * 1024)} MB.");
+                }
             }
 
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -1076,9 +1097,14 @@ namespace ManagerStudentCaltholic.Services
                         break;
                     }
 
+                    totalBytes += bytesRead;
+                    if (totalBytes > MaxUploadBytes)
+                    {
+                        throw new InvalidOperationException($"Dung lượng tệp tải lên vượt quá giới hạn tối đa {MaxUploadBytes / (1024 * 1024)} MB.");
+                    }
+
                     hasher.AppendData(buffer, 0, bytesRead);
                     await target.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                    totalBytes += bytesRead;
                 }
 
                 await target.FlushAsync(ct);

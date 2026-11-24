@@ -242,13 +242,13 @@ dotnet run --project ManagerStudentCaltholic
 ### 7.3. Triển khai Docker & Docker Compose
 ```bash
 # Build lại image ứng dụng không dùng cache
-docker compose build --no-cache app
+docker compose build --no-cache dotnet_app
 
 # Khởi chạy container ngầm
-docker compose up -d app
+docker compose up -d dotnet_app
 
 # Xem logs thời gian thực
-docker compose logs -f app
+docker compose logs -f dotnet_app
 
 # Rebuild và khởi động lại toàn bộ services
 docker compose up -d --build

@@ -197,17 +197,17 @@ namespace ManagerStudentCaltholic.Controllers
                 return Forbid();
             }
 
-            var safeFileName = Path.GetFileName(meta.FileName);
-            var exportsRoot = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "PrivateUploads", "exports"));
-            var fullFilePath = Path.GetFullPath(Path.Combine(exportsRoot, safeFileName));
+            var safeFileName = Path.GetFileName(meta.FileName.Trim());
+            var exportsRoot = Path.Combine(_env.ContentRootPath, "PrivateUploads", "exports");
 
-            if (!fullFilePath.StartsWith(exportsRoot, StringComparison.OrdinalIgnoreCase) || !System.IO.File.Exists(fullFilePath))
+            if (!FileUploadSecurityHelper.TryResolveContainedPath(exportsRoot, safeFileName, out var fullFilePath)
+                || !System.IO.File.Exists(fullFilePath))
             {
                 return NotFound("Không tìm thấy tệp báo cáo trên máy chủ.");
             }
 
-            var fileBytes = await System.IO.File.ReadAllBytesAsync(fullFilePath);
-            return File(fileBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", safeFileName);
+            var contentType = FileUploadSecurityHelper.GetSafeMimeType(Path.GetExtension(safeFileName));
+            return PhysicalFile(fullFilePath, contentType, safeFileName);
         }
     }
 }
