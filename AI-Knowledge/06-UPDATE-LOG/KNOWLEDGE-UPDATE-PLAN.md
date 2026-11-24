@@ -1,51 +1,59 @@
 # KẾ HOẠCH CẬP NHẬT KHO TRI THỨC AI (KNOWLEDGE UPDATE PLAN)
 
 - **Dự án:** `ManagerStudentCaltholic`
-- **Phiên bản baseline hiện tại (`KNOWLEDGE-BASELINE.json`):** `c0e828a`
-- **Phiên bản mục tiêu phân tích:** `2a3263d` (+ cập nhật cấu hình cục bộ 2026-11-15)
+- **Baseline hiện tại (`KNOWLEDGE-BASELINE.json`):**
+  - `lastFeatureSync`: `FEAT-P5-08` (`lastFeatureSyncCommit = 4589783`, kèm commit tài liệu `e183ccd`)
+  - `lastIndexedCommit`: `2a3263d` *(cần bắt kịp cả khoảng `2a3263d..4589783` khi làm mới `03-CODE-INDEX/`)*
+- **Phiên bản mục tiêu phân tích (`HEAD` trên `main`):** `e147f88` (`Merge pull request #99 from Kiin11/Fix-Sec-Inf`)
 - **Quy tắc bước phân tích:** **KHÔNG cập nhật các tài liệu Knowledge chính ở bước này**; tài liệu này lập lộ trình cập nhật chính xác cho đợt đồng bộ kế tiếp.
 
 ---
 
 ## 1. Danh sách Tài liệu `AI-Knowledge/` Cần Cập nhật
 
-| STT | Đường dẫn tài liệu | Phân loại | Ưu tiên | Nội dung cần cập nhật |
+| STT | Đường dẫn tài liệu | Phân loại | Ưu tiên | Nội dung cần cập nhật (đã xác minh từ source) |
 |---|---|---|---|---|
-| 1 | `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md` | Modified | Medium | Cập nhật cây thư mục Mục 2 phản ánh đúng các file thực tế (`ATTENDANCE.md`, các file `FEAT-P5-*`, `06-UPDATE-LOG/*`). |
-| 2 | `AI-Knowledge/00-OVERVIEW/PROJECT.md` | Modified | High | Bổ sung `FEAT-P5-04` (QR HUD & Undo 5s), `FEAT-P5-07` (Quản lý kế hoạch lớp theo version), `PublicRegistration/Resubmit`, thời hạn phiên/Refresh Token 14 ngày, `PwaController.Offline`, Circuit Breaker Redis. |
-| 3 | `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md` | Modified | High | Bổ sung `ClassCurriculumService` vào Service Layer, cập nhật `Flow 2` (Undo 5s & mã cũ `StudentCodeHistories`), thêm `Flow 6` cho `FEAT-P5-07`. |
-| 4 | `AI-Knowledge/00-OVERVIEW/TECH-STACK.md` | Modified | High | Ghi nhận cấu hình Hybrid Auth thời hạn **14 ngày** (`ParishSessionCookie` + `RefreshTokenExpirationDays`), `DataProtection` persist keys, và `RedisCacheService` Circuit Breaker 30s + `IMemoryCache` fallback. |
-| 5 | `AI-Knowledge/01-MODULES/ATTENDANCE.md` | Modified | High | Bổ sung luồng `UndoScanCheckIn` / `UndoScanCheckInAsync` (5s), tra cứu `StudentCodeHistories`, `undoOfflineQrScan`, liên kết tới `FEAT-P5-04-QR-SCANNER-UPGRADE.md`. |
-| 6 | `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md` | Modified | High | Bổ sung Flow hoàn tác 5 giây (`UndoScanRequestDto`), `HistoricalCodes` cho cache offline, tham chiếu `FEAT-P5-04-QR-SCANNER-UPGRADE.md`. |
-| 7 | `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` | Modified | Medium | Đảm bảo ghi nhận trạng thái ánh xạ ORM của `ClassCurriculumDocuments`, `ClassCurriculumVersions`, `ClassLessonPlans` và lưu ý thiếu file EF Migration trong `Migrations/`. |
-| 8 | `AI-Knowledge/02-DATABASE/TABLE-INDEX.json` | Modified | High | Bổ sung schema chi tiết (columns, FKs, indexes) của 3 bảng `ClassLessonPlans`, `ClassCurriculumDocuments`, `ClassCurriculumVersions`. |
-| 9 | `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md` | Modified | High | Thêm mục quan hệ bảng `Lesson Plans & Class Curriculum Versioning (FEAT-P5-07)`, cập nhật sơ đồ `erDiagram` Mermaid và khối JSON index. |
-| 10 | `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl` | Modified | High | Bổ sung `PublicRegistrationController.cs`, `PwaController.cs`, `StudentsController.cs`, `PublicRegistrationSubmitDto.cs`, `Resubmit.cshtml`, `ScanQr.cshtml`, `LessonPlans/Index.cshtml`, `offline-attendance.js`. |
-| 11 | `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl` | Modified | High | Thêm symbols cho `FEAT-P5-07` (`ClassLessonPlan`, `ClassCurriculumDocument`, `ClassCurriculumVersion`, `IClassCurriculumService`, `ClassCurriculumService`, `LessonPlansController` actions), `UndoScanCheckIn*`, `UndoScanRequestDto`, `PublicRegistrationController` (`Resubmit`, `SubmitResubmit`), `PublicRegistrationResubmitDto`, `PwaController`, `AccountController.Profile(long? id = null)`. |
-| 12 | `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl` | Modified | High | Cập nhật `startLine` chính xác cho các action `LessonPlansController` và bổ sung routes `/Attendance/UndoScanCheckIn`, `/PublicRegistration/Resubmit`, `/PublicRegistration/SubmitResubmit`, `/Offline`, `/icons/{fileName}`. |
-| 13 | `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl` | Modified | High | Chỉnh `sourceLine` của `ClassCurriculumService` (`17`, `23`) và bổ sung cạnh `CALLS`/`INJECTS` cho `AttendanceController.UndoScanCheckIn`, `LessonPlansController` actions và `PublicRegistrationController`. |
-| 14 | `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json` | Modified | Final | Sau khi hoàn tất cập nhật và kiểm tra cú pháp JSON/JSONL, nâng `lastIndexedCommit` từ `c0e828a` lên `2a3263d`. |
-| 15 | `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` | Modified | Final | Ghi biên bản hoàn thành cho phiên đồng bộ `c0e828a` ➔ `2a3263d` (+ cấu hình Token/Cookie 14 ngày). |
-| 16 | `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md` | Modified | Final | Cập nhật trạng thái đồng bộ và ghi rõ mục `NEEDS_VERIFICATION` về Migration/DDL của `ClassCurriculum*`. |
+| 1 | `AI-Knowledge/AI-KNOWLEDGE-STRUCTURE.md` | Modified | Medium | Rà soát phản ánh các file mới trong `06-UPDATE-LOG/` và việc gỡ 3 file trùng lặp ở root (`KNOWLEDGE-ISSUES.jsonl`, `KNOWLEDGE-VALIDATION-REPORT.md`, `REQUIRED-CORRECTIONS.md`). |
+| 2 | `AI-Knowledge/00-OVERVIEW/PROJECT.md` | Modified | High | Bổ sung 4 helper chuẩn (`VietnamTimeHelper`, `AgeValidationHelper`, `FileUploadSecurityHelper`, `StaffSelfActionGuard`), endpoint `/health`, bộ unit test `tests/ManagerStudentCaltholic.Tests`, và lớp phòng thủ IDOR/XSS/Upload/Anti-Abuse. |
+| 3 | `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md` | Modified | High | Cập nhật kiến trúc pipeline (`AddReverseProxyConfiguration(IConfiguration)`, `GlobalLimiter` `200 req/min`, `/health`), luồng khóa nguyên tử Hoàn tác QR (`ClassFlushLock -> ClassSheetLock`), idempotency `ATT:OFFLINE:IDEMP:*` và `PhysicalFile` / `Stream` cho xuất/tải tệp tránh OOM. |
+| 4 | `AI-Knowledge/00-OVERVIEW/CODING-RULES.md` | Modified | High | Bổ sung quy chuẩn bắt buộc dùng `VietnamTimeHelper` (cấm `DateTime.UtcNow.Date`/`toISOString().split('T')[0]` cho ngày nghiệp vụ VN), `AgeValidationHelper` (năm nhuận 29/02), `FileUploadSecurityHelper` (magic bytes + safe MIME + `TryResolveContainedPath`), `StaffSelfActionGuard`, và cấm `@Html.Raw`/unescaped `innerHTML`. |
+| 5 | `AI-Knowledge/00-OVERVIEW/TECH-STACK.md` | Modified | High | Ghi nhận cấu hình `ReverseProxy` trong `appsettings.json`, `RedisConnection = ""` mặc định, `GoogleDrive:Enabled = false` / `DriveLogUpload:Enabled = false` mặc định (`997507f`), Docker `HEALTHCHECK` (`http://127.0.0.1:8080/health`), và bộ test `xUnit 2.9.3` + `EF Core InMemory 8.0.11`. |
+| 6 | `AI-Knowledge/00-OVERVIEW/SOURCE-INVENTORY.md` & `PROJECT-INVENTORY.json` & `MODULE-INVENTORY.json` | Modified | Medium | Bổ sung 4 helper mới under `Services/`, test project `tests/ManagerStudentCaltholic.Tests/`, và loại bỏ tham chiếu tới `script/fix-db-1.txt`. |
+| 7 | `AI-Knowledge/01-MODULES/ATTENDANCE.md` | Modified | High | Cập nhật `IRedisAttendanceService` overloads (`ClaimsPrincipal? caller`, `ExecuteWithPartitionsFlushLockAsync`, `FinalizePartitionsAfterExternalSyncAsync`), khóa phân dải `ClassFlushLocks`, idempotency `ATT:OFFLINE:IDEMP:*`, xử lý `23505`, grace 15s + kiểm tra người quét gốc khi Hoàn tác, `StaffSelfActionGuard`, fail-closed `BranchHead`, và `AttendanceDisputeService` thông báo lỗi chung. |
+| 8 | `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md` | Modified | High | Cập nhật `QrScanResponseDto.IsForbidden`, `OfflineSyncItemDto.SessionMode`, đánh giá trạng thái phía Server theo `VietnamTimeHelper.ToVietnamTime`, `offline-attendance.js` (`DB_VERSION = 2`, `by_enrollmentId` non-unique, xóa đúng `syncedClientIds`, `formatLocalDateYyyyMmDd`), và fallback `/Attendance/UndoScanCheckIn` từ `ScanQr.cshtml`. |
+| 9 | `AI-Knowledge/05-FEATURES/FEAT-P5-04-QR-SCANNER-UPGRADE.md` | Modified | Medium | Ghi nhận tắt nút Hoàn tác khi `isDuplicate === true`, xử lý HTTP `403`, DOM `textContent` chống XSS, và fallback server undo khi offline đã đồng bộ. |
+| 10 | `AI-Knowledge/05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md` | Modified | High | Cập nhật `[Authorize(Policy = "RequireStaff")]` trên các API tra cứu, overload nhận `ClaimsPrincipal` trên `IStaffStudentLookupService` (`SearchStudentsQuickAsync`, `CanCallerAccessStudentAsync`, `GetRecentLookupsAsync`), chặn truy cập cache `staff_lookup:student_360:{studentId}` nếu ngoài phạm vi (`403`), và ủy quyền sự kiện thay inline `onclick` trong `staff-student-lookup.js`. |
+| 11 | `AI-Knowledge/05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md` | Modified | High | Cập nhật đổi chữ ký `IClassCurriculumService.GetVersionFileAsync` từ `byte[]` sang `Stream`, giới hạn 15 MB + kiểm tra magic bytes, kiểm tra `ver.ClassCurriculumDocumentId == documentId`, fail-closed khi `ClassRoom == null`, và escape HTML trong modal xem chi tiết phiên bản. |
+| 12 | `AI-Knowledge/05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md` | Modified | High | Cập nhật kiểm tra quyền `AVATAR` trong `CloudMediaController`, `Content-Security-Policy: sandbox` cho PDF, ép `attachment` cho `ABSENCE_DOC`, giới hạn `MaxUploadBytes = 30 MB` & 64-stripe `FolderLockStripes` trong `GoogleDriveStorageService`, xóa bù log verified / giới hạn `200 MB` / `RetryDelaySeconds` trong `DriveLogUploadService`, gộp singleton `LogRetentionBackgroundService` & dọn `tmp_logs`/`cloud_tmp` >2h. |
+| 13 | `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md` | Modified | High | Cập nhật chuẩn hóa `AgeValidationHelper` (năm nhuận `29/02`) trên `StudentViewModel`, `StudentsController`, `AccountController`, `UsersController`, `GovernanceController`, `ProfileHistoryService`; đồng bộ `LinkedUser`; khóa `ProbationaryTeacher` ca chiều & `StaffSelfActionGuard` tại mọi module. |
+| 14 | `AI-Knowledge/04-INTEGRATIONS/INTEGRATION-OVERVIEW.md` & `EXTERNAL-APIS.md` | Modified | Medium | Cập nhật cấu hình mặc định `GoogleDriveOptions` / `DriveLogUploadOptions` (`Enabled = false`), endpoint `/health`, `GlobalLimiter` (`200 req/min`), và `ReverseProxy` config-driven trong `ServiceCollectionExtensions`. |
+| 15 | `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl` | Modified | High | Thêm 4 helper mới, 5 file trong `tests/ManagerStudentCaltholic.Tests/`, xóa mục cũ nếu có của `script/fix-db-1.txt`, và bắt kịp các file giữa `2a3263d..e183ccd` còn thiếu. |
+| 16 | `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl` | Modified | High | Bổ sung/cập nhật symbols cho 4 helper mới, overloads mới của `IRedisAttendanceService`/`IStaffStudentLookupService`/`IGradeCalculationService`, chữ ký `Stream` của `IClassCurriculumService.GetVersionFileAsync`, `Options` defaults, `DTO` properties (`WebsiteUrlHoneypot`, `IsForbidden`, `SessionMode`), `SecurityExtensions.GetClientIpKey`. |
+| 17 | `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl` | Modified | High | Bổ sung route `GET /health` (`Program.cs:216`), cập nhật `startLine` & `[Authorize]` attribute mới trên 21 controllers (cùng các route Phase 6/7 còn thiếu từ mốc `2a3263d`). |
+| 18 | `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl` | Modified | High | Bổ sung cạnh `CALLS` / `INJECTS` cho 4 helper mới (`VietnamTimeHelper`, `AgeValidationHelper`, `FileUploadSecurityHelper`, `StaffSelfActionGuard`), `ICacheService` lockout trong `LookupController`/`AbsenceController`/`PublicRegistrationController`, `IImageOptimizationService` trong `PublicRegistrationController`, sửa cạnh singleton `LogRetentionBackgroundService`. |
+| 19 | `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`, `UPDATE-LOG.md`, `PENDING-UPDATES.md` | Modified | Final | Sau khi hoàn tất cập nhật và kiểm tra cú pháp JSON/JSONL, nâng `lastFeatureSync` / `lastFeatureSyncCommit` lên `e147f88` (và `lastIndexedCommit` nếu đã quét đủ `03-CODE-INDEX/` từ `2a3263d`), ghi biên bản vào `UPDATE-LOG.md`. |
 
 ---
 
 ## 2. Lộ trình Thực thi Đề xuất (Step-by-Step Roadmap)
 
-1. **Giai đoạn 1 — Lớp Cơ sở dữ liệu (`02-DATABASE/`):**
-   - Cập nhật `TABLE-INDEX.json` và `TABLE-RELATIONSHIPS.md` cho `ClassLessonPlans`, `ClassCurriculumDocuments`, `ClassCurriculumVersions`.
-2. **Giai đoạn 2 — Chỉ mục Mã nguồn (`03-CODE-INDEX/*.jsonl`):**
-   - Cập nhật `FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl` theo đúng line numbers đã kiểm chứng.
-3. **Giai đoạn 3 — Tài liệu Tổng quan, Module & Feature (`00-OVERVIEW/`, `01-MODULES/`, `05-FEATURES/`):**
-   - Cập nhật `AI-KNOWLEDGE-STRUCTURE.md`, `PROJECT.md`, `ARCHITECTURE.md`, `TECH-STACK.md`, `ATTENDANCE.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`.
-4. **Giai đoạn 4 — Kiểm tra & Chốt Baseline (`06-UPDATE-LOG/`):**
-   - Kiểm tra hợp lệ cú pháp toàn bộ `.json` và `.jsonl`.
-   - Sau khi xác nhận đạt 100%, cập nhật `KNOWLEDGE-BASELINE.json`, `UPDATE-LOG.md`, `PENDING-UPDATES.md`.
+1. **Giai đoạn 1 — Kiểm tra Tồn đọng `2a3263d..e183ccd` & Cập nhật `03-CODE-INDEX/*.jsonl`:**
+   - Quét đối chiếu bổ sung các tệp Phase 6/7 giữa `2a3263d..4589783` để `FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl` phản ánh trọn vẹn trạng thái `HEAD` (`e147f88`).
+   - Thêm 4 helper mới, test project, breaking signature `GetVersionFileAsync` và route `/health`.
+2. **Giai đoạn 2 — Cập nhật Kiến trúc & Quy chuẩn (`00-OVERVIEW/`, `04-INTEGRATIONS/`):**
+   - Cập nhật `PROJECT.md`, `ARCHITECTURE.md`, `CODING-RULES.md`, `TECH-STACK.md`, `SOURCE-INVENTORY.md`, `INTEGRATION-OVERVIEW.md`, `EXTERNAL-APIS.md`, `AI-KNOWLEDGE-STRUCTURE.md`.
+3. **Giai đoạn 3 — Cập nhật Module & Đặc tả Feature (`01-MODULES/`, `05-FEATURES/`):**
+   - Cập nhật `ATTENDANCE.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`, `FEAT-P5-04-QR-SCANNER-UPGRADE.md`, `FEAT-P5-01-STAFF-QUICK-LOOKUP.md`, `FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`, `FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md`, `FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`.
+   - Cân nhắc bổ sung mục tài liệu chuyên đề cho nhóm Học vụ/Bí tích/Hiệu năng (`GradesController`, `SacramentEvaluationService`, `BackgroundExportJobService`, `LogsController`) vốn hiện chưa có file riêng trong `01-MODULES/` hoặc `05-FEATURES/`.
+4. **Giai đoạn 4 — Kiểm định Cú pháp & Chốt Baseline (`06-UPDATE-LOG/`):**
+   - Kiểm tra hợp lệ toàn bộ `.json` và `.jsonl`.
+   - Cập nhật `KNOWLEDGE-BASELINE.json`, `UPDATE-LOG.md`, `PENDING-UPDATES.md` (giữ rõ phần `NEEDS_VERIFICATION` cho hạ tầng `parish-infra-config`).
 
 ---
 
 ## 3. Kiểm tra Bằng chứng & Dữ liệu Thiếu
 
-- [x] Đã đối chiếu trực tiếp toàn bộ git diff `c0e828a..HEAD` và working tree hiện hành.
-- [x] Mọi symbol, endpoint và quan hệ trong `IMPACT-ANALYSIS.md` đều gắn rõ bằng chứng `[Xác nhận được]` hoặc `[Suy luận kiến trúc]`.
-- [ ] **Cần xác minh bổ sung (`NEEDS_VERIFICATION`):** Xác nhận trạng thái DDL/bảng thực tế trên PostgreSQL cho `ClassCurriculumDocuments` và `ClassCurriculumVersions` do `Migrations/` hiện chưa có migration tương ứng.
+- [x] Đã đối chiếu trực tiếp toàn bộ `git diff --numstat -M e183ccd..HEAD` (`93` tệp trong git diff, gồm `91` tệp ngoài `AI-Knowledge/`).
+- [x] Đã kiểm tra và ghi nhận khoảng chênh `2a3263d..e183ccd` còn tồn tại trong `KNOWLEDGE-BASELINE.json`.
+- [x] Mọi symbol, route, dòng code và quan hệ trong `IMPACT-ANALYSIS.md` đều phân biệt rõ `[Xác nhận được]` và `[Suy luận kiến trúc]`.
+- [ ] **Cần xác minh bổ sung (`NEEDS_VERIFICATION`):** Xác nhận cấu hình thực tế tại repo ngoài `parish-infra-config` (`docker-compose.yml`, `nginx/default.conf`, chuỗi kết nối PostgreSQL/Redis trên Production) và quyết định sử dụng hay gỡ bỏ `IGradePermissionService` / `ILessonPlanImportService` chưa có caller thực thi.

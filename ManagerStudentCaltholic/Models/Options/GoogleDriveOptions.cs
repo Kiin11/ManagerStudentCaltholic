@@ -6,6 +6,9 @@ namespace ManagerStudentCaltholic.Models.Options
 
         public bool Enabled { get; set; } = false;
         public string ServiceAccountKeyPath { get; set; } = string.Empty;
+        public string OAuthClientId { get; set; } = string.Empty;
+        public string OAuthClientSecret { get; set; } = string.Empty;
+        public string OAuthRefreshToken { get; set; } = string.Empty;
         public string RootFolderId { get; set; } = string.Empty;
         public string RootFolderName { get; set; } = "QLGL_Storage_Root";
         public string SharedDriveId { get; set; } = string.Empty;

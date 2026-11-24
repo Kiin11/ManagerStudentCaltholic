@@ -1,83 +1,146 @@
 # BÁO CÁO PHÂN TÍCH THAY ĐỔI MÃ NGUỒN (CHANGE ANALYSIS REPORT)
 
 - **Dự án:** `ManagerStudentCaltholic`
-- **Thời gian phân tích:** `2026-11-15T14:05:00+07:00`
+- **Thời gian phân tích:** `2026-11-24T12:20:00+07:00`
 - **Vai trò:** Senior Software Architect & Codebase Analyst
-- **Commit Baseline (`KNOWLEDGE-BASELINE.json`):** `c0e828a` (`perf(mobile): optimize mobile layout rendering, remove scroll listener & prevent SW reload loop`)
-- **Commit Hiện tại (`HEAD`):** `2a3263d` (`add`) kèm thay đổi cục bộ chưa commit tại `appsettings.json`, `appsettings.Development.json`, `docker-compose.yml`, `.env`
-- **Tổng số tệp thay đổi trong phạm vi mã nguồn & cấu hình:** **53 tệp** (`7 Added`, `46 Modified`, `0 Deleted`, `0 Renamed`), chưa tính 3 tệp sinh tự động trong `ManagerStudentCaltholic/bin/Debug/net8.0/` và 2 tệp untracked (`nginx/default.conf`, `script/seed-curriculum-data.sql`).
+- **Baseline đối chiếu từ `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`:**
+  - `lastFeatureSync`: `FEAT-P5-08` (`lastFeatureSyncCommit = 4589783`, kèm commit tài liệu `e183ccd` ngày `2026-11-23`)
+  - `lastIndexedCommit`: `2a3263d` *(ghi chú trong baseline: chỉ mục đầy đủ `03-CODE-INDEX/` vẫn giữ mốc `2a3263d` chờ bắt kịp các commit Phase 6/7 giữa `2a3263d..4589783`)*
+- **Commit mục tiêu (`HEAD` trên nhánh `main`):** `e147f88` (`Merge pull request #99 from Kiin11/Fix-Sec-Inf`), bao gồm:
+  - `997507f` (`chore(config): decouple Google Drive account defaults into parish-infra-config`)
+  - `7386ebb` (`Merge pull request #96 from Kiin11/Phase-F5.8`)
+  - `9eeafed` ➔ `dbd1571` (nhánh `Fix-Sec-Inf` vá bảo mật, đồng thời, múi giờ, hiệu năng và bộ unit test xUnit)
+- **Phạm vi diff chính (`e183ccd..HEAD`):** **93 tệp** trong git diff, gồm **91 tệp** mã nguồn/test/cấu hình/tài liệu gốc (`9 Added`, `78 Modified`, `4 Deleted`, `0 Renamed`) và **2 tệp** trong `AI-Knowledge/` đã chỉnh sửa ở commit `997507f` (`04-INTEGRATIONS/EXTERNAL-APIS.md`, `05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md`).
+- **Khoảng chênh nền `2a3263d..e183ccd`:** Còn các tệp từ Phase 6 (`FEAT-P6-01`), `FEAT-P5-08` và dọn `.env`/`appsettings.Development.json` đã cập nhật vào DB/Feature docs trước đó nhưng chưa tái quét toàn bộ `03-CODE-INDEX/`.
 
 ---
 
-## 1. Phân loại các File Thay đổi (File Classification)
+## 1. Phân loại các File Thay đổi (`e183ccd..HEAD`)
 
-### 1.1. Added (7 tệp mới tạo)
+### 1.1. Added (`9` tệp mới tạo)
+
 | STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
 |---|---|---|---|
-| 1 | `ManagerStudentCaltholic/Interface/Services/IClassCurriculumService.cs` | Interface / Service | +48 / -0 |
-| 2 | `ManagerStudentCaltholic/Models/DTOs/CurriculumDtos.cs` | Model / DTO | +75 / -0 |
-| 3 | `ManagerStudentCaltholic/Models/Entities/ClassCurriculumDocument.cs` | Model / Entity | +71 / -0 |
-| 4 | `ManagerStudentCaltholic/Models/Entities/ClassCurriculumVersion.cs` | Model / Entity | +55 / -0 |
-| 5 | `ManagerStudentCaltholic/Models/ViewModels/LessonPlansViewModel.cs` | Model / ViewModel | +22 / -0 |
-| 6 | `ManagerStudentCaltholic/Services/ClassCurriculumService.cs` | Service | +1052 / -0 |
-| 7 | `ManagerStudentCaltholic/Views/PublicRegistration/Resubmit.cshtml` | Razor View | +494 / -0 |
+| 1 | `ManagerStudentCaltholic/Services/AgeValidationHelper.cs` | Service / Helper | +38 / -0 |
+| 2 | `ManagerStudentCaltholic/Services/FileUploadSecurityHelper.cs` | Service / Security Helper | +187 / -0 |
+| 3 | `ManagerStudentCaltholic/Services/StaffSelfActionGuard.cs` | Service / Security Guard | +31 / -0 |
+| 4 | `ManagerStudentCaltholic/Services/VietnamTimeHelper.cs` | Service / Time Helper | +73 / -0 |
+| 5 | `tests/ManagerStudentCaltholic.Tests/ManagerStudentCaltholic.Tests.csproj` | Test Project | +34 / -0 |
+| 6 | `tests/ManagerStudentCaltholic.Tests/AgeValidationTests.cs` | Unit Test | +41 / -0 |
+| 7 | `tests/ManagerStudentCaltholic.Tests/GradeAndSacramentLogicTests.cs` | Unit Test | +321 / -0 |
+| 8 | `tests/ManagerStudentCaltholic.Tests/SecurityHelpersTests.cs` | Unit Test | +175 / -0 |
+| 9 | `tests/ManagerStudentCaltholic.Tests/VietnamTimeHelperTests.cs` | Unit Test | +40 / -0 |
 
-*Ghi chú tệp untracked ngoài Git HEAD:* `nginx/default.conf`, `script/seed-curriculum-data.sql`.
+### 1.2. Modified (`78` tệp mã nguồn, view & cấu hình ngoài `AI-Knowledge/`)
 
-### 1.2. Modified (46 tệp mã nguồn & cấu hình)
+#### Startup, Extensions & Configuration (`5` tệp)
 | STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
 |---|---|---|---|
-| 1 | `ManagerStudentCaltholic/Controllers/AccountController.cs` | Controller | +50 / -12 |
-| 2 | `ManagerStudentCaltholic/Controllers/AttendanceController.cs` | Controller | +68 / -1 |
-| 3 | `ManagerStudentCaltholic/Controllers/LessonPlansController.cs` | Controller | +217 / -27 |
-| 4 | `ManagerStudentCaltholic/Controllers/PublicRegistrationController.cs` | Controller | +250 / -2 |
-| 5 | `ManagerStudentCaltholic/Controllers/PwaController.cs` | Controller | +1 / -1 |
-| 6 | `ManagerStudentCaltholic/Controllers/StudentsController.cs` | Controller | +1 / -2 |
-| 7 | `ManagerStudentCaltholic/Controllers/UsersController.cs` | Controller | +61 / -10 |
-| 8 | `ManagerStudentCaltholic/Data/ParishDbContext.cs` | Data / ORM | +32 / -0 |
-| 9 | `ManagerStudentCaltholic/Extensions/LoggingExtensions.cs` | Extension / Logging | +3 / -2 |
-| 10 | `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs` | Extension / DI & Auth | +15 / -2 |
-| 11 | `ManagerStudentCaltholic/Extensions/WebApplicationExtensions.cs` | Extension / Seeding | +172 / -4 |
-| 12 | `ManagerStudentCaltholic/Interface/Services/IRedisAttendanceService.cs` | Interface / Service | +6 / -1 |
-| 13 | `ManagerStudentCaltholic/Models/DTOs/PublicRegistrationSubmitDto.cs` | Model / DTO | +19 / -1 |
-| 14 | `ManagerStudentCaltholic/Models/Entities/ClassLessonPlan.cs` | Model / Entity | +8 / -2 |
-| 15 | `ManagerStudentCaltholic/Models/ViewModels/AttendanceViewModels.cs` | Model / ViewModel & DTO | +30 / -1 |
-| 16 | `ManagerStudentCaltholic/Models/ViewModels/AuthViewModels.cs` | Model / ViewModel | +35 / -14 |
-| 17 | `ManagerStudentCaltholic/Models/ViewModels/BatchTeacherViewModels.cs` | Model / ViewModel | +2 / -2 |
-| 18 | `ManagerStudentCaltholic/Services/FeatureNavigationService.cs` | Service | +73 / -10 |
-| 19 | `ManagerStudentCaltholic/Services/RedisAttendanceService.cs` | Service | +286 / -14 |
-| 20 | `ManagerStudentCaltholic/Services/RedisCacheService.cs` | Service / Cache | +26 / -0 |
-| 21 | `ManagerStudentCaltholic/Services/TokenService.cs` | Service / Security | +1 / -1 |
-| 22 | `ManagerStudentCaltholic/Views/Account/AccessDenied.cshtml` | Razor View | +85 / -21 |
-| 23 | `ManagerStudentCaltholic/Views/Account/Login.cshtml` | Razor View | +1 / -1 |
-| 24 | `ManagerStudentCaltholic/Views/Account/Profile.cshtml` | Razor View | +603 / -198 |
-| 25 | `ManagerStudentCaltholic/Views/Attendance/Index.cshtml` | Razor View | +271 / -187 |
-| 26 | `ManagerStudentCaltholic/Views/Attendance/ScanQr.cshtml` | Razor View | +1058 / -391 |
-| 27 | `ManagerStudentCaltholic/Views/Grades/Index.cshtml` | Razor View | +102 / -103 |
-| 28 | `ManagerStudentCaltholic/Views/Home/Guides/_GuideAcademic.cshtml` | Razor Partial View | +5 / -2 |
-| 29 | `ManagerStudentCaltholic/Views/Home/Index.cshtml` | Razor View | +2 / -2 |
-| 30 | `ManagerStudentCaltholic/Views/LessonPlans/Index.cshtml` | Razor View | +945 / -119 |
-| 31 | `ManagerStudentCaltholic/Views/Lookup/Result.cshtml` | Razor View | +546 / -215 |
-| 32 | `ManagerStudentCaltholic/Views/Promotion/Index.cshtml` | Razor View | +0 / -10 |
-| 33 | `ManagerStudentCaltholic/Views/PublicRegistration/CheckStatus.cshtml` | Razor View | +478 / -58 |
-| 34 | `ManagerStudentCaltholic/Views/PublicRegistration/Index.cshtml` | Razor View | +146 / -53 |
-| 35 | `ManagerStudentCaltholic/Views/PublicRegistration/Success.cshtml` | Razor View | +50 / -22 |
-| 36 | `ManagerStudentCaltholic/Views/Shared/_Layout.cshtml` | Razor Layout | +3 / -3 |
-| 37 | `ManagerStudentCaltholic/Views/Shared/_LayoutMobileBottomNav.cshtml` | Razor Partial View | +65 / -45 |
-| 38 | `ManagerStudentCaltholic/Views/Shared/_LayoutMobileHeader.cshtml` | Razor Partial View | +27 / -5 |
-| 39 | `ManagerStudentCaltholic/Views/Students/Index.cshtml` | Razor View | +0 / -119 |
-| 40 | `ManagerStudentCaltholic/Views/Users/Index.cshtml` | Razor View | +435 / -189 |
-| 41 | `ManagerStudentCaltholic/wwwroot/css/mobile-layout.css` | Static Asset / CSS | +193 / -62 |
-| 42 | `ManagerStudentCaltholic/wwwroot/js/offline-attendance.js` | Static Asset / JS | +119 / -12 |
-| 43 | `ManagerStudentCaltholic/appsettings.json` | Configuration | +1 / -1 |
-| 44 | `ManagerStudentCaltholic/appsettings.Development.json` | Configuration | +1 / -1 |
-| 45 | `ManagerStudentCaltholic/Dockerfile` | Deployment / Docker | +4 / -4 |
-| 46 | `docker-compose.yml` | Deployment / Docker | +9 / -6 |
+| 1 | `ManagerStudentCaltholic/Program.cs` | Entrypoint / Pipeline | +31 / -3 |
+| 2 | `ManagerStudentCaltholic/Extensions/SecurityExtensions.cs` | Extension / Rate Limiting | +77 / -5 |
+| 3 | `ManagerStudentCaltholic/Extensions/ServiceCollectionExtensions.cs` | Extension / DI & Proxy | +90 / -11 |
+| 4 | `ManagerStudentCaltholic/appsettings.json` | Configuration | +9 / -4 |
+| 5 | `ManagerStudentCaltholic/Dockerfile` | Deployment / Docker | +2 / -0 |
 
-*(Ngoài ra có 3 tệp build artifact dưới `ManagerStudentCaltholic/bin/Debug/net8.0/`: `ManagerStudentCaltholic.staticwebassets.endpoints.json`, `ManagerStudentCaltholic.staticwebassets.runtime.json`, `appsettings.json`).*
+#### Interfaces, Options & ViewModels (`10` tệp)
+| STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
+|---|---|---|---|
+| 6 | `ManagerStudentCaltholic/Interface/Services/IClassCurriculumService.cs` | Interface | +2 / -2 |
+| 7 | `ManagerStudentCaltholic/Interface/Services/IGradeCalculationService.cs` | Interface | +8 / -0 |
+| 8 | `ManagerStudentCaltholic/Interface/Services/IRedisAttendanceService.cs` | Interface | +24 / -0 |
+| 9 | `ManagerStudentCaltholic/Interface/Services/IStaffStudentLookupService.cs` | Interface | +4 / -0 |
+| 10 | `ManagerStudentCaltholic/Models/Options/DriveLogUploadOptions.cs` | Model / Options | +1 / -1 |
+| 11 | `ManagerStudentCaltholic/Models/Options/GoogleDriveOptions.cs` | Model / Options | +2 / -2 |
+| 12 | `ManagerStudentCaltholic/Models/ViewModels/AttendanceViewModels.cs` | Model / ViewModel & DTO | +4 / -0 |
+| 13 | `ManagerStudentCaltholic/Models/ViewModels/LookupViewModels.cs` | Model / ViewModel & DTO | +6 / -1 |
+| 14 | `ManagerStudentCaltholic/Models/ViewModels/PrintingViewModels.cs` | Model / DTO | +1 / -0 |
+| 15 | `ManagerStudentCaltholic/Models/ViewModels/StudentViewModel.cs` | Model / ViewModel | +3 / -11 |
 
-### 1.3. Deleted (0 tệp) & Renamed (0 tệp)
-- Không có tệp mã nguồn nào bị xóa hoặc đổi tên trong phạm vi `c0e828a..HEAD`.
+#### Services (`17` tệp)
+| STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
+|---|---|---|---|
+| 16 | `ManagerStudentCaltholic/Services/AttendanceDisputeService.cs` | Service | +56 / -17 |
+| 17 | `ManagerStudentCaltholic/Services/BackgroundExportJobService.cs` | Service / Hangfire Job | +116 / -32 |
+| 18 | `ManagerStudentCaltholic/Services/ClassCurriculumService.cs` | Service | +62 / -43 |
+| 19 | `ManagerStudentCaltholic/Services/ClassEvaluationService.cs` | Service | +194 / -125 |
+| 20 | `ManagerStudentCaltholic/Services/DriveLogUploadService.cs` | Service | +62 / -25 |
+| 21 | `ManagerStudentCaltholic/Services/GoogleDriveStorageService.cs` | Service / Storage | +30 / -4 |
+| 22 | `ManagerStudentCaltholic/Services/GradeCalculationService.cs` | Service | +30 / -12 |
+| 23 | `ManagerStudentCaltholic/Services/GradePermissionService.cs` | Service / AuthZ | +99 / -30 |
+| 24 | `ManagerStudentCaltholic/Services/LessonPlanImportService.cs` | Service | +24 / -2 |
+| 25 | `ManagerStudentCaltholic/Services/LogRetentionBackgroundService.cs` | Service / Background | +81 / -52 |
+| 26 | `ManagerStudentCaltholic/Services/MassCampaignService.cs` | Service | +60 / -19 |
+| 27 | `ManagerStudentCaltholic/Services/ProfileHistoryService.cs` | Service | +7 / -7 |
+| 28 | `ManagerStudentCaltholic/Services/PromotionEvaluationService.cs` | Service | +26 / -7 |
+| 29 | `ManagerStudentCaltholic/Services/RedisAttendanceService.cs` | Service / Cache & Sync | +886 / -319 |
+| 30 | `ManagerStudentCaltholic/Services/SacramentEvaluationService.cs` | Service | +39 / -17 |
+| 31 | `ManagerStudentCaltholic/Services/StaffStudentLookupService.cs` | Service | +162 / -8 |
+| 32 | `ManagerStudentCaltholic/Services/StudentExcelService.cs` | Service / Excel | +215 / -113 |
+
+#### Controllers (`21` tệp)
+| STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
+|---|---|---|---|
+| 33 | `ManagerStudentCaltholic/Controllers/AbsenceController.cs` | Controller | +211 / -61 |
+| 34 | `ManagerStudentCaltholic/Controllers/AccountController.cs` | Controller | +88 / -35 |
+| 35 | `ManagerStudentCaltholic/Controllers/AttendanceController.cs` | Controller | +741 / -392 |
+| 36 | `ManagerStudentCaltholic/Controllers/BackgroundJobsController.cs` | Controller | +6 / -6 |
+| 37 | `ManagerStudentCaltholic/Controllers/ClassesController.cs` | Controller | +114 / -28 |
+| 38 | `ManagerStudentCaltholic/Controllers/CloudMediaController.cs` | Controller / Media Proxy | +330 / -46 |
+| 39 | `ManagerStudentCaltholic/Controllers/DashboardController.cs` | Controller | +33 / -5 |
+| 40 | `ManagerStudentCaltholic/Controllers/FacilitiesController.cs` | Controller | +6 / -5 |
+| 41 | `ManagerStudentCaltholic/Controllers/GovernanceController.cs` | Controller | +54 / -0 |
+| 42 | `ManagerStudentCaltholic/Controllers/GradesController.cs` | Controller | +324 / -114 |
+| 43 | `ManagerStudentCaltholic/Controllers/HomeController.cs` | Controller | +18 / -4 |
+| 44 | `ManagerStudentCaltholic/Controllers/LessonPlansController.cs` | Controller | +110 / -98 |
+| 45 | `ManagerStudentCaltholic/Controllers/LogsController.cs` | Controller | +151 / -62 |
+| 46 | `ManagerStudentCaltholic/Controllers/LookupController.cs` | Controller | +92 / -20 |
+| 47 | `ManagerStudentCaltholic/Controllers/MassCampaignsController.cs` | Controller | +25 / -1 |
+| 48 | `ManagerStudentCaltholic/Controllers/ParentMessagesController.cs` | Controller | +55 / -13 |
+| 49 | `ManagerStudentCaltholic/Controllers/PublicRegistrationController.cs` | Controller | +228 / -107 |
+| 50 | `ManagerStudentCaltholic/Controllers/SacramentsController.cs` | Controller | +211 / -49 |
+| 51 | `ManagerStudentCaltholic/Controllers/StudentRegistrationsController.cs` | Controller | +12 / -12 |
+| 52 | `ManagerStudentCaltholic/Controllers/StudentsController.cs` | Controller | +59 / -14 |
+| 53 | `ManagerStudentCaltholic/Controllers/UsersController.cs` | Controller | +87 / -35 |
+
+#### Razor Views, Static JS & Repo Docs (`25` tệp)
+| STT | Đường dẫn | Tầng (Layer) | Số dòng (+/-) |
+|---|---|---|---|
+| 54 | `ManagerStudentCaltholic/Views/Attendance/Index.cshtml` | Razor View | +102 / -34 |
+| 55 | `ManagerStudentCaltholic/Views/Attendance/MonthlySummary.cshtml` | Razor View | +4 / -1 |
+| 56 | `ManagerStudentCaltholic/Views/Attendance/ScanQr.cshtml` | Razor View | +135 / -50 |
+| 57 | `ManagerStudentCaltholic/Views/Classes/Index.cshtml` | Razor View | +20 / -8 |
+| 58 | `ManagerStudentCaltholic/Views/Dashboard/Index.cshtml` | Razor View | +2 / -1 |
+| 59 | `ManagerStudentCaltholic/Views/Enrollments/Manage.cshtml` | Razor View | +19 / -2 |
+| 60 | `ManagerStudentCaltholic/Views/Facilities/Index.cshtml` | Razor View | +10 / -6 |
+| 61 | `ManagerStudentCaltholic/Views/Grades/Index.cshtml` | Razor View | +25 / -14 |
+| 62 | `ManagerStudentCaltholic/Views/LessonPlans/Index.cshtml` | Razor View | +54 / -30 |
+| 63 | `ManagerStudentCaltholic/Views/Lookup/Index.cshtml` | Razor View | +1 / -0 |
+| 64 | `ManagerStudentCaltholic/Views/Lookup/Result.cshtml` | Razor View | +21 / -11 |
+| 65 | `ManagerStudentCaltholic/Views/ParentMessages/Index.cshtml` | Razor View | +2 / -1 |
+| 66 | `ManagerStudentCaltholic/Views/Pwa/Index.cshtml` | Razor View | +17 / -6 |
+| 67 | `ManagerStudentCaltholic/Views/Sacraments/Evaluation.cshtml` | Razor View | +2 / -2 |
+| 68 | `ManagerStudentCaltholic/Views/Sacraments/Index.cshtml` | Razor View | +23 / -5 |
+| 69 | `ManagerStudentCaltholic/Views/Sacraments/PrintApprovalSheet.cshtml` | Razor View | +2 / -1 |
+| 70 | `ManagerStudentCaltholic/Views/Students/Index.cshtml` | Razor View | +79 / -12 |
+| 71 | `ManagerStudentCaltholic/Views/Users/Index.cshtml` | Razor View | +19 / -15 |
+| 72 | `ManagerStudentCaltholic/wwwroot/js/offline-attendance.js` | Static Asset / JS | +75 / -12 |
+| 73 | `ManagerStudentCaltholic/wwwroot/js/staff-student-lookup.js` | Static Asset / JS | +43 / -21 |
+| 74 | `.dockerignore` | Repo / Docker Config | +7 / -0 |
+| 75 | `.gitignore` | Repo / Git Config | +3 / -0 |
+| 76 | `README.md` | Documentation | +8 / -1 |
+| 77 | `docs/DOCKER-BUILD-DEPLOY.md` | Documentation | +24 / -1 |
+| 78 | `gemini.md` | Repo Playbook | +3 / -3 |
+
+*(Ghi chú: 2 tệp thuộc `AI-Knowledge/` đã được chỉnh sửa trước đó trong commit `997507f` gồm `AI-Knowledge/04-INTEGRATIONS/EXTERNAL-APIS.md` (+1/-1) và `AI-Knowledge/05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md` (+5/-4).)*
+
+### 1.3. Deleted (`4` tệp) & Renamed (`0` tệp)
+
+| STT | Đường dẫn đã xóa | Tầng (Layer) | Số dòng (-deleted) | Ghi chú |
+|---|---|---|---|---|
+| 1 | `KNOWLEDGE-ISSUES.jsonl` | Stale Root Knowledge | -14 | Gỡ bản sao lỗi thời ở root; bản chính nằm tại `AI-Knowledge/06-UPDATE-LOG/` |
+| 2 | `KNOWLEDGE-VALIDATION-REPORT.md` | Stale Root Knowledge | -86 | Gỡ bản sao lỗi thời ở root |
+| 3 | `REQUIRED-CORRECTIONS.md` | Stale Root Knowledge | -117 | Gỡ bản sao lỗi thời ở root |
+| 4 | `script/fix-db-1.txt` | Legacy Ad-hoc SQL | -52 | Gỡ tệp DDL cũ sai quy chuẩn tên; giữ nguyên `script/2026*.sql` và `script/seed-curriculum-data.sql` |
 
 ---
 
@@ -85,104 +148,129 @@
 
 ### 2.1. Class, Method, Property Mới
 
-#### Phân hệ Kế hoạch Lớp & Giáo án (`FEAT-P5-07`)
-- **`ManagerStudentCaltholic.Models.Entities.ClassCurriculumDocument`** (`Models/Entities/ClassCurriculumDocument.cs`):
-  - Đại diện tài liệu kế hoạch phân phối chương trình hiện hành theo lớp (`ClassRoomId`) và niên khóa (`AcademicYearId`).
-  - Các property chính: `Id`, `ClassRoomId`, `AcademicYearId`, `Title`, `Description`, `CurrentVersion`, `VersionNumber`, `ContentJson`, `LastAttachmentFileName`, `LastAttachmentFilePath`, `LastAttachmentFileSize`, `LastAttachmentContentType`, `CreatedBy`, `CreatedByUserId`, `CreatedAt`, `UpdatedBy`, `UpdatedByUserId`, `UpdatedAt`, `IsActive`, cùng navigation collections `Versions` và `LessonPlans`.
-- **`ManagerStudentCaltholic.Models.Entities.ClassCurriculumVersion`** (`Models/Entities/ClassCurriculumVersion.cs`):
-  - Lưu lịch sử từng phiên bản ngày sửa và bản chụp file `.xlsx` (`KeHoach_{Class}_{Version}_{YYYYMMDD}.xlsx`).
-  - Properties: `Id`, `ClassCurriculumDocumentId`, `VersionNumber`, `VersionTag`, `ChangeSummary`, `ContentJson`, `FileName`, `StoredFileName`, `FilePath`, `FileSize`, `ContentType`, `CreatedBy`, `CreatedByUserId`, `CreatedAt`.
-- **`ManagerStudentCaltholic.Models.DTOs` (`Models/DTOs/CurriculumDtos.cs`):**
-  - 5 DTO mới: `CurriculumItemDto`, `ClassCurriculumDocumentDto`, `ClassCurriculumVersionDto`, `SaveCurriculumRequestDto`, `CurriculumParseResultDto`.
-- **`ManagerStudentCaltholic.Models.ViewModels.LessonPlanWorkspaceViewModel`** (`Models/ViewModels/LessonPlansViewModel.cs`):
-  - ViewModel workspace kế hoạch lớp gồm `Classes`, `CurrentYear`, `SelectedClassId`, `CurriculumDocument`, `Versions`, `LegacyDocuments`.
-- **`ManagerStudentCaltholic.Interface.Services.IClassCurriculumService`** & **`ManagerStudentCaltholic.Services.ClassCurriculumService`**:
-  - 8 methods mới: `GetCurriculumByClassAsync`, `GetVersionsAsync`, `GetVersionDetailAsync`, `ParseUploadedCurriculumFileAsync`, `SaveCurriculumAsync`, `RollbackCurriculumAsync`, `ExportCurriculumToExcelAsync`, `GetVersionFileAsync`.
-- **`WebApplicationExtensions.SeedSampleCurriculumData`** (`Extensions/WebApplicationExtensions.cs`):
-  - Khởi tạo dữ liệu mẫu cho `ClassCurriculumDocuments` và `ClassCurriculumVersions` khi khởi động nếu bảng rỗng.
+#### Nhóm Helper Dùng chung (`ManagerStudentCaltholic.Services`)
+- **`VietnamTimeHelper`** (`Services/VietnamTimeHelper.cs:7-71`):
+  - Properties: `VietnamTimeZone`, `Now`, `Today`, `TodayUtcKind`.
+  - Methods: `ToVietnamTime(DateTime dt)`, `NormalizeBusinessDateUtcKind(DateTime date)`, `ResolveVietnamTimeZone()`.
+- **`AgeValidationHelper`** (`Services/AgeValidationHelper.cs:7-37`):
+  - Methods: `CalculateAgeAtDate(DateTime dateOfBirth, DateTime targetDate)`, `IsAtLeastAge(DateTime dateOfBirth, DateTime targetDate, int minimumYears = 18)`.
+- **`FileUploadSecurityHelper`** (`Services/FileUploadSecurityHelper.cs:8-186`):
+  - Methods: `HasValidPdfSignature`, `HasValidZipOoxmlSignature`, `HasValidOle2Signature`, `HasValidImageSignature`, `ValidateStreamMagicBytesAsync`, `ValidateHeaderBytes`, `ValidateFormFileMagicBytesAsync`, `GetSafeMimeType`, `TryResolveContainedPath`.
+- **`StaffSelfActionGuard`** (`Services/StaffSelfActionGuard.cs:9-30`):
+  - Methods: `GetLinkedStudentIdAsync(ParishDbContext context, long userId, CancellationToken cancellationToken = default)`, `IsSelfStudentAction(long? linkedStudentId, long targetStudentId)`.
 
-#### Phân hệ Điểm danh QR & HUD (`FEAT-P5-04`)
-- **`ManagerStudentCaltholic.Models.ViewModels.UndoScanRequestDto`** (`Models/ViewModels/AttendanceViewModels.cs`, dòng 108-117):
-  - Properties: `EnrollmentId`, `ClassId`, `StudentCode`, `AttendanceDate`, `ActivityType`, `SessionMode`.
-- **`IRedisAttendanceService.UndoScanCheckInAsync(UndoScanRequestDto dto)`** & **`RedisAttendanceService.UndoScanCheckInAsync(UndoScanRequestDto dto)`** (`Services/RedisAttendanceService.cs`, dòng 692-785):
-  - Thu hồi trạng thái điểm danh trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), đồng bộ reset bản ghi trong `Attendances` và `MassCampaignRecords`.
+#### Interface & Service Overloads / Methods Mới
+- **`IRedisAttendanceService`** (`Interface/Services/IRedisAttendanceService.cs:42,52,57,65`) & **`RedisAttendanceService`** (`Services/RedisAttendanceService.cs`):
+  - `ProcessQrCheckInViaRedisAsync(QrScanRequestDto request, ClaimsPrincipal? caller)` (`:817`)
+  - `UndoScanCheckInAsync(UndoScanRequestDto dto, ClaimsPrincipal? caller)` (`:1266`)
+  - `ExecuteWithPartitionsFlushLockAsync(...)` (`:1803`) & `FinalizePartitionsAfterExternalSyncAsync(...)` (`:1869`)
+  - Helpers nội bộ mới: `FlushSingleClassByIdCoreLockedAsync` (`:2483`), `ValidateCallerScanAccessAsync` (`:3104`), `CanCallerAccessClassAsync` (`:3136`), `EvaluateSessionCheckIn` (`internal static`, `:3230`), `RedisQrScanUndoMeta` (`private class`, `:3273`).
+- **`IStaffStudentLookupService`** (`Interface/Services/IStaffStudentLookupService.cs:12,13,17`) & **`StaffStudentLookupService`** (`Services/StaffStudentLookupService.cs`):
+  - `SearchStudentsQuickAsync(string keyword, ClaimsPrincipal caller, int limit = 8)` (`:59`)
+  - `CanCallerAccessStudentAsync(ClaimsPrincipal caller, long studentId)` (`:65`)
+  - `GetRecentLookupsAsync(long userId, ClaimsPrincipal caller, int limit = 5)` (`:713`)
+  - Private helpers: `ResolveCallerScopeAsync` (`:82`), `SearchStudentsQuickInternalAsync` (`:151`), `GetRecentLookupsInternalAsync` (`:719`).
+- **`IGradeCalculationService`** (`Interface/Services/IGradeCalculationService.cs:32`) & **`GradeCalculationService`** (`Services/GradeCalculationService.cs:98`):
+  - `EvaluateGradeFormula(string formulaExpression, Dictionary<string, decimal?> scores, IEnumerable<string>? allColumnCodes = null)`.
+- **`StudentExcelService`** (`Services/StudentExcelService.cs:300-407`):
+  - `ExportClassListToStreamAsync(int classId, Stream outputStream)` (`:300`), `BuildClassListWorkbookAsync` (`:307`).
+- **`BackgroundExportJobService`** (`Services/BackgroundExportJobService.cs:315-329`):
+  - Private records `ParishExportStudentRow` và `ParishAttendanceSummaryRow`.
+- **`LogRetentionBackgroundService`** (`Services/LogRetentionBackgroundService.cs:87-131`):
+  - Private method `CleanDirectory`.
+- **`SecurityExtensions`** (`Extensions/SecurityExtensions.cs:17-65`):
+  - `GetClientIpKey(HttpContext? httpContext)` (public static) và `ShouldBypassGlobalRateLimit(HttpContext httpContext)` (private static).
+- **`ServiceCollectionExtensions`** (`Extensions/ServiceCollectionExtensions.cs:63,121`):
+  - Overload `AddReverseProxyConfiguration(this IServiceCollection services, IConfiguration? configuration)` và private `TryParseIpNetwork`.
 
-#### Phân hệ Tuyển sinh Công khai (`PublicRegistration`)
-- **`ManagerStudentCaltholic.Models.ViewModels.PublicRegistrationResubmitDto`** (`Models/DTOs/PublicRegistrationSubmitDto.cs`, dòng 66-83):
-  - Kế thừa `PublicRegistrationSubmitDto`, bổ sung `Id`, `OriginalParentPhone`, `OriginalDateOfBirth`, `RejectionReason`, `ExistingCertificatePath`, `Status`, `CreatedAt`, `ReviewedAt`.
+#### DTOs & ViewModels Mới
+- `QrScanResponseDto.IsForbidden` (`bool`, `[JsonIgnore]`, `AttendanceViewModels.cs:144-145`)
+- `OfflineSyncItemDto.SessionMode` (`string?`, `AttendanceViewModels.cs:343`)
+- `StudentLookupRequestDto.WebsiteUrlHoneypot` (`string?`, `LookupViewModels.cs:25`)
+- `SubmitAttendanceDisputeRequestDto.WebsiteUrlHoneypot` (`string?`, `LookupViewModels.cs:217`)
+- `SubmitAbsenceRequestDto.WebsiteUrlHoneypot` (`string?`, `PrintingViewModels.cs:12`)
 
-#### Hạ tầng Cache (`RedisCacheService`)
-- **`ManagerStudentCaltholic.Services.RedisCacheService`** (`Services/RedisCacheService.cs`, dòng 15-22):
-  - Bổ sung cơ chế Circuit Breaker 30 giây (`CircuitBreakDuration`, `_circuitOpenUntilTicks`, `IsRedisCircuitOpen()`, `TripRedisCircuit()`) kết hợp đọc/ghi dự phòng trên `IMemoryCache` khi Redis ngoại tuyến.
+#### Unit Test Project Mới (`tests/ManagerStudentCaltholic.Tests/`)
+- `AgeValidationTests`, `GradeAndSacramentLogicTests`, `SecurityHelpersTests`, `VietnamTimeHelperTests` (`41` unit tests tổng cộng, dùng `xunit` + `Microsoft.EntityFrameworkCore.InMemory`).
 
 ---
 
 ### 2.2. Class, Method, Property Bị Sửa hoặc Xóa
-- **`ClassLessonPlan`** (`Models/Entities/ClassLessonPlan.cs`): Bổ sung `CurriculumDocumentId`, `CurriculumDocument`, `WeekNumber`, `Semester`.
-- **`QrScanRequestDto`** (`Models/ViewModels/AttendanceViewModels.cs`, dòng 75-76): Thêm `SessionMode`, `CampaignId`.
-- **`QrScanResponseDto`** (`AttendanceViewModels.cs`, dòng 95-104): Thêm `IsHistoricalCode`, `OldCode`, `CurrentCode`, `WarningMessage`, `EnrollmentId`, `ClassId`, `SessionMode`, `ScanDate`.
-- **`OfflineStudentCacheItemDto`** (`AttendanceViewModels.cs`, dòng 304): Thêm `HistoricalCodes` (`List<string>`).
-- **`CreateUserRequestDto`** (`Models/ViewModels/AuthViewModels.cs`, dòng 43-97): Chuẩn hóa setter trim chuỗi cho `ChristianName`, `Email`, `PhoneNumber`, `ManagedGradeLevel`; bắt buộc `ChristianName` với `[Required]`, nâng độ dài `LastName` cho phép lên 50 trên DTO; bỏ yêu cầu `ComplexityPattern` 8 ký tự trên `CreateUserRequestDto.Password` và `ResetPasswordRequestDto.NewPassword` (giảm về `[MinLength(6)]`).
-- **`BatchCreateTeachersRequestDto`** (`Models/ViewModels/BatchTeacherViewModels.cs`, dòng 25): Đổi `DefaultPassword` thành `string?`.
-- **`AccountController.Login`** (`Controllers/AccountController.cs`, dòng 144): Khi `model.RememberMe == true`, nâng `ExpiresUtc` từ `AddDays(7)` lên `AddDays(14)`.
-- **`AccountController.Profile`** (`Controllers/AccountController.cs`, dòng 295) & **`UpdateProfile`** (dòng 401): Bổ sung tham số `long? id = null` / `[Bind("Id,...")]`, cho phép `Admin`, `ExecutiveBoard`, `SpiritualDirector` xem hồ sơ GLV khác (`UpdateProfile` cho phép `Admin`, `ExecutiveBoard`), đặt `ViewBag.IsViewingOther` và `ViewBag.TargetUserId`.
-- **`UsersController.Create`** (`Controllers/UsersController.cs`, dòng 87) & **`ResetPassword`** (dòng 193): Tách chuỗi `LastName` thành họ đệm (`FirstName <= 100`) và tên chính (`LastName <= 10`), kiểm tra `ManagedGradeLevel` bắt buộc cho `BranchHead` và hỗ trợ gán `ManagedGradeLevel` cho cả `Teacher`, trả thông điệp lỗi chi tiết từ `ModelState`.
-- **`StudentsController.Create`** (`Controllers/StudentsController.cs`, dòng 245): Bổ sung gán `AcademicYearId = selectedClass.AcademicYearId` khi tạo `Enrollment` mới.
-- **`PwaController.Offline`** (`Controllers/PwaController.cs`, dòng 23): Sửa `return View();` thành `return View("Index");` khớp với `Views/Pwa/Index.cshtml`.
-- **`RedisAttendanceService.ProcessQrCheckInViaRedisAsync`** (`Services/RedisAttendanceService.cs`, dòng 382-687): Hỗ trợ `SessionMode`, tra cứu ngược thẻ mã cũ trong `StudentCodeHistories`, cache alias key lên Redis O(1), trả `IsHistoricalCode` / `WarningMessage`.
-- **`TokenService.GenerateRefreshToken`** (`Services/TokenService.cs`, dòng 79): Đổi fallback `RefreshTokenExpirationDays` từ `7` lên `14`.
-- **`FeatureNavigationService`** (`Services/FeatureNavigationService.cs`): Bổ sung cập nhật rule `ACD_ATTENDANCE_DIRECT` (`SortOrder = 2`) và thay thế động `{class_id}` trong `TargetUrl` bằng lớp được phân công mặc định của người dùng.
-- **`ServiceCollectionExtensions`** (`Extensions/ServiceCollectionExtensions.cs`): Đăng ký `IClassCurriculumService -> ClassCurriculumService` (dòng 89); nâng `ExpireTimeSpan` của `ParishSessionCookie` từ `TimeSpan.FromDays(7)` lên `TimeSpan.FromDays(14)` (dòng 154); thêm cấu hình `DataProtection().SetApplicationName("ManagerStudentCaltholic").PersistKeysToFileSystem(...)` tại `AddStrictSecurityConfigurations` (dòng 250-259).
+
+- **Thay đổi chữ ký Interface (Breaking signature):**
+  - `IClassCurriculumService.GetVersionFileAsync(long versionId)` (`IClassCurriculumService.cs:46`) & `ClassCurriculumService.GetVersionFileAsync` (`:597`) đổi kiểu trả về từ `Task<(byte[] FileBytes, string ContentType, string DownloadFileName)?>` sang `Task<(Stream FileStream, string ContentType, string DownloadFileName)?>`.
+- **Thay đổi Options mặc định (commit `997507f`):**
+  - `GoogleDriveOptions`: `Enabled` mặc định `true` ➔ `false` (`:7`), `ServiceAccountKeyPath` mặc định `"/app/secrets/google-service-account.json"` ➔ `string.Empty` (`:8`).
+  - `DriveLogUploadOptions`: `Enabled` mặc định `true` ➔ `false` (`:7`).
+- **Xóa helper nội bộ cũ thay bằng helper dùng chung:**
+  - `DriveLogUploadService.GetVietnamTimeZone()` đã xóa (thay bằng `VietnamTimeHelper.VietnamTimeZone`).
+  - `LessonPlansController.HasValidMagicBytesAsync` và `PublicRegistrationController.IsValidMagicBytesAsync` đã xóa (thay bằng `FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync`).
+  - `StudentViewModel.CalculateAgeAtDate` (`:73-74`) sửa công thức trừ năm gây lệch ngày 29/02 sang gọi `AgeValidationHelper.CalculateAgeAtDate`.
+- **Sửa logic bảo mật, đồng thời & hiệu năng cốt lõi:**
+  - `GoogleDriveStorageService`: đổi `ConcurrentDictionary<string, SemaphoreSlim> FolderLocks` không giới hạn thành mảng khóa phân dải cố định `64` phần tử (`FolderLockStripes`), chặn giới hạn `MaxUploadBytes = 30 MB` khi spool.
+  - `DriveLogUploadService`: xóa bù file log cục bộ đã verified nếu `DeleteLocalAfterVerifiedUpload == true`, bỏ qua file `> 200 MB`, áp dụng `RetryDelaySeconds`.
+  - `LogRetentionBackgroundService`: sửa đăng ký DI bị trùng thành 1 singleton duy nhất, bổ sung dọn file tạm `> 2 giờ` tại `PrivateUploads/tmp_logs` và `PrivateUploads/cloud_tmp`.
+  - `GradeCalculationService` & `ClassEvaluationService`: không ép `null` thành `0.0` trong `EvaluateGradeFormula`; làm tròn `MidpointRounding.AwayFromZero`; chặn trọng số âm / tổng trọng số `<= 0`; bọc giao dịch `CreateExecutionStrategy()` + kiểm tra `IsGradeLocked` & `AcademicYear.IsCurrent`.
+  - `SacramentEvaluationService` & `PromotionEvaluationService`: sửa lỗi chia cho `0` (`NaN`) khi lớp có `0` buổi Chúa Nhật; đồng nhất hằng `AttendanceStatus.AbsentPermitted` + `LinedUp` + đếm phiên Chúa Nhật.
+  - `AttendanceDisputeService`: gộp 4 thông báo lỗi xác thực thành 1 thông báo chung `GenericParentVerificationFailedMessage`; chặn `ProbationaryTeacher` ca chiều & tự duyệt đơn qua `StaffSelfActionGuard`.
+  - `GradePermissionService` & `MassCampaignService`: bổ sung fail-closed `BranchHead`, lọc `AcademicYearId`, chặn `ProbationaryTeacher` ca chiều, và chặn tự điểm danh `LinkedStudentId` trong `MassCampaignService`.
 
 ---
 
 ### 2.3. Thay đổi Controller, Route, Action
 
-| Controller | Action | HTTP Method & Route | Thay đổi |
-|---|---|---|---|
-| `AttendanceController` | `ScanQr()` | `GET /Attendance/ScanQr` | Gợi ý `ViewBag.RecommendedSessionMode` theo ngày/giờ VN |
-| `AttendanceController` | `UndoScanCheckIn` | `POST /Attendance/UndoScanCheckIn` | **Mới:** Hoàn tác lượt quét QR trong 5 giây (`UndoScanRequestDto`) |
-| `AttendanceController` | `GetOfflineStudentCache` | `GET /Attendance/GetOfflineStudentCache` | Bổ sung `HistoricalCodes` từ `StudentCodeHistories` |
-| `LessonPlansController` | `ParseCurriculumFile` | `POST /LessonPlans/ParseCurriculumFile` | **Mới:** Phân tích file kế hoạch `.xlsx/.docx/.csv/.md/.pdf` |
-| `LessonPlansController` | `SaveCurriculum` | `POST /LessonPlans/SaveCurriculum` | **Mới:** Lưu phiên bản kế hoạch mới & sinh `.xlsx` |
-| `LessonPlansController` | `GetVersionDetail` | `GET /LessonPlans/GetVersionDetail/{versionId:long}` | **Mới:** Xem chi tiết tuần học của một phiên bản |
-| `LessonPlansController` | `DownloadCurriculumVersion` | `GET /LessonPlans/DownloadCurriculumVersion/{versionId:long}` | **Mới:** Tải file `.xlsx` theo phiên bản |
-| `LessonPlansController` | `ExportCurrentCurriculumExcel` | `GET /LessonPlans/ExportCurrentCurriculumExcel` | **Mới:** Xuất Excel kế hoạch hiện hành |
-| `LessonPlansController` | `RollbackCurriculum` | `POST /LessonPlans/RollbackCurriculum` | **Mới:** Khôi phục kế hoạch về phiên bản cũ |
-| `PublicRegistrationController` | `Resubmit` | `GET /PublicRegistration/Resubmit` | **Mới:** Form bổ sung & nộp lại hồ sơ bị từ chối |
-| `PublicRegistrationController` | `SubmitResubmit` | `POST /PublicRegistration/SubmitResubmit` | **Mới:** Lưu dữ liệu + tệp Giấy Rửa Tội thay thế |
-| `AccountController` | `Profile` | `GET /Account/Profile?id={id}` | Mở rộng tham số `id` cho phép Admin/BĐH/Cha xem hồ sơ GLV |
-| `PwaController` | `Offline` | `GET /Offline` | Sửa `return View("Index")` để render `Views/Pwa/Index.cshtml` |
+- **Route mới (`Program.cs:216`):**
+  - `GET /health` (`[AllowAnonymous]`) trả `{ status = "healthy" }` phục vụ Docker `HEALTHCHECK` và bypass `GlobalLimiter`.
+- **Thay đổi phân quyền & phản hồi HTTP trên Controllers:**
+  - `HomeController`: gắn `[Authorize(Policy = "RequireStaff")]` cho `StaffSearchSuggestions`, `StaffStudentLookup`, `StaffRecentLookups`, `StaffLookupOptions`; trả `403` khi `CanCallerAccessStudentAsync` = `false`; `Index` ẩn widget lookup với `UserRole.Parent`.
+  - `CloudMediaController`: `File` (`GET /CloudMedia/File/{id:long}`) thêm header `Content-Security-Policy: sandbox` cho `.pdf`, ép `attachment` cho `ABSENCE_DOC`; `CanAccessMediaAsync` khóa quyền `AVATAR` (`Student` theo `CanStaffAccessStudentAsync`, `User` theo `CanStaffAccessUserAvatarAsync`), lọc `AcademicYear.IsCurrent` và chặn `ProbationaryTeacher` ca chiều.
+  - `ClassesController`: `GetAvailableTeachers` siết thành `[Authorize(Roles = "Admin,SpiritualDirector,ExecutiveBoard,BranchHead")]`; `GetTeachers` trả `403` nếu không thuộc lớp; `AssignTeacher` chặn gán `UserRole.Parent`; `Index` fail-closed cho `BranchHead` rỗng khối.
+  - `AttendanceController`: `ScanCheckIn`, `UndoScanCheckIn`, `SaveBatch`, `QuickUpdateSingle`, `GetAuditHistory`, `GetClassRule`, `SaveClassRule`, `GetClassDisputes`, `ReviewDispute`, `SyncOfflineQueue`, `Statistics`, `ExportStatisticsExcel`, `MonthlySummary`, `ExportMonthlySummaryExcel` đồng loạt siết scope (fail-closed `BranchHead`, `AcademicYearId`, chặn `ProbationaryTeacher` ca chiều, chặn `StaffSelfActionGuard` `403`, idempotency `ATT:OFFLINE:IDEMP:*` và xử lý trùng PostgreSQL `23505`).
+  - `GradesController`: `SaveSingleCell`, `AddCustomColumn`, `DeleteCustomColumn`, `SubmitClassEvaluation` kiểm tra `IsGradeLocked` & `IsCurrent` trong transaction, trả `403` khi vi phạm hoặc tự chấm điểm.
+  - `SacramentsController`: thêm `ValidateBranchHeadScopeAsync` (kiểm tra `batchId` và `grade` allow-list `CanonicalEvaluationGrades`) trên `Evaluation`, `SaveApprovalBatch`, `ExportApprovalExcel`, `PrintApprovalSheet`; `Index` trả `Forbid()` khi `classId` ngoài phạm vi.
+  - `LessonPlansController`: fail-closed khi `ClassRoom == null` trên `GetVersionDetail`, `DownloadCurriculumVersion`, `ExportCurrentCurriculumExcel`, `DeleteDocument`; `DownloadCurriculumVersion` stream trực tiếp từ `Stream`; `DownloadDocument` dùng `TryResolveContainedPath` + `FileStream`.
+  - `LookupController`: đổi lockout sang `ICacheService` (`lookup:fail:ip:*` và `lookup:fail:ip_code:*`), thêm `WebsiteUrlHoneypot` (`400`) và lockout trên `SubmitDispute` (`429`).
+  - `AbsenceController`: thêm Redis lockout trên `SubmitRequest`/`SubmitRequestWithFile` (`429`), gộp lỗi chung chống enumeration, giới hạn 5 đơn chờ & chống nộp trùng, kiểm tra cửa sổ ngày `[Today-7, Today+60]`, `Review` trả `403` nếu tự duyệt.
+  - `PublicRegistrationController` & `StudentRegistrationsController`: thêm lockout `pubreg:fail:*` (`429`) trên `CheckStatus`/`Resubmit`/`SubmitResubmit`/`ViewOwnCertificate`, re-encode JPG/PNG sang WebP qua `IImageOptimizationService`, dùng `PhysicalFile` + `Content-Security-Policy: sandbox` khi trả chứng nhận.
+  - `BackgroundJobsController`: `DownloadExport` dùng `TryResolveContainedPath` + `PhysicalFile`.
+  - `LogsController`: `ParseLogFileEntriesAsync` giới hạn đọc 5 MB cuối / tối đa 5.000 dòng / 64 KB stack trace bằng `StringBuilder`.
+  - `AccountController`, `StudentsController`, `UsersController`, `GovernanceController`: đồng bộ ràng buộc `>= 18` tuổi (cả khi tạo `Teacher` ở `UsersController` và nâng cấp ở `GovernanceController`), chặn non-Leadership tự đổi `DateOfBirth`/`CatechistPromiseDate`, đồng bộ ngược sang `LinkedUser`, kiểm tra magic bytes `.xlsx` khi import.
+  - `DashboardController`, `FacilitiesController`, `MassCampaignsController`, `ParentMessagesController`: chuẩn hóa allow-list `gradeLevel`, giờ Việt Nam `VietnamTimeHelper`, và mã lỗi `403` cho vi phạm quyền/tự điểm danh chiến dịch.
 
 ---
 
 ### 2.4. Thay đổi Razor View & Static Assets
-- **Tuyển sinh Công khai:** Thêm mới `Views/PublicRegistration/Resubmit.cshtml`; cập nhật `CheckStatus.cshtml` (nút mở màn hình nộp lại hồ sơ), `Index.cshtml`, `Success.cshtml`.
-- **Điểm danh & Quét QR (`FEAT-P5-04`):** Thiết kế lại `Views/Attendance/ScanQr.cshtml` (Viewfinder HUD, Torch/Flip/Zoom, Session Quick-Switcher, Recent Scans Drawer, nút Hoàn tác 5s), cập nhật `wwwroot/js/offline-attendance.js` (`undoOfflineQrScan`, hỗ trợ `HistoricalCodes` & `sessionMode`), dọn phần tử trùng lặp trong `Views/Attendance/Index.cshtml`.
-- **Giáo án (`FEAT-P5-07`):** Thiết kế lại `Views/LessonPlans/Index.cshtml` với 3 tab (Trình biên tập tuần trực tuyến, Lịch sử phiên bản ngày sửa, Tài liệu giáo án bổ trợ).
-- **Tài khoản & Bảo mật:** Cập nhật `Views/Account/Login.cshtml` (`Duy trì đăng nhập (14 ngày)`), `Views/Account/AccessDenied.cshtml` (hỗ trợ Mobile UI & gọi `clearCacheOnLogout()`), `Views/Account/Profile.cshtml` và `Views/Users/Index.cshtml` (cho phép Admin bấm xem/sửa hồ sơ GLV, chuẩn hóa modal tạo user).
-- **Sửa lỗi Razor/JS & Mobile UI:**
-  - `Views/Grades/Index.cshtml`: Đưa `#modalClassEvaluation` ra khỏi `@section Scripts` về khối HTML hợp lệ.
-  - `Views/Promotion/Index.cshtml`: Xóa đoạn JS thừa tham chiếu `decisions` chưa khai báo ở top-level.
-  - `Views/Students/Index.cshtml`: Xóa modal `#createStudentModal` và `#editStudentModal` trùng lặp.
-  - `Views/Shared/_Layout.cshtml`, `_LayoutMobileHeader.cshtml`, `_LayoutMobileBottomNav.cshtml`, `Views/Lookup/Result.cshtml`, `Views/Home/Index.cshtml`, `_GuideAcademic.cshtml`, `wwwroot/css/mobile-layout.css`.
+
+- **Chống XSS (18 Razor Views & 2 JS):**
+  - Loại bỏ `@Html.Raw` chứa dữ liệu động trong JS tại `Views/Attendance/Index.cshtml`, `Views/Dashboard/Index.cshtml` (dùng `data-grade`), `Views/Lookup/Result.cshtml` (dùng `@Json.Serialize`), `Views/Sacraments/Evaluation.cshtml`.
+  - Escape HTML / dùng `createElement` + `textContent` / thay inline `onclick` bằng `data-*` + `addEventListener` tại `Views/Attendance/Index.cshtml`, `ScanQr.cshtml`, `Classes/Index.cshtml`, `Enrollments/Manage.cshtml`, `Facilities/Index.cshtml`, `Grades/Index.cshtml`, `LessonPlans/Index.cshtml`, `Pwa/Index.cshtml`, `Sacraments/Index.cshtml`, `Students/Index.cshtml`, `Users/Index.cshtml`, và `wwwroot/js/staff-student-lookup.js`.
+- **Honeypot & Giao diện Công khai:**
+  - `Views/Lookup/Index.cshtml` & `Views/Lookup/Result.cshtml`: thêm trường ẩn `WebsiteUrlHoneypot` cho form tra cứu, phản ánh và đơn nghỉ phép.
+- **Múi giờ Local & Offline Sync (`offline-attendance.js`, `ScanQr.cshtml`):**
+  - Thay `new Date().toISOString().split('T')[0]` bằng ngày local `YYYY-MM-DD` tại `Attendance/Index.cshtml`, `LessonPlans/Index.cshtml`, `Sacraments/Index.cshtml`, `Students/Index.cshtml`, và `offline-attendance.js` (`formatLocalDateYyyyMmDd`).
+  - `offline-attendance.js`: nâng IndexedDB `DB_VERSION = 2` (chuyển `by_enrollmentId` sang `{ unique: false }` hỗ trợ mã cũ), chỉ xóa bản ghi có mặt trong `data.syncedClientIds`, kiểm tra `store.get` khi hoàn tác offline; `ScanQr.cshtml` tắt Undo khi `isDuplicate === true` và fallback sang `/Attendance/UndoScanCheckIn` nếu offline đã tự đồng bộ.
 
 ---
 
 ### 2.5. Thay đổi SQL & Database Schema
-- **`ManagerStudentCaltholic/Data/ParishDbContext.cs`** (+32/-0 dòng):
-  - Bổ sung 2 `DbSet`: `ClassCurriculumDocuments`, `ClassCurriculumVersions`.
-  - Cấu hình Fluent API bảng `"ClassCurriculumDocuments"` (FKs `Classes`, `AcademicYears`, `Users`; Indexes `(ClassRoomId, AcademicYearId)`, `AcademicYearId`).
-  - Cấu hình Fluent API bảng `"ClassCurriculumVersions"` (FKs `ClassCurriculumDocuments`, `Users`; Indexes `(ClassCurriculumDocumentId, VersionNumber)`, `CreatedAt`).
-  - Cập nhật `ClassLessonPlans`: thêm FK `CurriculumDocumentId` -> `ClassCurriculumDocuments` (`DeleteBehavior.SetNull`) và index trên `CurriculumDocumentId`.
-- **Thông tin thiếu (`NEEDS_VERIFICATION`):** Thư mục `ManagerStudentCaltholic/Migrations/` hiện rỗng; chưa thấy file EF Core Migration mới tương ứng với 2 bảng `ClassCurriculumDocuments` / `ClassCurriculumVersions` trong repository. Có tệp untracked `script/seed-curriculum-data.sql` và logic seed code `WebApplicationExtensions.SeedSampleCurriculumData`.
+
+- **Xác nhận qua `git diff --name-status e183ccd..HEAD`:**
+  - **Không có thay đổi nào** đối với Entity (`Models/Entities/`), `Data/ParishDbContext.cs`, `Migrations/`, hay thêm tệp `.sql` mới trong `e183ccd..HEAD`.
+  - Thay đổi duy nhất liên quan `script/` là xóa tệp cũ `script/fix-db-1.txt` (do không theo quy chuẩn tên `{yyyyMMdd}_*.sql` và dùng schema snake_case cũ).
+  - *(Lưu ý từ khoảng nền `2a3263d..e183ccd`: Các thay đổi schema của Phase 6 & `FEAT-P5-08` nằm trong 3 script SQL ở `script/20261120_*.sql`, `script/20261123_*.sql` và đã được phản ánh vào `02-DATABASE/` ở lần cập nhật `4589783`; thư mục `ManagerStudentCaltholic/Migrations/` hiện vẫn trống).*
 
 ---
 
 ### 2.6. Thay đổi API, Integration & Configuration
-- **Thời hạn Token & Cookie (14 ngày):**
-  - `appsettings.json` (dòng 25) & `appsettings.Development.json` (dòng 26): Đổi `"RefreshTokenExpirationDays"` từ `7` lên `14`.
-- **Serilog (`Extensions/LoggingExtensions.cs`):** Ghi đè mức log của `Microsoft.AspNetCore.Antiforgery` thành `LogEventLevel.Fatal`.
-- **Docker & Nginx (`Dockerfile`, `docker-compose.yml`):**
-  - Tạo thư mục `/app/dataprotection-keys` trong image và mount Docker volume `dataprotection_keys:/app/dataprotection-keys` để bảo toàn Cookie/Antiforgery keys qua các lần restart container.
-  - Bổ sung service `nginx` (reverse proxy) phụ thuộc `app` trong `docker-compose.yml` (cùng tệp untracked `nginx/default.conf`).
+
+- **Rate Limiting & Reverse Proxy (`Program.cs`, `SecurityExtensions.cs`, `ServiceCollectionExtensions.cs`, `appsettings.json`):**
+  - Thêm mục `ReverseProxy` vào `appsettings.json` (`ForwardLimit: 1`, `KnownProxies: ["127.0.0.1", "::1"]`, `KnownNetworks: ["172.16.0.0/12"]`) thay cho dải RFC198 rộng trước đó.
+  - Chuẩn hóa IPv4-mapped IPv6 và bật `GlobalLimiter` (`200 req/min/IP`), bypass `/health`, tài nguyên tĩnh và `/Attendance/ScanCheckIn`.
+- **Google Drive & Redis Defaults (`appsettings.json`, `GoogleDriveOptions`, `DriveLogUploadOptions`, `Program.cs`):**
+  - Đặt `ConnectionStrings:RedisConnection = ""` trong `appsettings.json` (tránh fallback về `localhost:6379` trong container khi thiếu biến môi trường).
+  - Đặt `GoogleDrive:Enabled = false`, `GoogleDrive:ServiceAccountKeyPath = ""`, `DriveLogUpload:Enabled = false`.
+  - Bổ sung cảnh báo khởi động ở môi trường non-Development khi DB connection dùng `Trust Server Certificate=true` hoặc thiếu `SSL Mode=`, hoặc Redis connection thiếu `password=`.
+- **Docker, Gitignore & Tài liệu (`Dockerfile`, `.gitignore`, `.dockerignore`, `README.md`, `docs/DOCKER-BUILD-DEPLOY.md`, `gemini.md`):**
+  - `Dockerfile`: thêm `HEALTHCHECK` gọi `http://127.0.0.1:8080/health`.
+  - `.gitignore` & `.dockerignore`: bổ sung `*service-account*.json`, `credentials*.json`, `*.jks`; `.dockerignore` loại thêm `**/scripts`, `ManagerStudentCaltholic/scripts`, `tests`, `**/tests`.
+  - Thống nhất tên service Docker Compose là `dotnet_app` trong `README.md`, `docs/DOCKER-BUILD-DEPLOY.md` và `gemini.md` (§7.3).

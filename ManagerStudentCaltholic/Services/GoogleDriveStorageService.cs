@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Text;
 using Google;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Download;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
@@ -658,7 +660,8 @@ namespace ManagerStudentCaltholic.Services
             }
 
             var resolvedKeyPath = ResolveConfiguredPath(_options.ServiceAccountKeyPath, string.Empty);
-            bool isKeyFound = !string.IsNullOrWhiteSpace(resolvedKeyPath) && File.Exists(resolvedKeyPath);
+            bool isOAuthConfigured = HasOAuthCredentials();
+            bool isKeyFound = isOAuthConfigured || (!string.IsNullOrWhiteSpace(resolvedKeyPath) && File.Exists(resolvedKeyPath));
             bool isRootConfigured = !string.IsNullOrWhiteSpace(_options.RootFolderId)
                 || !string.IsNullOrWhiteSpace(_options.SharedDriveId);
 
@@ -759,6 +762,11 @@ namespace ManagerStudentCaltholic.Services
             ProxyUrl = $"/CloudMedia/File/{f.Id}"
         };
 
+        private bool HasOAuthCredentials() =>
+            !string.IsNullOrWhiteSpace(_options.OAuthClientId)
+            && !string.IsNullOrWhiteSpace(_options.OAuthClientSecret)
+            && !string.IsNullOrWhiteSpace(_options.OAuthRefreshToken);
+
         private bool TryGetDriveService(out DriveService? driveService, out string? unavailableReason)
         {
             driveService = null;
@@ -770,9 +778,62 @@ namespace ManagerStudentCaltholic.Services
                 return false;
             }
 
+            // 1. Ưu tiên OAuth2 Refresh Token (hỗ trợ Gmail cá nhân @gmail.com dùng dung lượng Drive của chủ tài khoản)
+            if (HasOAuthCredentials())
+            {
+                try
+                {
+                    var oauthCacheKey = $"oauth:{_options.OAuthClientId.Trim()}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(_options.OAuthRefreshToken.Trim())))}";
+                    lock (ServiceCacheLock)
+                    {
+                        if (_cachedDriveService != null
+                            && string.Equals(_cachedKeyPath, oauthCacheKey, StringComparison.Ordinal))
+                        {
+                            driveService = _cachedDriveService;
+                            return true;
+                        }
+
+                        var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+                        {
+                            ClientSecrets = new ClientSecrets
+                            {
+                                ClientId = _options.OAuthClientId.Trim(),
+                                ClientSecret = _options.OAuthClientSecret.Trim()
+                            },
+                            Scopes = new[] { DriveService.Scope.Drive }
+                        });
+
+                        var token = new TokenResponse
+                        {
+                            RefreshToken = _options.OAuthRefreshToken.Trim()
+                        };
+
+                        var credential = new UserCredential(flow, "parish-drive-user", token);
+                        var createdService = new DriveService(new BaseClientService.Initializer
+                        {
+                            HttpClientInitializer = credential,
+                            ApplicationName = "ManagerStudentCaltholic"
+                        });
+
+                        _cachedDriveService = createdService;
+                        _cachedKeyPath = oauthCacheKey;
+                        _cachedKeyWriteTimeUtc = DateTime.MinValue;
+                        driveService = createdService;
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Không thể khởi tạo Google DriveService qua OAuth2 Refresh Token.");
+                    unavailableReason = $"Lỗi khởi tạo Google Drive OAuth2: {ex.Message}";
+                    return false;
+                }
+            }
+
+            // 2. Dự phòng Service Account JSON (dùng cho Google Workspace Shared Drive)
             if (string.IsNullOrWhiteSpace(_options.ServiceAccountKeyPath))
             {
-                unavailableReason = "Chưa cấu hình đường dẫn Service Account key (GoogleDrive:ServiceAccountKeyPath).";
+                unavailableReason = "Chưa cấu hình OAuth2 Refresh Token hoặc Service Account key (GoogleDrive).";
                 return false;
             }
 
