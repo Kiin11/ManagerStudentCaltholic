@@ -5,6 +5,7 @@ using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -46,28 +47,52 @@ namespace ManagerStudentCaltholic.Controllers
         /// <summary>
         /// SEC-NEW-05 FIX: Kiểm tra người dùng hiện tại có thẩm quyền quản lý tài liệu của lớp hay không
         /// </summary>
-        private async Task<bool> CanManageClassLessonAsync(ClassRoom targetClass)
+        private async Task<bool> CanManageClassLessonAsync(ClassRoom? targetClass)
         {
+            if (targetClass == null) return false;
             if (IsLeadership) return true;
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
+
+            var currentYearId = await _context.AcademicYears
+                .AsNoTracking()
+                .Where(y => y.IsCurrent)
+                .Select(y => y.Id)
+                .FirstOrDefaultAsync();
 
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return false;
+                }
+
+                if ((currentYearId == 0 || targetClass.AcademicYearId == currentYearId) &&
+                    string.Equals(targetClass.GradeLevel?.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
             }
 
+            if (CurrentUserId <= 0) return false;
+
             return await _context.ClassTeachers
-                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id &&
+                                ct.UserId == CurrentUserId &&
+                                ct.AcademicYearId == targetClass.AcademicYearId &&
+                                (currentYearId == 0 || ct.AcademicYearId == currentYearId));
         }
 
         [HttpGet]
         public async Task<IActionResult> Index(int? classRoomId)
         {
-            var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
+            var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
             var yearId = currentYear?.Id ?? 0;
 
             var classesQuery = _context.Classes.Where(c => c.AcademicYearId == yearId);
@@ -78,13 +103,26 @@ namespace ManagerStudentCaltholic.Controllers
                 if (User.IsInRole(UserRole.BranchHead))
                 {
                     var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                    classesQuery = !string.IsNullOrWhiteSpace(managedGrade)
-                        ? classesQuery.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId))
-                        : classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId));
+                    if (string.IsNullOrWhiteSpace(managedGrade))
+                    {
+                        classesQuery = classesQuery.Where(_ => false);
+                    }
+                    else
+                    {
+                        var trimmedGrade = managedGrade.Trim();
+                        classesQuery = classesQuery.Where(c =>
+                            c.GradeLevel == trimmedGrade ||
+                            c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId));
+                    }
+                }
+                else if (User.IsInRole(UserRole.Teacher) || User.IsInRole(UserRole.ProbationaryTeacher))
+                {
+                    classesQuery = classesQuery.Where(c =>
+                        c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId && ct.AcademicYearId == yearId));
                 }
                 else
                 {
-                    classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == CurrentUserId));
+                    classesQuery = classesQuery.Where(_ => false);
                 }
             }
 
@@ -92,6 +130,13 @@ namespace ManagerStudentCaltholic.Controllers
                 .OrderBy(c => c.GradeLevel).ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
+
+            if (!IsLeadership && User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                classes = classes
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
 
             if (classRoomId.HasValue && !classes.Any(c => c.Id == classRoomId.Value))
             {
@@ -222,7 +267,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (ver == null) return NotFound(new { success = false, message = "Không tìm thấy phiên bản." });
 
-            if (ver.CurriculumDocument?.ClassRoom != null && !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
+            if (ver.CurriculumDocument?.ClassRoom == null || !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
             {
                 return Forbid();
             }
@@ -245,7 +290,7 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (ver == null) return NotFound("Không tìm thấy phiên bản yêu cầu.");
 
-            if (ver.CurriculumDocument?.ClassRoom != null && !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
+            if (ver.CurriculumDocument?.ClassRoom == null || !await CanManageClassLessonAsync(ver.CurriculumDocument.ClassRoom))
             {
                 return Forbid();
             }
@@ -253,7 +298,7 @@ namespace ManagerStudentCaltholic.Controllers
             var fileResult = await _curriculumService.GetVersionFileAsync(versionId);
             if (fileResult == null) return NotFound("Tệp đính kèm không tồn tại.");
 
-            return File(fileResult.Value.FileBytes, fileResult.Value.ContentType, fileResult.Value.DownloadFileName);
+            return File(fileResult.Value.FileStream, fileResult.Value.ContentType, fileResult.Value.DownloadFileName);
         }
 
         /// <summary>
@@ -267,15 +312,26 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == documentId);
 
-            if (doc == null || doc.ClassRoom == null) return NotFound("Không tìm thấy tài liệu kế hoạch.");
+            if (doc == null) return NotFound("Không tìm thấy tài liệu kế hoạch.");
 
-            if (!await CanManageClassLessonAsync(doc.ClassRoom))
+            if (doc.ClassRoom == null || !await CanManageClassLessonAsync(doc.ClassRoom))
             {
                 return Forbid();
             }
 
-            var fileResult = await _curriculumService.ExportCurriculumToExcelAsync(documentId, versionId);
-            return File(fileResult.FileBytes, fileResult.ContentType, fileResult.DownloadFileName);
+            try
+            {
+                var fileResult = await _curriculumService.ExportCurriculumToExcelAsync(documentId, versionId);
+                return File(fileResult.FileBytes, fileResult.ContentType, fileResult.DownloadFileName);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (FileNotFoundException)
+            {
+                return NotFound("Không tìm thấy phiên bản kế hoạch.");
+            }
         }
 
         /// <summary>
@@ -315,49 +371,8 @@ namespace ManagerStudentCaltholic.Controllers
         // LEGACY DOCUMENT MANAGEMENT (ClassLessonDocuments)
         // =========================================================================
 
-        private static async Task<bool> HasValidMagicBytesAsync(IFormFile file, string ext)
-        {
-            if (file.Length < 4) return false;
-
-            byte[] header = new byte[8];
-            await using var stream = file.OpenReadStream();
-            int bytesRead = 0;
-            while (bytesRead < header.Length)
-            {
-                int read = await stream.ReadAsync(header.AsMemory(bytesRead, header.Length - bytesRead));
-                if (read == 0) break;
-                bytesRead += read;
-            }
-            if (bytesRead < 4) return false;
-
-            return ext switch
-            {
-                ".pdf" => header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46,
-                ".docx" or ".xlsx" => header[0] == 0x50 && header[1] == 0x4B && header[2] == 0x03 && header[3] == 0x04,
-                ".doc" or ".xls" => bytesRead >= 8 &&
-                                    header[0] == 0xD0 && header[1] == 0xCF && header[2] == 0x11 && header[3] == 0xE0 &&
-                                    header[4] == 0xA1 && header[5] == 0xB1 && header[6] == 0x1A && header[7] == 0xE1,
-                _ => false
-            };
-        }
-
-        private static string ResolveLessonDocumentContentType(string ext, string? rawContentType)
-        {
-            if (!string.IsNullOrWhiteSpace(rawContentType) && rawContentType.Trim().Length <= 100)
-            {
-                return rawContentType.Trim();
-            }
-
-            return ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ".doc" => "application/msword",
-                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                ".xls" => "application/vnd.ms-excel",
-                _ => "application/octet-stream"
-            };
-        }
+        private static string ResolveLessonDocumentContentType(string ext, string? _ = null)
+            => FileUploadSecurityHelper.GetSafeMimeType(ext);
 
         private static string TruncateValue(string value, int maxLength)
             => value.Length <= maxLength ? value : value[..maxLength];
@@ -375,16 +390,8 @@ namespace ManagerStudentCaltholic.Controllers
 
         private static void DeleteLegacyFileIfContained(string rootDirectory, string safeStoredName)
         {
-            if (string.IsNullOrWhiteSpace(safeStoredName)) return;
-
-            var fullRoot = Path.GetFullPath(rootDirectory);
-            if (!fullRoot.EndsWith(Path.DirectorySeparatorChar))
-            {
-                fullRoot += Path.DirectorySeparatorChar;
-            }
-
-            var physicalPath = Path.GetFullPath(Path.Combine(fullRoot, safeStoredName));
-            if (physicalPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(physicalPath))
+            if (FileUploadSecurityHelper.TryResolveContainedPath(rootDirectory, safeStoredName, out var physicalPath)
+                && System.IO.File.Exists(physicalPath))
             {
                 try { System.IO.File.Delete(physicalPath); } catch { }
             }
@@ -411,9 +418,9 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = $"Dung lượng file vượt quá giới hạn {maxMb:0.#} MB." });
                 }
 
-                var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                var ext = Path.GetExtension(Path.GetFileName(file.FileName)).ToLowerInvariant();
                 var allowedExtensions = new[] { ".pdf", ".docx", ".doc", ".xlsx", ".xls" };
-                if (!allowedExtensions.Contains(ext) || !await HasValidMagicBytesAsync(file, ext))
+                if (!allowedExtensions.Contains(ext) || !await FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync(file, ext))
                 {
                     return Json(new { success = false, message = "Định dạng hoặc cấu trúc tệp không hợp lệ! Chỉ chấp nhận tệp chuẩn .pdf, .docx, .doc, .xlsx, .xls." });
                 }
@@ -437,8 +444,8 @@ namespace ManagerStudentCaltholic.Controllers
                     safeOriginalName = $"lesson_plan{ext}";
                 }
 
-                var storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
-                var safeContentType = ResolveLessonDocumentContentType(ext, file.ContentType);
+                var storedFileName = $"{VietnamTimeHelper.Now:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}{ext}";
+                var safeContentType = ResolveLessonDocumentContentType(ext);
                 var safeDescription = TruncateValue(
                     string.IsNullOrWhiteSpace(description) ? safeOriginalName : description.Trim(),
                     500);
@@ -519,49 +526,54 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.Id == id);
 
-            if (doc == null || doc.ClassRoom == null) return NotFound();
+            if (doc == null) return NotFound();
 
-            if (!await CanManageClassLessonAsync(doc.ClassRoom))
+            if (doc.ClassRoom == null || !await CanManageClassLessonAsync(doc.ClassRoom))
             {
                 return Forbid();
             }
 
-            var isPdf = string.Equals(Path.GetExtension(doc.FileName), ".pdf", StringComparison.OrdinalIgnoreCase);
+            var safeFileExt = Path.GetExtension(doc.FileName).ToLowerInvariant();
+            var isPdf = string.Equals(safeFileExt, ".pdf", StringComparison.OrdinalIgnoreCase);
 
             if (doc.CloudFileId.HasValue)
             {
                 var cloudResult = await _storageService.DownloadAsync(doc.CloudFileId.Value);
                 if (cloudResult != null)
                 {
-                    var cloudContentType = isPdf
-                        ? "application/pdf"
-                        : (!string.IsNullOrWhiteSpace(cloudResult.ContentType)
-                            ? cloudResult.ContentType
-                            : (string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType));
+                    var cloudContentType = FileUploadSecurityHelper.GetSafeMimeType(
+                        !string.IsNullOrWhiteSpace(safeFileExt) ? safeFileExt : Path.GetExtension(cloudResult.FileName));
                     var downloadName = string.IsNullOrWhiteSpace(doc.FileName) ? cloudResult.FileName : doc.FileName;
                     return FileStreamResponse(cloudResult.ContentStream, cloudContentType, downloadName, inline);
                 }
             }
 
-            var safeStoredName = Path.GetFileName(doc.StoredFileName);
             string? targetPath = null;
-            if (!string.IsNullOrWhiteSpace(safeStoredName))
+            if (!string.IsNullOrWhiteSpace(doc.StoredFileName))
             {
-                var privatePath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans", safeStoredName));
-                var legacyPublicPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans", safeStoredName));
+                var privateRoot = Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans");
+                var legacyPublicRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans");
 
-                targetPath = System.IO.File.Exists(privatePath)
-                    ? privatePath
-                    : (System.IO.File.Exists(legacyPublicPath) ? legacyPublicPath : null);
+                if (FileUploadSecurityHelper.TryResolveContainedPath(privateRoot, doc.StoredFileName, out var privatePath)
+                    && System.IO.File.Exists(privatePath))
+                {
+                    targetPath = privatePath;
+                }
+                else if (FileUploadSecurityHelper.TryResolveContainedPath(legacyPublicRoot, doc.StoredFileName, out var legacyPublicPath)
+                    && System.IO.File.Exists(legacyPublicPath))
+                {
+                    targetPath = legacyPublicPath;
+                }
             }
 
             if (targetPath == null) return NotFound("Không tìm thấy tệp giáo án trên máy chủ.");
 
-            var contentType = (isPdf || string.Equals(Path.GetExtension(safeStoredName), ".pdf", StringComparison.OrdinalIgnoreCase))
-                ? "application/pdf"
-                : (string.IsNullOrWhiteSpace(doc.ContentType) ? "application/octet-stream" : doc.ContentType);
+            var resolvedExt = !string.IsNullOrWhiteSpace(safeFileExt)
+                ? safeFileExt
+                : Path.GetExtension(targetPath).ToLowerInvariant();
+            var contentType = FileUploadSecurityHelper.GetSafeMimeType(resolvedExt);
 
-            var fileStream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var fileStream = new FileStream(targetPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536, options: FileOptions.Asynchronous);
             return FileStreamResponse(fileStream, contentType, doc.FileName, inline);
         }
 
@@ -576,13 +588,13 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (doc == null) return Json(new { success = false, message = "Không tìm thấy tài liệu cần xóa." });
 
-            if (doc.ClassRoom != null && !await CanManageClassLessonAsync(doc.ClassRoom))
+            if (doc.ClassRoom == null || !await CanManageClassLessonAsync(doc.ClassRoom))
             {
-                return Json(new { success = false, message = "Bạn không có quyền xóa tài liệu của khối/lớp khác!" });
+                return Forbid();
             }
 
             var cloudFileId = doc.CloudFileId;
-            var safeStoredName = Path.GetFileName(doc.StoredFileName);
+            var storedName = doc.StoredFileName;
 
             _context.ClassLessonDocuments.Remove(doc);
             await _context.SaveChangesAsync();
@@ -592,10 +604,10 @@ namespace ManagerStudentCaltholic.Controllers
                 await _storageService.DeleteAsync(cloudFileId.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(safeStoredName))
+            if (!string.IsNullOrWhiteSpace(storedName))
             {
-                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"), safeStoredName);
-                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"), safeStoredName);
+                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "lesson_plans"), storedName);
+                DeleteLegacyFileIfContained(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "lesson_plans"), storedName);
             }
 
             return Json(new { success = true, message = "Đã xóa tài liệu kế hoạch thành công!" });

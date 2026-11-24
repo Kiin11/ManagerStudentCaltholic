@@ -85,7 +85,13 @@ namespace ManagerStudentCaltholic.Controllers
                 ? $"file_{id}"
                 : Path.GetFileName(downloadResult.FileName);
 
-            bool canInline = !download && InlineSafeContentTypes.Contains(contentType);
+            if (contentType.StartsWith("application/pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers["Content-Security-Policy"] = "sandbox";
+            }
+
+            bool isAbsenceDoc = string.Equals(media.Category, CloudMediaCategory.AbsenceDoc, StringComparison.OrdinalIgnoreCase);
+            bool canInline = !download && !isAbsenceDoc && InlineSafeContentTypes.Contains(contentType);
             if (canInline)
             {
                 Response.Headers["Content-Disposition"] = $"inline; filename=\"{Uri.EscapeDataString(safeFileName)}\"";
@@ -119,12 +125,13 @@ namespace ManagerStudentCaltholic.Controllers
                 || User.IsInRole(UserRole.SpiritualDirector)
                 || User.IsInRole(UserRole.ExecutiveBoard);
             bool isBranchHead = User.IsInRole(UserRole.BranchHead);
+            bool isProbationary = User.IsInRole(UserRole.ProbationaryTeacher);
             bool isStaff = isLeadership
                 || isBranchHead
                 || User.IsInRole(UserRole.Teacher)
-                || User.IsInRole(UserRole.ProbationaryTeacher);
+                || isProbationary;
 
-            var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+            var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
 
             switch (media.Category.ToUpperInvariant())
             {
@@ -134,7 +141,7 @@ namespace ManagerStudentCaltholic.Controllers
                 case CloudMediaCategory.LessonPlan:
                     if (isLeadership) return true;
                     if (!isStaff) return false;
-                    return await CanAccessLessonPlanAsync(media, currentUserId, isBranchHead, managedGrade, ct);
+                    return await CanAccessLessonPlanAsync(media, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
 
                 case CloudMediaCategory.IncidentImage:
                     if (isLeadership) return true;
@@ -144,12 +151,49 @@ namespace ManagerStudentCaltholic.Controllers
                 case CloudMediaCategory.Avatar:
                     if (string.Equals(media.EntityName, nameof(Models.Entities.User), StringComparison.OrdinalIgnoreCase))
                     {
-                        return isStaff || (media.EntityId.HasValue && media.EntityId.Value == currentUserId);
+                        if (media.EntityId.HasValue && media.EntityId.Value == currentUserId)
+                        {
+                            return true;
+                        }
+
+                        if (isLeadership)
+                        {
+                            return true;
+                        }
+
+                        if (!isStaff || !media.EntityId.HasValue || media.EntityId.Value <= 0)
+                        {
+                            return false;
+                        }
+
+                        return await CanStaffAccessUserAvatarAsync(
+                            media.EntityId.Value,
+                            currentUserId,
+                            isBranchHead,
+                            isProbationary,
+                            managedGrade,
+                            ct);
                     }
 
                     if (string.Equals(media.EntityName, nameof(Student), StringComparison.OrdinalIgnoreCase))
                     {
-                        return isStaff;
+                        if (isLeadership)
+                        {
+                            return true;
+                        }
+
+                        if (!isStaff || !media.EntityId.HasValue || media.EntityId.Value <= 0)
+                        {
+                            return false;
+                        }
+
+                        return await CanStaffAccessStudentAsync(
+                            media.EntityId.Value,
+                            currentUserId,
+                            isBranchHead,
+                            isProbationary,
+                            managedGrade,
+                            ct);
                     }
 
                     return false;
@@ -157,17 +201,17 @@ namespace ManagerStudentCaltholic.Controllers
                 case CloudMediaCategory.SacramentDoc:
                     if (isLeadership) return true;
                     if (!isStaff) return false;
-                    return await CanAccessSacramentDocAsync(media, currentUserId, isBranchHead, managedGrade, ct);
+                    return await CanAccessSacramentDocAsync(media, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
 
                 case CloudMediaCategory.AnnouncementDoc:
                     if (isLeadership) return true;
                     if (!isStaff) return false;
-                    return await CanAccessAnnouncementDocAsync(media, currentUserId, isBranchHead, managedGrade, ct);
+                    return await CanAccessAnnouncementDocAsync(media, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
 
                 case CloudMediaCategory.AbsenceDoc:
                     if (isLeadership) return true;
                     if (!isStaff) return false;
-                    return await CanAccessAbsenceDocAsync(media, currentUserId, isBranchHead, managedGrade, ct);
+                    return await CanAccessAbsenceDocAsync(media, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
 
                 default:
                     return false;
@@ -178,6 +222,7 @@ namespace ManagerStudentCaltholic.Controllers
             CloudMediaFile media,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
@@ -235,7 +280,13 @@ namespace ManagerStudentCaltholic.Controllers
                 return false;
             }
 
-            return await CanStaffAccessClassAsync(targetClass.Id, targetClass.GradeLevel, currentUserId, isBranchHead, managedGrade, ct);
+            return await CanStaffAccessClassAsync(
+                targetClass.Id,
+                currentUserId,
+                isBranchHead,
+                isProbationary,
+                managedGrade,
+                ct);
         }
 
         private async Task<bool> CanAccessIncidentImageAsync(CloudMediaFile media, long currentUserId, CancellationToken ct)
@@ -269,6 +320,7 @@ namespace ManagerStudentCaltholic.Controllers
             CloudMediaFile media,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
@@ -294,13 +346,14 @@ namespace ManagerStudentCaltholic.Controllers
                 return false;
             }
 
-            return await CanStaffAccessStudentAsync(studentId.Value, currentUserId, isBranchHead, managedGrade, ct);
+            return await CanStaffAccessStudentAsync(studentId.Value, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
         }
 
         private async Task<bool> CanAccessAnnouncementDocAsync(
             CloudMediaFile media,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
@@ -334,11 +387,19 @@ namespace ManagerStudentCaltholic.Controllers
                     return false;
                 }
 
-                if (isBranchHead
-                    && !string.IsNullOrWhiteSpace(managedGrade)
-                    && string.Equals(announcement.TargetGradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                if (isProbationary && GradeLevel.IsAfternoonGrade(announcement.TargetGradeLevel))
                 {
-                    return true;
+                    return false;
+                }
+
+                if (isBranchHead)
+                {
+                    if (string.IsNullOrWhiteSpace(managedGrade))
+                    {
+                        return false;
+                    }
+
+                    return string.Equals(announcement.TargetGradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase);
                 }
 
                 var currentYearId = await _context.AcademicYears
@@ -347,11 +408,30 @@ namespace ManagerStudentCaltholic.Controllers
                     .Select(y => (int?)y.Id)
                     .FirstOrDefaultAsync(ct);
 
-                return await _context.ClassTeachers
+                if (!currentYearId.HasValue)
+                {
+                    return false;
+                }
+
+                var targetGradeLower = announcement.TargetGradeLevel.Trim().ToLowerInvariant();
+                var teacherQuery = _context.ClassTeachers
                     .AsNoTracking()
-                    .AnyAsync(t => t.UserId == currentUserId
-                        && (!currentYearId.HasValue || t.AcademicYearId == currentYearId.Value)
-                        && t.ClassRoom.GradeLevel == announcement.TargetGradeLevel, ct);
+                    .Where(t => t.UserId == currentUserId
+                        && t.AcademicYearId == currentYearId.Value
+                        && t.ClassRoom.AcademicYearId == currentYearId.Value
+                        && t.ClassRoom.AcademicYear.IsCurrent
+                        && t.ClassRoom.GradeLevel.ToLower() == targetGradeLower);
+
+                if (isProbationary)
+                {
+                    teacherQuery = teacherQuery.Where(t =>
+                        t.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                        t.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                        t.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                        t.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                }
+
+                return await teacherQuery.AnyAsync(ct);
             }
 
             if (scope == "CLASS")
@@ -363,9 +443,9 @@ namespace ManagerStudentCaltholic.Controllers
 
                 return await CanStaffAccessClassAsync(
                     announcement.TargetClassRoomId.Value,
-                    announcement.TargetClassRoom.GradeLevel,
                     currentUserId,
                     isBranchHead,
+                    isProbationary,
                     managedGrade,
                     ct);
             }
@@ -377,6 +457,7 @@ namespace ManagerStudentCaltholic.Controllers
             CloudMediaFile media,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
@@ -388,33 +469,29 @@ namespace ManagerStudentCaltholic.Controllers
             if (string.IsNullOrWhiteSpace(media.EntityName)
                 || string.Equals(media.EntityName, nameof(AbsenceRequest), StringComparison.OrdinalIgnoreCase))
             {
-                var classInfo = await _context.AbsenceRequests
+                var classRoomId = await _context.AbsenceRequests
                     .AsNoTracking()
                     .Where(r => r.Id == media.EntityId.Value)
-                    .Select(r => new
-                    {
-                        r.Enrollment.ClassRoomId,
-                        r.Enrollment.ClassRoom.GradeLevel
-                    })
+                    .Select(r => (int?)r.Enrollment.ClassRoomId)
                     .FirstOrDefaultAsync(ct);
 
-                if (classInfo == null)
+                if (!classRoomId.HasValue || classRoomId.Value <= 0)
                 {
                     return false;
                 }
 
                 return await CanStaffAccessClassAsync(
-                    classInfo.ClassRoomId,
-                    classInfo.GradeLevel,
+                    classRoomId.Value,
                     currentUserId,
                     isBranchHead,
+                    isProbationary,
                     managedGrade,
                     ct);
             }
 
             if (string.Equals(media.EntityName, nameof(Student), StringComparison.OrdinalIgnoreCase))
             {
-                return await CanStaffAccessStudentAsync(media.EntityId.Value, currentUserId, isBranchHead, managedGrade, ct);
+                return await CanStaffAccessStudentAsync(media.EntityId.Value, currentUserId, isBranchHead, isProbationary, managedGrade, ct);
             }
 
             return false;
@@ -422,28 +499,58 @@ namespace ManagerStudentCaltholic.Controllers
 
         private async Task<bool> CanStaffAccessClassAsync(
             int classRoomId,
-            string? classGradeLevel,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
-            if (isBranchHead
-                && !string.IsNullOrWhiteSpace(managedGrade)
-                && string.Equals(classGradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+            var targetClass = await _context.Classes
+                .AsNoTracking()
+                .Where(c => c.Id == classRoomId)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.GradeLevel,
+                    c.Session,
+                    c.AcademicYearId,
+                    IsCurrentYear = c.AcademicYear.IsCurrent
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (targetClass == null || !targetClass.IsCurrentYear)
             {
-                return true;
+                return false;
+            }
+
+            if (isProbationary && GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+            {
+                return false;
+            }
+
+            if (isBranchHead)
+            {
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return false;
+                }
+
+                return string.Equals(targetClass.GradeLevel?.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase);
             }
 
             return await _context.ClassTeachers
                 .AsNoTracking()
-                .AnyAsync(t => t.ClassRoomId == classRoomId && t.UserId == currentUserId, ct);
+                .AnyAsync(t => t.ClassRoomId == classRoomId
+                    && t.UserId == currentUserId
+                    && t.AcademicYearId == targetClass.AcademicYearId
+                    && t.ClassRoom.AcademicYear.IsCurrent, ct);
         }
 
         private async Task<bool> CanStaffAccessStudentAsync(
             long studentId,
             long currentUserId,
             bool isBranchHead,
+            bool isProbationary,
             string? managedGrade,
             CancellationToken ct)
         {
@@ -453,25 +560,46 @@ namespace ManagerStudentCaltholic.Controllers
                 .Select(y => (int?)y.Id)
                 .FirstOrDefaultAsync(ct);
 
-            if (isBranchHead && !string.IsNullOrWhiteSpace(managedGrade))
+            if (!currentYearId.HasValue)
             {
-                bool inManagedGrade = await _context.Enrollments
-                    .AsNoTracking()
-                    .AnyAsync(e => e.StudentId == studentId
-                        && (!currentYearId.HasValue || e.ClassRoom.AcademicYearId == currentYearId.Value)
-                        && e.ClassRoom.GradeLevel == managedGrade, ct);
-
-                if (inManagedGrade)
-                {
-                    return true;
-                }
+                return false;
             }
 
-            var assignedClassIds = await _context.ClassTeachers
+            if (isBranchHead)
+            {
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return false;
+                }
+
+                var managedGradeLower = managedGrade.Trim().ToLowerInvariant();
+                return await _context.Enrollments
+                    .AsNoTracking()
+                    .AnyAsync(e => e.StudentId == studentId
+                        && e.ClassRoom.AcademicYearId == currentYearId.Value
+                        && e.ClassRoom.AcademicYear.IsCurrent
+                        && e.ClassRoom.GradeLevel.ToLower() == managedGradeLower, ct);
+            }
+
+            var assignedQuery = _context.ClassTeachers
                 .AsNoTracking()
                 .Where(t => t.UserId == currentUserId
-                    && (!currentYearId.HasValue || t.AcademicYearId == currentYearId.Value))
+                    && t.AcademicYearId == currentYearId.Value
+                    && t.ClassRoom.AcademicYearId == currentYearId.Value
+                    && t.ClassRoom.AcademicYear.IsCurrent);
+
+            if (isProbationary)
+            {
+                assignedQuery = assignedQuery.Where(t =>
+                    t.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                    t.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                    t.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                    t.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+            }
+
+            var assignedClassIds = await assignedQuery
                 .Select(t => t.ClassRoomId)
+                .Distinct()
                 .ToListAsync(ct);
 
             if (assignedClassIds.Count == 0)
@@ -481,7 +609,163 @@ namespace ManagerStudentCaltholic.Controllers
 
             return await _context.Enrollments
                 .AsNoTracking()
-                .AnyAsync(e => e.StudentId == studentId && assignedClassIds.Contains(e.ClassRoomId), ct);
+                .AnyAsync(e => e.StudentId == studentId
+                    && assignedClassIds.Contains(e.ClassRoomId)
+                    && e.ClassRoom.AcademicYearId == currentYearId.Value, ct);
+        }
+
+        private async Task<bool> CanStaffAccessUserAvatarAsync(
+            long targetUserId,
+            long currentUserId,
+            bool isBranchHead,
+            bool isProbationary,
+            string? managedGrade,
+            CancellationToken ct)
+        {
+            if (isBranchHead && string.IsNullOrWhiteSpace(managedGrade))
+            {
+                return false;
+            }
+
+            var targetUser = await _context.Users
+                .AsNoTracking()
+                .Where(u => u.Id == targetUserId && u.IsActive)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Role,
+                    u.ManagedGradeLevel,
+                    u.LinkedStudentId,
+                    u.StudentId
+                })
+                .FirstOrDefaultAsync(ct);
+
+            if (targetUser == null)
+            {
+                return false;
+            }
+
+            bool targetIsStaff = targetUser.Role is UserRole.Admin
+                or UserRole.SpiritualDirector
+                or UserRole.ExecutiveBoard
+                or UserRole.BranchHead
+                or UserRole.Teacher
+                or UserRole.ProbationaryTeacher;
+
+            if (!targetIsStaff)
+            {
+                return false;
+            }
+
+            var currentYearId = await _context.AcademicYears
+                .AsNoTracking()
+                .Where(y => y.IsCurrent)
+                .Select(y => (int?)y.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (!currentYearId.HasValue)
+            {
+                return false;
+            }
+
+            long? targetLinkedStudentId = targetUser.LinkedStudentId ?? targetUser.StudentId;
+
+            if (isBranchHead)
+            {
+                var managedGradeLower = managedGrade!.Trim().ToLowerInvariant();
+
+                if (targetUser.Role == UserRole.BranchHead &&
+                    string.Equals(targetUser.ManagedGradeLevel?.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                bool targetTeachesInBranch = await _context.ClassTeachers
+                    .AsNoTracking()
+                    .AnyAsync(t => t.UserId == targetUserId
+                        && t.AcademicYearId == currentYearId.Value
+                        && t.ClassRoom.AcademicYearId == currentYearId.Value
+                        && t.ClassRoom.AcademicYear.IsCurrent
+                        && t.ClassRoom.GradeLevel.ToLower() == managedGradeLower, ct);
+
+                if (targetTeachesInBranch)
+                {
+                    return true;
+                }
+
+                if (targetLinkedStudentId.HasValue && targetLinkedStudentId.Value > 0)
+                {
+                    return await _context.Enrollments
+                        .AsNoTracking()
+                        .AnyAsync(e => e.StudentId == targetLinkedStudentId.Value
+                            && e.ClassRoom.AcademicYearId == currentYearId.Value
+                            && e.ClassRoom.AcademicYear.IsCurrent
+                            && e.ClassRoom.GradeLevel.ToLower() == managedGradeLower, ct);
+                }
+
+                return false;
+            }
+
+            var callerClassQuery = _context.ClassTeachers
+                .AsNoTracking()
+                .Where(t => t.UserId == currentUserId
+                    && t.AcademicYearId == currentYearId.Value
+                    && t.ClassRoom.AcademicYearId == currentYearId.Value
+                    && t.ClassRoom.AcademicYear.IsCurrent);
+
+            if (isProbationary)
+            {
+                callerClassQuery = callerClassQuery.Where(t =>
+                    t.ClassRoom.Session != GradeLevel.SessionAfternoon &&
+                    t.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
+                    t.ClassRoom.GradeLevel != GradeLevel.DuBi &&
+                    t.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+            }
+
+            var callerClassIds = await callerClassQuery
+                .Select(t => t.ClassRoomId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            if (callerClassIds.Count == 0)
+            {
+                return false;
+            }
+
+            bool sharesClassAsTeacher = await _context.ClassTeachers
+                .AsNoTracking()
+                .AnyAsync(t => t.UserId == targetUserId
+                    && t.AcademicYearId == currentYearId.Value
+                    && callerClassIds.Contains(t.ClassRoomId), ct);
+
+            if (sharesClassAsTeacher)
+            {
+                return true;
+            }
+
+            if (targetUser.Role == UserRole.BranchHead && !string.IsNullOrWhiteSpace(targetUser.ManagedGradeLevel))
+            {
+                var targetGradeLower = targetUser.ManagedGradeLevel.Trim().ToLowerInvariant();
+                bool isCallerBranchHead = await _context.Classes
+                    .AsNoTracking()
+                    .AnyAsync(c => callerClassIds.Contains(c.Id)
+                        && c.GradeLevel.ToLower() == targetGradeLower, ct);
+
+                if (isCallerBranchHead)
+                {
+                    return true;
+                }
+            }
+
+            if (targetLinkedStudentId.HasValue && targetLinkedStudentId.Value > 0)
+            {
+                return await _context.Enrollments
+                    .AsNoTracking()
+                    .AnyAsync(e => e.StudentId == targetLinkedStudentId.Value
+                        && callerClassIds.Contains(e.ClassRoomId), ct);
+            }
+
+            return false;
         }
     }
 }

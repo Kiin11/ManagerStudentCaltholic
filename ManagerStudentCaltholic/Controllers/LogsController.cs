@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
@@ -25,6 +26,10 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ILocalMediaMigrationService? _localMediaMigrationService;
         private readonly DriveLogUploadOptions _driveLogOptions;
         private readonly ILogger<LogsController> _logger;
+
+        private const long MaxLogTailBytes = 5L * 1024 * 1024; // 5 MB tail read cap for 1 GiB VM safety
+        private const int MaxParsedLogEntries = 5000;
+        private const int MaxExceptionChars = 64 * 1024;
 
         // Regex bóc tách chuẩn dòng Header của Serilog
         private static readonly Regex LogHeaderRegex = new(
@@ -170,18 +175,26 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             model.SelectedFile = safeFileName;
-            var allEntries = await ParseLogFileEntriesAsync(fullPath);
+            var allEntries = await ParseLogFileEntriesAsync(fullPath, HttpContext.RequestAborted);
 
             model.TotalLines = allEntries.Count;
-            model.InfoCount = allEntries.Count(e => e.Level == "INF");
-            model.WarningCount = allEntries.Count(e => e.Level == "WRN");
-            model.ErrorCount = allEntries.Count(e => e.Level == "ERR");
-            model.FatalCount = allEntries.Count(e => e.Level == "FTL");
-            model.AuditCount = allEntries.Count(e => e.Module == "KIỂM TOÁN (AUDIT)");
 
-            // Tổng hợp số liệu theo 24 khung giờ và theo từng Module
+            // Tổng hợp số liệu theo cấp độ, 24 khung giờ và từng Module trong một vòng lặp
             foreach (var entry in allEntries)
             {
+                switch (entry.Level)
+                {
+                    case "INF": model.InfoCount++; break;
+                    case "WRN": model.WarningCount++; break;
+                    case "ERR": model.ErrorCount++; break;
+                    case "FTL": model.FatalCount++; break;
+                }
+
+                if (entry.Module == "KIỂM TOÁN (AUDIT)")
+                {
+                    model.AuditCount++;
+                }
+
                 if (entry.Timestamp.HasValue)
                 {
                     int hr = entry.Timestamp.Value.Hour;
@@ -202,57 +215,82 @@ namespace ManagerStudentCaltholic.Controllers
 
             model.HourlyStats = hourlyMap.Values.OrderBy(x => x.Hour).ToList();
 
-            // Áp dụng bộ lọc đa tiêu chí (TASK-P3-11.2)
-            IEnumerable<LogEntryItem> filtered = allEntries;
-
-            if (model.LevelFilter != "ALL")
+            // Áp dụng bộ lọc đa tiêu chí (TASK-P3-11.2) không cấp phát bản sao Reverse().ToList()
+            var kw = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+            bool MatchesFilters(LogEntryItem e)
             {
-                if (model.LevelFilter == "ERR_FTL")
+                if (model.LevelFilter != "ALL")
                 {
-                    filtered = filtered.Where(e => e.Level == "ERR" || e.Level == "FTL");
+                    if (model.LevelFilter == "ERR_FTL")
+                    {
+                        if (e.Level != "ERR" && e.Level != "FTL") return false;
+                    }
+                    else if (!e.Level.Equals(model.LevelFilter, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
                 }
-                else
+
+                if (model.ModuleFilter != "ALL" && !e.Module.Equals(model.ModuleFilter, StringComparison.OrdinalIgnoreCase))
                 {
-                    filtered = filtered.Where(e => e.Level.Equals(model.LevelFilter, StringComparison.OrdinalIgnoreCase));
+                    return false;
+                }
+
+                if (fromTime.HasValue && (!e.Timestamp.HasValue || e.Timestamp.Value.TimeOfDay < fromTime.Value))
+                {
+                    return false;
+                }
+
+                if (toTime.HasValue && (!e.Timestamp.HasValue || e.Timestamp.Value.TimeOfDay > toTime.Value))
+                {
+                    return false;
+                }
+
+                if (kw != null)
+                {
+                    bool matched =
+                        e.Message.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
+                        (e.Exception != null && e.Exception.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
+                        (e.PerformedBy != null && e.PerformedBy.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
+                        (e.IpAddress != null && e.IpAddress.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
+                        (e.RequestPath != null && e.RequestPath.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                    if (!matched) return false;
+                }
+
+                return true;
+            }
+
+            int filteredCount = 0;
+            for (int i = 0; i < allEntries.Count; i++)
+            {
+                if (MatchesFilters(allEntries[i]))
+                {
+                    filteredCount++;
                 }
             }
 
-            if (model.ModuleFilter != "ALL")
-            {
-                filtered = filtered.Where(e => e.Module.Equals(model.ModuleFilter, StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (fromTime.HasValue)
-            {
-                filtered = filtered.Where(e => e.Timestamp.HasValue && e.Timestamp.Value.TimeOfDay >= fromTime.Value);
-            }
-
-            if (toTime.HasValue)
-            {
-                filtered = filtered.Where(e => e.Timestamp.HasValue && e.Timestamp.Value.TimeOfDay <= toTime.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var kw = search.Trim();
-                filtered = filtered.Where(e =>
-                    e.Message.Contains(kw, StringComparison.OrdinalIgnoreCase) ||
-                    (e.Exception != null && e.Exception.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
-                    (e.PerformedBy != null && e.PerformedBy.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
-                    (e.IpAddress != null && e.IpAddress.Contains(kw, StringComparison.OrdinalIgnoreCase)) ||
-                    (e.RequestPath != null && e.RequestPath.Contains(kw, StringComparison.OrdinalIgnoreCase)));
-            }
-
-            // Đảo ngược để dòng log mới nhất hiển thị lên đầu
-            var orderedList = filtered.Reverse().ToList();
-            model.FilteredCount = orderedList.Count;
-            model.TotalPages = Math.Max(1, (int)Math.Ceiling(model.FilteredCount / (double)pageSize));
+            model.FilteredCount = filteredCount;
+            model.TotalPages = Math.Max(1, (int)Math.Ceiling(filteredCount / (double)pageSize));
             model.CurrentPage = Math.Min(model.CurrentPage, model.TotalPages);
 
-            model.Entries = orderedList
-                .Skip((model.CurrentPage - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            int skip = (model.CurrentPage - 1) * pageSize;
+            var pagedEntries = new List<LogEntryItem>(Math.Min(pageSize, Math.Max(0, filteredCount - skip)));
+            int matchedIndex = 0;
+
+            // Duyệt ngược từ cuối danh sách để dòng log mới nhất hiển thị lên đầu mà không cần .Reverse().ToList()
+            for (int i = allEntries.Count - 1; i >= 0 && pagedEntries.Count < pageSize; i--)
+            {
+                var item = allEntries[i];
+                if (!MatchesFilters(item)) continue;
+
+                if (matchedIndex >= skip)
+                {
+                    pagedEntries.Add(item);
+                }
+                matchedIndex++;
+            }
+
+            model.Entries = pagedEntries;
 
             return View(model);
         }
@@ -465,29 +503,66 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         #region Helpers Phân tích Structured Log & Kiểm tra Sức khỏe Hạ tầng
-        private async Task<List<LogEntryItem>> ParseLogFileEntriesAsync(string fullPath)
+        private async Task<List<LogEntryItem>> ParseLogFileEntriesAsync(string fullPath, CancellationToken ct = default)
         {
-            var entries = new List<LogEntryItem>();
+            var entries = new Queue<LogEntryItem>(Math.Min(256, MaxParsedLogEntries));
             int idx = 1;
 
-            await using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var reader = new StreamReader(stream);
+            await using var stream = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite,
+                bufferSize: 65536,
+                options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            bool seekedTail = stream.Length > MaxLogTailBytes;
+            if (seekedTail)
+            {
+                stream.Seek(-MaxLogTailBytes, SeekOrigin.End);
+            }
+
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: !seekedTail);
+
+            if (seekedTail)
+            {
+                // Bỏ qua dòng đầu tiên có thể bị cắt ngang khi seek trực tiếp vào giữa tệp UTF-8
+                await reader.ReadLineAsync(ct);
+            }
 
             string? line;
             LogEntryItem? currentEntry = null;
+            StringBuilder? currentException = null;
+            bool exceptionTruncated = false;
 
-            while ((line = await reader.ReadLineAsync()) != null)
+            void FinalizeCurrentEntry()
+            {
+                if (currentEntry == null) return;
+
+                if (currentException != null && currentException.Length > 0)
+                {
+                    currentEntry.Exception = currentException.ToString();
+                }
+
+                currentException = null;
+                exceptionTruncated = false;
+                EnrichLogEntryMetadata(currentEntry);
+
+                if (entries.Count >= MaxParsedLogEntries)
+                {
+                    entries.Dequeue();
+                }
+                entries.Enqueue(currentEntry);
+            }
+
+            while ((line = await reader.ReadLineAsync(ct)) != null)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
                 var match = LogHeaderRegex.Match(line);
                 if (match.Success)
                 {
-                    if (currentEntry != null)
-                    {
-                        EnrichLogEntryMetadata(currentEntry);
-                        entries.Add(currentEntry);
-                    }
+                    FinalizeCurrentEntry();
 
                     var lvl = match.Groups["lvl"].Value.ToUpperInvariant();
                     var msg = match.Groups["msg"].Value;
@@ -505,9 +580,27 @@ namespace ManagerStudentCaltholic.Controllers
                 }
                 else if (currentEntry != null)
                 {
-                    currentEntry.Exception = string.IsNullOrEmpty(currentEntry.Exception)
-                        ? line
-                        : currentEntry.Exception + Environment.NewLine + line;
+                    currentException ??= new StringBuilder();
+                    if (!exceptionTruncated)
+                    {
+                        if (currentException.Length + line.Length + 2 <= MaxExceptionChars)
+                        {
+                            if (currentException.Length > 0)
+                            {
+                                currentException.Append(Environment.NewLine);
+                            }
+                            currentException.Append(line);
+                        }
+                        else
+                        {
+                            if (currentException.Length > 0)
+                            {
+                                currentException.Append(Environment.NewLine);
+                            }
+                            currentException.Append("... [truncated]");
+                            exceptionTruncated = true;
+                        }
+                    }
                 }
                 else
                 {
@@ -522,13 +615,9 @@ namespace ManagerStudentCaltholic.Controllers
                 }
             }
 
-            if (currentEntry != null)
-            {
-                EnrichLogEntryMetadata(currentEntry);
-                entries.Add(currentEntry);
-            }
+            FinalizeCurrentEntry();
 
-            return entries;
+            return entries.ToList();
         }
 
         /// <summary>

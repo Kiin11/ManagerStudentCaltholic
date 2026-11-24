@@ -154,7 +154,9 @@
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow border-0">
                                             <li>
-                                                <form asp-action="Delete" asp-route-id="@c.Id" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa lớp @c.Name không?');">
+                                                <form asp-action="Delete" asp-route-id="@c.Id" method="post"
+                                                      data-class-name="@c.Name"
+                                                      onsubmit="return confirm('Bạn có chắc chắn muốn xóa lớp ' + (this.dataset.className || '') + ' không?');">
                                                     @Html.AntiForgeryToken()
                                                     <button type="submit" class="dropdown-item text-danger">
                                                         <i class="bi bi-trash3 me-2"></i> Xóa Lớp Học
@@ -546,16 +548,22 @@
                 json.data.forEach(t => {
                     const item = document.createElement('div');
                     item.className = 'list-group-item d-flex justify-content-between align-items-center py-2 px-3';
+                    const teacherId = Number(t.id) || 0;
+                    const safeClassId = Number(classId) || 0;
                     item.innerHTML = `
                         <div>
-                            <span class="badge ${t.roleInClass === 'HEAD' ? 'bg-primary' : 'bg-secondary'} me-1">${t.roleName}</span>
-                            <strong class="text-dark small">${t.teacherName}</strong>
-                            ${t.phoneNumber ? `<small class="text-muted ms-2"><i class="bi bi-telephone"></i> ${t.phoneNumber}</small>` : ''}
+                            <span class="badge ${t.roleInClass === 'HEAD' ? 'bg-primary' : 'bg-secondary'} me-1">${escapeHtmlRoster(t.roleName)}</span>
+                            <strong class="text-dark small">${escapeHtmlRoster(t.teacherName)}</strong>
+                            ${t.phoneNumber ? `<small class="text-muted ms-2"><i class="bi bi-telephone"></i> ${escapeHtmlRoster(t.phoneNumber)}</small>` : ''}
                         </div>
-                        <button type="button" class="btn btn-outline-danger btn-sm border-0 py-0 px-2" onclick="removeTeacher(${t.id}, ${classId})" title="Hủy phân công">
+                        <button type="button" class="btn btn-outline-danger btn-sm border-0 py-0 px-2 btn-remove-teacher" title="Hủy phân công">
                             <i class="bi bi-trash"></i>
                         </button>
                     `;
+                    const removeBtn = item.querySelector('.btn-remove-teacher');
+                    if (removeBtn) {
+                        removeBtn.addEventListener('click', () => removeTeacher(teacherId, safeClassId));
+                    }
                     listContainer.appendChild(item);
                 });
             } catch (e) {
@@ -676,7 +684,11 @@
                         roomSelect.appendChild(optgroup);
                     }
                 } else {
-                    roomSelect.innerHTML = `<option value="">Lỗi: ${json.message}</option>`;
+                    roomSelect.innerHTML = '';
+                    const errOpt = document.createElement('option');
+                    errOpt.value = '';
+                    errOpt.textContent = `Lỗi: ${json.message || 'Không thể tải danh sách phòng'}`;
+                    roomSelect.appendChild(errOpt);
                 }
             } catch (err) {
                 roomSelect.innerHTML = '<option value="">Không thể tải danh sách phòng</option>';
@@ -754,7 +766,7 @@
                         <td class="small">${escapeHtmlRoster(s.dateOfBirth)}</td>
                         <td class="small">
                             ${s.parentPhone
-                                ? `<a href="tel:${escapeHtmlRoster(s.parentPhone)}" class="text-decoration-none"><i class="bi bi-telephone me-1"></i>${escapeHtmlRoster(s.parentPhone)}</a>`
+                                ? `<a href="tel:${escapeHtmlRoster(String(s.parentPhone).replace(/[^0-9+]/g, ''))}" class="text-decoration-none"><i class="bi bi-telephone me-1"></i>${escapeHtmlRoster(s.parentPhone)}</a>`
                                 : '<span class="text-muted fst-italic">Chưa có</span>'}
                         </td>
                         <td class="text-center">
@@ -763,7 +775,7 @@
                                 : '<span class="badge bg-secondary-subtle text-secondary rounded-pill">Tạm nghỉ</span>'}
                         </td>
                         <td class="text-end pe-3">
-                            <a href="/Students/Details/${s.id}" class="btn btn-outline-primary btn-sm rounded-pill px-2">
+                            <a href="/Students/Details/${Number(s.id) || 0}" class="btn btn-outline-primary btn-sm rounded-pill px-2">
                                 <i class="bi bi-person-vcard me-1"></i>Chi tiết
                             </a>
                         </td>

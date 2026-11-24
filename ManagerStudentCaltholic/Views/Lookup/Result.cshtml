@@ -1,5 +1,6 @@
 @model ManagerStudentCaltholic.Models.ViewModels.StudentLookupResultViewModel
 @using ManagerStudentCaltholic.Extensions
+@using ManagerStudentCaltholic.Services
 @{
     ViewData["Title"] = $"Kết Quả Tra Cứu - {Model.ChristianName} {Model.FullName}";
     bool isMobile = Context.Request.IsMobileDevice();
@@ -120,7 +121,7 @@
             <div class="row g-2">
                 <div class="col-6">
                     <button type="button" class="btn btn-outline-danger w-100 rounded-pill py-2 fw-bold text-nowrap touch-target-44 shadow-sm"
-                            onclick="openDisputeModal('@DateTime.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
+                            onclick="openDisputeModal('@VietnamTimeHelper.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
                         <i class="bi bi-flag-fill me-1"></i> Báo Sai Sót
                     </button>
                 </div>
@@ -142,7 +143,7 @@
             </a>
             <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold"
-                        onclick="openDisputeModal('@DateTime.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
+                        onclick="openDisputeModal('@VietnamTimeHelper.Today.ToString("yyyy-MM-dd")', 'REGULAR_MASS_SUN', null, 'Báo sai sót điểm danh')">
                     <i class="bi bi-flag-fill me-1"></i> Báo Sai Sót Điểm Danh
                 </button>
                 <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 fw-bold shadow-sm"
@@ -727,7 +728,7 @@
                                 </div>
                             }
                             <div class="text-muted text-end mt-2" style="font-size: 0.7rem;">
-                                Gửi: @d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")
+                                Gửi: @VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(d.CreatedAt, DateTimeKind.Utc)).ToString("dd/MM/yyyy HH:mm")
                             </div>
                         </div>
                     }
@@ -752,7 +753,7 @@
                             @foreach (var d in Model.SubmittedDisputes)
                             {
                                 <tr>
-                                    <td class="ps-3">@d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td class="ps-3">@VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(d.CreatedAt, DateTimeKind.Utc)).ToString("dd/MM/yyyy HH:mm")</td>
                                     <td><strong>@d.AttendanceDate.ToString("dd/MM/yyyy")</strong> - @d.SessionScopeLabel</td>
                                     <td>
                                         <span class="badge bg-secondary">@d.CurrentRecordedStatus</span>
@@ -895,6 +896,7 @@
             <div class="modal-body p-4">
                 <div class="alert alert-light border small mb-3" id="disputeTargetLabel"></div>
                 <input type="hidden" id="dispCampaignId" value="" />
+                <input type="text" id="dispWebsiteUrlHoneypot" name="WebsiteUrlHoneypot" value="" autocomplete="off" tabindex="-1" aria-hidden="true" style="display:none" />
 
                 <div class="row g-2 mb-3">
                     <div class="col-12 col-md-6">
@@ -953,9 +955,10 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4">
+                <input type="text" id="absWebsiteUrlHoneypot" name="WebsiteUrlHoneypot" value="" autocomplete="off" tabindex="-1" aria-hidden="true" style="display:none" />
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Ngày xin nghỉ (*)</label>
-                    <input type="date" id="absDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                    <input type="date" id="absDate" class="form-control" value="@VietnamTimeHelper.Today.ToString("yyyy-MM-dd")" required />
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Buổi xin nghỉ (*)</label>
@@ -1031,6 +1034,10 @@
             }
         }
 
+        const lookupStudentDisplayName = @Json.Serialize((Model.ChristianName + " " + Model.FullName).Trim());
+        const lookupStudentCode = @Json.Serialize(Model.StudentCode);
+        const lookupStudentDobIso = @Json.Serialize(Model.DateOfBirth.ToString("yyyy-MM-dd"));
+
         function openDisputeModal(dateIso, scope, campaignId, labelText) {
             document.getElementById('dispDateIso').value = dateIso;
             document.getElementById('dispSessionScope').value = scope;
@@ -1038,7 +1045,7 @@
             document.getElementById('dispReason').value = '';
             document.getElementById('dispPhoneLast4').value = '';
             document.getElementById('disputeTargetLabel').textContent =
-                `Thiếu nhi: @Html.Raw(Model.ChristianName + " " + Model.FullName) (@Model.StudentCode) — Mục cần đính chính: ${labelText}`;
+                `Thiếu nhi: ${lookupStudentDisplayName} (${lookupStudentCode}) — Mục cần đính chính: ${labelText}`;
 
             bootstrap.Modal.getOrCreateInstance(document.getElementById('disputeModal')).show();
         }
@@ -1050,6 +1057,7 @@
             const reqStatus = document.getElementById('dispRequestedStatus').value;
             const reason = document.getElementById('dispReason').value.trim();
             const phoneLast4 = document.getElementById('dispPhoneLast4').value.trim();
+            const honeypot = document.getElementById('dispWebsiteUrlHoneypot')?.value || '';
 
             if (!dateIso || !reason || phoneLast4.length !== 4) {
                 alert('Vui lòng nhập đầy đủ lý do báo sai sót và đúng 4 chữ số cuối SĐT Phụ huynh!');
@@ -1067,14 +1075,15 @@
                         'X-CSRF-TOKEN': getCsrfToken()
                     },
                     body: JSON.stringify({
-                        studentCode: '@Model.StudentCode',
-                        dateOfBirth: '@Model.DateOfBirth.ToString("yyyy-MM-dd")',
+                        studentCode: lookupStudentCode,
+                        dateOfBirth: lookupStudentDobIso,
                         phoneLast4Digits: phoneLast4,
                         attendanceDateIso: dateIso,
                         sessionScope: scope,
                         campaignId: campIdVal ? parseInt(campIdVal) : null,
                         requestedStatus: reqStatus,
-                        reason: reason
+                        reason: reason,
+                        websiteUrlHoneypot: honeypot
                     })
                 });
 
@@ -1114,12 +1123,13 @@
             }
 
             const formData = new FormData();
-            formData.append('studentCode', '@Model.StudentCode');
-            formData.append('dateOfBirth', '@Model.DateOfBirth.ToString("yyyy-MM-dd")');
+            formData.append('studentCode', lookupStudentCode);
+            formData.append('dateOfBirth', lookupStudentDobIso);
             formData.append('absenceDate', absDate);
             formData.append('sessionType', sessionType);
             formData.append('parentPhone', parentPhone);
             formData.append('reason', reason);
+            formData.append('websiteUrlHoneypot', document.getElementById('absWebsiteUrlHoneypot')?.value || '');
             if (attachmentFile) {
                 formData.append('attachmentFile', attachmentFile);
             }

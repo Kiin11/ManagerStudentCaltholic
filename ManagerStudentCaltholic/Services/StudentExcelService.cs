@@ -10,6 +10,9 @@ namespace ManagerStudentCaltholic.Services
     
     public class StudentExcelService : IStudentExcelService
     {
+        public const int MaxImportRows = 2000;
+        private const long MaxImportStreamBytes = 10L * 1024 * 1024; // 10 MB defense-in-depth cap
+
         private readonly ParishDbContext _context;
         private readonly IStudentCodeGenerator _codeGenerator;
         private readonly ILogger<StudentExcelService> _logger;
@@ -79,134 +82,205 @@ namespace ManagerStudentCaltholic.Services
         public async Task<StudentImportResultDto> ImportStudentsFromExcelAsync(Stream fileStream)
         {
             var result = new StudentImportResultDto();
-            using var workbook = new XLWorkbook(fileStream);
-            var worksheet = workbook.Worksheets.FirstOrDefault();
-
-            if (worksheet == null)
+            if (fileStream == null || !fileStream.CanRead)
             {
-                result.ErrorMessages.Add("File Excel không chứa bất kỳ trang tính nào.");
+                result.ErrorMessages.Add("Tệp Excel không hợp lệ hoặc không thể đọc.");
+                result.FailureCount = 1;
                 return result;
             }
 
-            var rows = worksheet.RangeUsed()?.RowsUsed()?.Skip(1); // Bỏ qua tiêu đề
-            if (rows == null || !rows.Any())
+            Stream workbookStream = fileStream;
+            MemoryStream? bufferedStream = null;
+            try
             {
-                result.ErrorMessages.Add("File Excel không có dữ liệu để nạp.");
-                return result;
-            }
-
-            var codeList = await _context.Students
-                .Select(s => s.StudentCode.ToLower())
-                .ToListAsync();
-
-            var existingCodes = new HashSet<string>(codeList);
-
-            var currentYear = DateTime.UtcNow.Year;
-            var prefix = $"TN-{currentYear}-";
-            var maxSeq = await _context.Students
-                .Where(s => s.StudentCode.StartsWith(prefix))
-                .OrderByDescending(s => s.StudentCode)
-                .Select(s => s.StudentCode)
-                .FirstOrDefaultAsync();
-
-            int nextSeq = 1;
-            if (!string.IsNullOrEmpty(maxSeq) && maxSeq.Length >= prefix.Length + 4)
-            {
-                var seqPart = maxSeq.Substring(prefix.Length);
-                if (int.TryParse(seqPart, out int parsed)) nextSeq = parsed + 1;
-            }
-
-            var studentsToInsert = new List<Student>();
-            int rowIndex = 1;
-
-            foreach (var row in rows)
-            {
-                rowIndex++;
-                var code = row.Cell(1).GetString().Trim();
-                var christian = row.Cell(2).GetString().Trim();
-                var first = row.Cell(3).GetString().Trim();
-                var last = row.Cell(4).GetString().Trim();
-                var gender = row.Cell(5).GetString().Trim();
-                var dobRaw = row.Cell(6).GetString().Trim();
-                var baptismRaw = row.Cell(7).GetString().Trim();
-                var confirmRaw = row.Cell(8).GetString().Trim();
-                var phone = row.Cell(9).GetString().Trim();
-
-                // Kiểm tra dòng trống
-                if (string.IsNullOrWhiteSpace(christian) && string.IsNullOrWhiteSpace(first) && string.IsNullOrWhiteSpace(last))
-                    continue;
-
-                result.TotalRows++;
-
-                if (string.IsNullOrWhiteSpace(christian) || string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(last))
+                if (fileStream.CanSeek)
                 {
-                    result.ErrorMessages.Add($"Dòng {rowIndex}: Thiếu thông tin bắt buộc (Tên thánh, Họ đệm hoặc Tên).");
-                    result.FailureCount++;
-                    continue;
-                }
-
-
-                // 1. Ngày sinh (bắt buộc)
-                if (!TryParseCellDate(row.Cell(6), out DateTime dob))
-                {
-                    result.ErrorMessages.Add($"Dòng {rowIndex}: Ngày sinh '{row.Cell(6).GetString()}' không hợp lệ (bắt buộc định dạng dd/MM/yyyy).");
-                    result.FailureCount++;
-                    continue;
-                }
-
-                // 2. Ngày Rửa tội (không bắt buộc)
-                DateTime? baptismDate = TryParseCellDate(row.Cell(7), out var bDate) ? bDate : null;
-
-                // 3. Ngày Thêm sức (không bắt buộc)
-                DateTime? confirmDate = TryParseCellDate(row.Cell(8), out var cDate) ? cDate : null;
-
-                // Tự sinh mã nếu để trống
-                if (string.IsNullOrWhiteSpace(code))
-                {
-                    code = $"{prefix}{nextSeq++:D4}";
+                    if (fileStream.Length > MaxImportStreamBytes)
+                    {
+                        result.ErrorMessages.Add($"Dung lượng tệp Excel vượt quá giới hạn tối đa {MaxImportStreamBytes / (1024 * 1024)} MB.");
+                        result.FailureCount = 1;
+                        return result;
+                    }
                 }
                 else
                 {
-                    if (existingCodes.Contains(code.ToLower()))
+                    bufferedStream = new MemoryStream();
+                    byte[] copyBuf = new byte[81920];
+                    long totalCopied = 0;
+                    int bytesRead;
+                    while ((bytesRead = await fileStream.ReadAsync(copyBuf.AsMemory(0, copyBuf.Length))) > 0)
                     {
-                        result.ErrorMessages.Add($"Dòng {rowIndex}: Mã định danh '{code}' đã tồn tại trên hệ thống.");
+                        totalCopied += bytesRead;
+                        if (totalCopied > MaxImportStreamBytes)
+                        {
+                            result.ErrorMessages.Add($"Dung lượng tệp Excel vượt quá giới hạn tối đa {MaxImportStreamBytes / (1024 * 1024)} MB.");
+                            result.FailureCount = 1;
+                            return result;
+                        }
+                        await bufferedStream.WriteAsync(copyBuf.AsMemory(0, bytesRead));
+                    }
+                    bufferedStream.Position = 0;
+                    workbookStream = bufferedStream;
+                }
+
+                if (!await FileUploadSecurityHelper.ValidateStreamMagicBytesAsync(workbookStream, ".xlsx"))
+                {
+                    result.ErrorMessages.Add("Định dạng tệp Excel không hợp lệ (chữ ký tệp không đúng chuẩn .xlsx).");
+                    result.FailureCount = 1;
+                    return result;
+                }
+
+                using var workbook = new XLWorkbook(workbookStream);
+                var worksheet = workbook.Worksheets.FirstOrDefault();
+
+                if (worksheet == null)
+                {
+                    result.ErrorMessages.Add("File Excel không chứa bất kỳ trang tính nào.");
+                    return result;
+                }
+
+                var rawRows = worksheet.RangeUsed()?.RowsUsed()?.Skip(1); // Bỏ qua tiêu đề
+                if (rawRows == null)
+                {
+                    result.ErrorMessages.Add("File Excel không có dữ liệu để nạp.");
+                    return result;
+                }
+
+                var rows = rawRows.Take(MaxImportRows + 1).ToList();
+                if (rows.Count == 0)
+                {
+                    result.ErrorMessages.Add("File Excel không có dữ liệu để nạp.");
+                    return result;
+                }
+
+                if (rows.Count > MaxImportRows)
+                {
+                    result.ErrorMessages.Add($"File Excel vượt quá giới hạn tối đa {MaxImportRows} dòng dữ liệu cho mỗi lần nhập.");
+                    result.FailureCount = 1;
+                    return result;
+                }
+
+                var codeList = await _context.Students
+                    .AsNoTracking()
+                    .Select(s => s.StudentCode.ToLower())
+                    .ToListAsync();
+
+                var existingCodes = new HashSet<string>(codeList);
+
+                var currentYear = VietnamTimeHelper.Today.Year;
+                var prefix = $"TN-{currentYear}-";
+                var maxSeq = await _context.Students
+                    .AsNoTracking()
+                    .Where(s => s.StudentCode.StartsWith(prefix))
+                    .OrderByDescending(s => s.StudentCode)
+                    .Select(s => s.StudentCode)
+                    .FirstOrDefaultAsync();
+
+                int nextSeq = 1;
+                if (!string.IsNullOrEmpty(maxSeq) && maxSeq.Length >= prefix.Length + 4)
+                {
+                    var seqPart = maxSeq.Substring(prefix.Length);
+                    if (int.TryParse(seqPart, out int parsed)) nextSeq = parsed + 1;
+                }
+
+                var studentsToInsert = new List<Student>();
+                int rowIndex = 1;
+
+                foreach (var row in rows)
+                {
+                    rowIndex++;
+                    var code = row.Cell(1).GetString().Trim();
+                    var christian = row.Cell(2).GetString().Trim();
+                    var first = row.Cell(3).GetString().Trim();
+                    var last = row.Cell(4).GetString().Trim();
+                    var gender = row.Cell(5).GetString().Trim();
+                    var dobRaw = row.Cell(6).GetString().Trim();
+                    var baptismRaw = row.Cell(7).GetString().Trim();
+                    var confirmRaw = row.Cell(8).GetString().Trim();
+                    var phone = row.Cell(9).GetString().Trim();
+
+                    // Kiểm tra dòng trống
+                    if (string.IsNullOrWhiteSpace(christian) && string.IsNullOrWhiteSpace(first) && string.IsNullOrWhiteSpace(last))
+                        continue;
+
+                    result.TotalRows++;
+
+                    if (string.IsNullOrWhiteSpace(christian) || string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(last))
+                    {
+                        result.ErrorMessages.Add($"Dòng {rowIndex}: Thiếu thông tin bắt buộc (Tên thánh, Họ đệm hoặc Tên).");
                         result.FailureCount++;
                         continue;
                     }
+
+                    // 1. Ngày sinh (bắt buộc)
+                    if (!TryParseCellDate(row.Cell(6), out DateTime dob))
+                    {
+                        result.ErrorMessages.Add($"Dòng {rowIndex}: Ngày sinh '{row.Cell(6).GetString()}' không hợp lệ (bắt buộc định dạng dd/MM/yyyy).");
+                        result.FailureCount++;
+                        continue;
+                    }
+
+                    // 2. Ngày Rửa tội (không bắt buộc)
+                    DateTime? baptismDate = TryParseCellDate(row.Cell(7), out var bDate) ? bDate : null;
+
+                    // 3. Ngày Thêm sức (không bắt buộc)
+                    DateTime? confirmDate = TryParseCellDate(row.Cell(8), out var cDate) ? cDate : null;
+
+                    // Tự sinh mã nếu để trống
+                    if (string.IsNullOrWhiteSpace(code))
+                    {
+                        code = $"{prefix}{nextSeq++:D4}";
+                    }
+                    else
+                    {
+                        if (existingCodes.Contains(code.ToLower()))
+                        {
+                            result.ErrorMessages.Add($"Dòng {rowIndex}: Mã định danh '{code}' đã tồn tại trên hệ thống.");
+                            result.FailureCount++;
+                            continue;
+                        }
+                    }
+                    existingCodes.Add(code.ToLower());
+
+                    studentsToInsert.Add(new Student
+                    {
+                        StudentCode = code.ToUpper(),
+                        ChristianName = christian,
+                        FirstName = first,
+                        LastName = last,
+                        Gender = string.Equals(gender, "Nữ", StringComparison.OrdinalIgnoreCase) ? "Nữ" : "Nam",
+                        DateOfBirth = DateTime.SpecifyKind(dob, DateTimeKind.Utc),
+                        BaptismDate = baptismDate.HasValue ? DateTime.SpecifyKind(baptismDate.Value, DateTimeKind.Utc) : null,
+                        ConfirmationDate = confirmDate.HasValue ? DateTime.SpecifyKind(confirmDate.Value, DateTimeKind.Utc) : null,
+                        ParentPhone = string.IsNullOrWhiteSpace(phone) ? null : phone,
+                        IsActive = true
+                    });
                 }
-                existingCodes.Add(code.ToLower());
 
-                studentsToInsert.Add(new Student
+                if (studentsToInsert.Any())
                 {
-                    StudentCode = code.ToUpper(),
-                    ChristianName = christian,
-                    FirstName = first,
-                    LastName = last,
-                    Gender = string.Equals(gender, "Nữ", StringComparison.OrdinalIgnoreCase) ? "Nữ" : "Nam",
-                    DateOfBirth = DateTime.SpecifyKind(dob, DateTimeKind.Utc),
-                    BaptismDate = baptismDate.HasValue ? DateTime.SpecifyKind(baptismDate.Value, DateTimeKind.Utc) : null,
-                    ConfirmationDate = confirmDate.HasValue ? DateTime.SpecifyKind(confirmDate.Value, DateTimeKind.Utc) : null,
-                    ParentPhone = string.IsNullOrWhiteSpace(phone) ? null : phone,
-                    IsActive = true
-                });
-            }
+                    var strategy = _context.Database.CreateExecutionStrategy();
+                    await strategy.ExecuteAsync(async () =>
+                    {
+                        await using var transaction = await _context.Database.BeginTransactionAsync();
+                        await _context.Students.AddRangeAsync(studentsToInsert);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                    });
 
-            if (studentsToInsert.Any())
+                    result.SuccessCount = studentsToInsert.Count;
+                    _logger.LogInformation("Import thành công {Count} hồ sơ thiếu nhi từ file Excel", studentsToInsert.Count);
+                }
+
+                return result;
+            }
+            finally
             {
-                var strategy = _context.Database.CreateExecutionStrategy();
-                await strategy.ExecuteAsync(async () =>
+                if (bufferedStream != null)
                 {
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-                    await _context.Students.AddRangeAsync(studentsToInsert);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                });
-
-                result.SuccessCount = studentsToInsert.Count;
-                _logger.LogInformation("Import thành công {Count} hồ sơ thiếu nhi từ file Excel", studentsToInsert.Count);
+                    await bufferedStream.DisposeAsync();
+                }
             }
-
-            return result;
         }
 
         // ==========================================
@@ -214,15 +288,51 @@ namespace ManagerStudentCaltholic.Services
         // ==========================================
         public async Task<byte[]> ExportClassListToExcelAsync(int classId)
         {
+            using var workbook = await BuildClassListWorkbookAsync(classId);
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
+        }
+
+        /// <summary>
+        /// Ghi trực tiếp danh sách lớp ra Stream đích (tránh cấp phát MemoryStream trung gian trên VM RAM thấp).
+        /// </summary>
+        public async Task ExportClassListToStreamAsync(int classId, Stream outputStream)
+        {
+            ArgumentNullException.ThrowIfNull(outputStream);
+            using var workbook = await BuildClassListWorkbookAsync(classId);
+            workbook.SaveAs(outputStream);
+        }
+
+        private async Task<XLWorkbook> BuildClassListWorkbookAsync(int classId)
+        {
             var targetClass = await _context.Classes
-                .Include(c => c.AcademicYear)
-                .Include(c => c.Enrollments)
-                    .ThenInclude(e => e.Student)
-                .FirstOrDefaultAsync(c => c.Id == classId);
+                .AsNoTracking()
+                .Where(c => c.Id == classId)
+                .Select(c => new
+                {
+                    c.Name,
+                    AcademicYearName = c.AcademicYear.Name,
+                    c.GradeLevel,
+                    Students = c.Enrollments
+                        .OrderBy(e => e.Student.LastName)
+                        .ThenBy(e => e.Student.FirstName)
+                        .Select(e => new
+                        {
+                            e.Student.StudentCode,
+                            e.Student.ChristianName,
+                            e.Student.FirstName,
+                            e.Student.LastName,
+                            e.Student.Gender,
+                            e.Student.DateOfBirth
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
 
             if (targetClass == null) throw new Exception("Không tìm thấy thông tin lớp học");
 
-            using var workbook = new XLWorkbook();
+            var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add(targetClass.Name);
 
             // Thiết lập trang in A4 dọc
@@ -238,12 +348,12 @@ namespace ManagerStudentCaltholic.Services
             worksheet.Cell("A1").Style.Font.Bold = true;
             worksheet.Cell("A1").Style.Font.FontSize = 11;
 
-            worksheet.Cell("A2").Value = $"LỚP: {targetClass.Name.ToUpper()} - NIÊN KHÓA: {targetClass.AcademicYear.Name}";
+            worksheet.Cell("A2").Value = $"LỚP: {targetClass.Name.ToUpper()} - NIÊN KHÓA: {targetClass.AcademicYearName}";
             worksheet.Cell("A2").Style.Font.Bold = true;
             worksheet.Cell("A2").Style.Font.FontSize = 13;
             worksheet.Range("A2:G2").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            worksheet.Cell("A3").Value = $"Khối: {targetClass.GradeLevel} | Sĩ số: {targetClass.Enrollments.Count} em";
+            worksheet.Cell("A3").Value = $"Khối: {targetClass.GradeLevel} | Sĩ số: {targetClass.Students.Count} em";
             worksheet.Range("A3:G3").Merge().Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             // Bảng danh sách cột
@@ -260,15 +370,9 @@ namespace ManagerStudentCaltholic.Services
                 cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
             }
 
-            var students = targetClass.Enrollments
-                .Select(e => e.Student)
-                .OrderBy(s => s.LastName)
-                .ThenBy(s => s.FirstName)
-                .ToList();
-
             int currRow = startRow + 1;
             int stt = 1;
-            foreach (var s in students)
+            foreach (var s in targetClass.Students)
             {
                 worksheet.Cell(currRow, 1).Value = stt++;
                 worksheet.Cell(currRow, 2).Value = SanitizeExcelText(s.StudentCode);
@@ -299,9 +403,7 @@ namespace ManagerStudentCaltholic.Services
 
             worksheet.Columns().AdjustToContents();
 
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return stream.ToArray();
+            return workbook;
         }
 
         /// <summary>

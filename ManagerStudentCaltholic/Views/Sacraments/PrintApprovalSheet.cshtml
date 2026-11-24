@@ -1,6 +1,7 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.SacramentEvaluationFilterViewModel
 @{
     Layout = null;
+    var vnNow = ManagerStudentCaltholic.Services.VietnamTimeHelper.Now;
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -76,7 +77,7 @@
             </div>
             <div class="col-6">
                 <div class="fw-bold text-uppercase" style="font-size: 11pt;">NIÊN KHÓA: @Model.AcademicYearName</div>
-                <div class="fst-italic" style="font-size: 10.5pt;">Tp.HCM, ngày @DateTime.Now.ToString("dd") tháng @DateTime.Now.ToString("MM") năm @DateTime.Now.ToString("yyyy")</div>
+                <div class="fst-italic" style="font-size: 10.5pt;">Tp.HCM, ngày @vnNow.ToString("dd") tháng @vnNow.ToString("MM") năm @vnNow.ToString("yyyy")</div>
             </div>
         </div>
 

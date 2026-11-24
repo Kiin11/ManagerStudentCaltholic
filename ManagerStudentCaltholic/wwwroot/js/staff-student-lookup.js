@@ -8,6 +8,7 @@
 const student360ClientCache = new Map();
 let currentLoadedStudent = null;
 let searchDebounceTimer = null;
+let currentParentTemplates = [];
 
 document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('staffStudentQuickSearchInput');
@@ -99,7 +100,7 @@ function renderSuggestionsDropdown(items, term) {
                 <div class="d-flex align-items-center gap-2">
                     <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center fw-bold"
                          style="width: 36px; height: 36px; font-size: 0.9rem;">
-                        ${initial}
+                        ${escapeHtml(initial)}
                     </div>
                     <div>
                         <div class="fw-bold text-dark d-flex align-items-center">
@@ -236,8 +237,8 @@ function renderStudent360ToDom(data, selectedOption = 'OVERVIEW') {
     const resSunOver = document.getElementById('resSundayStatusOverview');
     if (resSunOver) {
         if (sun) {
-            resSunOver.innerHTML = `<span class="badge bg-${sun.statusBadgeColor} me-1">${escapeHtml(sun.statusDisplay)}</span>
-                <small class="text-muted">(${formatDateShort(sun.attendanceDate)})</small>`;
+            resSunOver.innerHTML = `<span class="badge bg-${escapeHtml(sun.statusBadgeColor)} me-1">${escapeHtml(sun.statusDisplay)}</span>
+                <small class="text-muted">(${escapeHtml(formatDateShort(sun.attendanceDate))})</small>`;
         } else {
             resSunOver.innerHTML = `<span class="badge bg-secondary">Chưa có dữ liệu</span>`;
         }
@@ -247,8 +248,8 @@ function renderStudent360ToDom(data, selectedOption = 'OVERVIEW') {
     const resThuOver = document.getElementById('resThursdayStatusOverview');
     if (resThuOver) {
         if (thu) {
-            resThuOver.innerHTML = `<span class="badge bg-${thu.statusBadgeColor} me-1">${escapeHtml(thu.statusDisplay)}</span>
-                <small class="text-muted">(${formatDateShort(thu.attendanceDate)})</small>`;
+            resThuOver.innerHTML = `<span class="badge bg-${escapeHtml(thu.statusBadgeColor)} me-1">${escapeHtml(thu.statusDisplay)}</span>
+                <small class="text-muted">(${escapeHtml(formatDateShort(thu.attendanceDate))})</small>`;
         } else {
             resThuOver.innerHTML = `<span class="badge bg-secondary">Chưa có dữ liệu</span>`;
         }
@@ -375,7 +376,7 @@ function renderAttendancePanel(att) {
 
         if (camp.recentPresentDatesIso && camp.recentPresentDatesIso.length > 0) {
             campDatesList.innerHTML = camp.recentPresentDatesIso.map(d => `
-                <span class="badge bg-success-subtle text-success border"><i class="bi bi-check2 me-1"></i>${d}</span>
+                <span class="badge bg-success-subtle text-success border"><i class="bi bi-check2 me-1"></i>${escapeHtml(d)}</span>
             `).join('');
         } else {
             campDatesList.innerHTML = `<span class="badge bg-light text-muted border">Chưa có ngày tham dự</span>`;
@@ -409,9 +410,9 @@ function renderAcademicPanel(acad, sac) {
         tbodyCur.innerHTML = acad.currentGrades.map(g => `
             <tr>
                 <td class="fw-semibold text-dark">${escapeHtml(g.columnName)}</td>
-                <td class="text-center"><span class="badge bg-light text-dark border">x${g.weightFactor}</span></td>
-                <td class="text-center fw-bold text-primary">${g.score != null ? g.score.toFixed(1) : '<span class="text-muted">--</span>'}</td>
-                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary">HK${g.semester}</span></td>
+                <td class="text-center"><span class="badge bg-light text-dark border">x${Number(g.weightFactor) || 1}</span></td>
+                <td class="text-center fw-bold text-primary">${g.score != null ? Number(g.score).toFixed(1) : '<span class="text-muted">--</span>'}</td>
+                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary">HK${Number(g.semester) || 1}</span></td>
                 <td class="text-muted small">${escapeHtml(g.note || '-')}</td>
             </tr>
         `).join('');
@@ -431,8 +432,8 @@ function renderAcademicPanel(acad, sac) {
                 <tr>
                     <td class="fw-bold">${escapeHtml(p.academicYearName)}</td>
                     <td>${escapeHtml(p.className)}</td>
-                    <td class="text-center fw-bold text-primary">${p.yearAverageScore != null ? p.yearAverageScore.toFixed(2) : '--'}</td>
-                    <td class="text-center"><span class="badge bg-light text-dark border">${p.attendanceRatePercent}%</span></td>
+                    <td class="text-center fw-bold text-primary">${p.yearAverageScore != null ? Number(p.yearAverageScore).toFixed(2) : '--'}</td>
+                    <td class="text-center"><span class="badge bg-light text-dark border">${Number(p.attendanceRatePercent) || 0}%</span></td>
                     <td class="text-center">${outcomeBadge}</td>
                 </tr>
             `;
@@ -464,10 +465,10 @@ function buildSacramentCardHtml(item, iconClass) {
         <div class="p-3 rounded-4 border bg-light h-100 d-flex flex-column justify-content-between">
             <div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold text-dark"><i class="bi ${iconClass} me-1 fs-5"></i>${escapeHtml(item.milestoneName)}</span>
+                    <span class="fw-bold text-dark"><i class="bi ${escapeHtml(iconClass)} me-1 fs-5"></i>${escapeHtml(item.milestoneName)}</span>
                     ${statusBadge}
                 </div>
-                <div class="small text-muted mb-1">Ngày: <strong class="text-dark">${dateStr}</strong></div>
+                <div class="small text-muted mb-1">Ngày: <strong class="text-dark">${escapeHtml(dateStr)}</strong></div>
                 <div class="small text-muted mb-1">Giáo xứ: <strong class="text-dark">${escapeHtml(item.parishName || 'GX Phú Trung')}</strong></div>
                 ${item.priestName ? `<div class="small text-muted mb-1">Chủ tế: <strong class="text-dark">${escapeHtml(item.priestName)}</strong></div>` : ''}
                 ${item.godparentName ? `<div class="small text-muted mb-1">Đỡ đầu: <strong class="text-dark">${escapeHtml(item.godparentName)}</strong></div>` : ''}
@@ -511,26 +512,41 @@ function renderParentContactPanel(par, b) {
 
     const tplContainer = document.getElementById('resParentTemplatesContainer');
     if (tplContainer && par.templates) {
+        currentParentTemplates = par.templates.map(t => t.content || '');
+        const cleanPhoneForHref = phone ? phone.replace(/[^0-9]/g, '') : '';
+
         tplContainer.innerHTML = par.templates.map((t, idx) => `
             <div class="p-3 rounded-4 border bg-light">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <span class="fw-bold text-dark">${idx + 1}. ${escapeHtml(t.title)}</span>
-                    <span class="badge bg-secondary-subtle text-secondary small">${t.category}</span>
+                    <span class="badge bg-secondary-subtle text-secondary small">${escapeHtml(t.category)}</span>
                 </div>
                 <p class="small text-secondary mb-2 bg-white p-2 rounded-3 border" style="white-space: pre-line;">${escapeHtml(t.content)}</p>
                 <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3"
-                            onclick="copyParentTemplateText('${escapeJs(t.content)}')">
+                    <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 btn-copy-parent-template"
+                            data-template-index="${idx}">
                         <i class="bi bi-clipboard me-1"></i> Sao chép tin nhắn
                     </button>
-                    ${phone ? `<a href="https://zalo.me/${phone.replace(/[^0-9]/g, '')}" target="_blank"
-                                  class="btn btn-info text-white btn-sm rounded-pill px-3"
-                                  onclick="copyParentTemplateText('${escapeJs(t.content)}')">
+                    ${cleanPhoneForHref ? `<a href="https://zalo.me/${escapeHtml(cleanPhoneForHref)}" target="_blank"
+                                  class="btn btn-info text-white btn-sm rounded-pill px-3 btn-copy-parent-template"
+                                  data-template-index="${idx}">
                         <i class="bi bi-chat-text-fill me-1"></i> Mở Zalo & Gửi
                     </a>` : ''}
                 </div>
             </div>
         `).join('');
+
+        if (!tplContainer.dataset.copyDelegated) {
+            tplContainer.dataset.copyDelegated = 'true';
+            tplContainer.addEventListener('click', function (e) {
+                const trigger = e.target.closest('.btn-copy-parent-template');
+                if (!trigger) return;
+                const idx = Number(trigger.dataset.templateIndex);
+                if (!Number.isNaN(idx) && idx >= 0 && idx < currentParentTemplates.length) {
+                    copyParentTemplateText(currentParentTemplates[idx]);
+                }
+            });
+        }
     }
 }
 
@@ -545,13 +561,16 @@ function copyParentTemplateText(text) {
 function prependRecentLookupChip(basicInfo) {
     if (!basicInfo || !basicInfo.studentId) return;
 
+    const studentId = Number(basicInfo.studentId) || 0;
+    if (studentId <= 0) return;
+
     const chipsWrapper = document.getElementById('staffRecentChipsWrapper');
     const notice = document.getElementById('noRecentLookupsNotice');
     if (notice) notice.remove();
 
     if (!chipsWrapper) return;
 
-    const existingBtn = chipsWrapper.querySelector(`button[onclick*="${basicInfo.studentId}"]`);
+    const existingBtn = chipsWrapper.querySelector(`button[data-student-id="${studentId}"], button[onclick*="(${studentId},"]`);
     if (existingBtn) {
         chipsWrapper.removeChild(existingBtn);
     }
@@ -559,7 +578,10 @@ function prependRecentLookupChip(basicInfo) {
     const newBtn = document.createElement('button');
     newBtn.type = 'button';
     newBtn.className = 'btn btn-sm btn-light border rounded-pill px-3 py-1 text-dark shadow-2xs hover-primary staff-recent-chip';
-    newBtn.setAttribute('onclick', `fetchStudent360Detail(${basicInfo.studentId}, 'OVERVIEW', '${escapeJs(basicInfo.fullName)}')`);
+    newBtn.dataset.studentId = String(studentId);
+    newBtn.addEventListener('click', () => {
+        fetchStudent360Detail(studentId, 'OVERVIEW', basicInfo.fullName || '');
+    });
     newBtn.innerHTML = `
         <span class="badge bg-secondary-subtle text-secondary me-1">${escapeHtml(basicInfo.studentCode)}</span>
         <strong>${escapeHtml(basicInfo.christianName)} ${escapeHtml(basicInfo.fullName)}</strong>

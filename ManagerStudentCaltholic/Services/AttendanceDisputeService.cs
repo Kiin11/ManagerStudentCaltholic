@@ -28,6 +28,9 @@ namespace ManagerStudentCaltholic.Services
             _logger = logger;
         }
 
+        private const string GenericParentVerificationFailedMessage =
+            "Thông tin xác thực thiếu nhi không chính xác hoặc chưa đủ điều kiện gửi phản ánh.";
+
         public async Task<(bool Success, string Message)> SubmitDisputeFromParentAsync(
             SubmitAttendanceDisputeRequestDto dto,
             string ipAddress)
@@ -47,16 +50,22 @@ namespace ManagerStudentCaltholic.Services
                 return (false, "Định dạng ngày điểm danh không hợp lệ.");
             }
 
-            var targetDateUtc = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc);
-            var todayVn = DateTime.UtcNow.AddHours(7).Date;
+            var targetDateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(parsedDate);
+            var todayVn = VietnamTimeHelper.Today;
             if (targetDateUtc.Date > todayVn)
             {
                 return (false, "Không thể gửi yêu cầu báo sai sót cho ngày chưa diễn ra.");
             }
 
-            // 1. Xác thực 3 yếu tố: Mã thiếu nhi (kể cả mã lịch sử) + Ngày sinh + 4 số cuối SĐT Phụ huynh
+            // SEC-APP-03: Gom toàn bộ lỗi xác thực (sai Mã TN, Ngày sinh, 4 số cuối SĐT, chưa xếp lớp)
+            // về một thông báo chung duy nhất để chống enumeration hồ sơ thiếu nhi.
+            if (string.IsNullOrWhiteSpace(dto.StudentCode) || string.IsNullOrWhiteSpace(dto.PhoneLast4Digits))
+            {
+                return (false, GenericParentVerificationFailedMessage);
+            }
+
             var (resolvedStudent, _, _) = await _codeRolloverService.ResolveStudentByAnyCodeAsync(dto.StudentCode);
-            var startDob = DateTime.SpecifyKind(dto.DateOfBirth.Date, DateTimeKind.Utc);
+            var startDob = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.DateOfBirth);
             var endDob = startDob.AddDays(1);
 
             if (resolvedStudent == null ||
@@ -64,13 +73,13 @@ namespace ManagerStudentCaltholic.Services
                 resolvedStudent.DateOfBirth < startDob ||
                 resolvedStudent.DateOfBirth >= endDob)
             {
-                return (false, "Thông tin Mã thiếu nhi hoặc Ngày sinh không khớp với hồ sơ.");
+                return (false, GenericParentVerificationFailedMessage);
             }
 
             var phoneDigits = new string((resolvedStudent.ParentPhone ?? string.Empty).Where(char.IsDigit).ToArray());
-            if (phoneDigits.Length < 4 || !phoneDigits.EndsWith(dto.PhoneLast4Digits.Trim()))
+            if (phoneDigits.Length < 4 || !phoneDigits.EndsWith(dto.PhoneLast4Digits.Trim(), StringComparison.Ordinal))
             {
-                return (false, "4 chữ số cuối Số điện thoại Phụ huynh không chính xác.");
+                return (false, GenericParentVerificationFailedMessage);
             }
 
             var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent)
@@ -78,7 +87,7 @@ namespace ManagerStudentCaltholic.Services
 
             if (currentYear == null)
             {
-                return (false, "Chưa có niên khóa hoạt động.");
+                return (false, GenericParentVerificationFailedMessage);
             }
 
             var enrollment = await _context.Enrollments
@@ -89,7 +98,7 @@ namespace ManagerStudentCaltholic.Services
 
             if (enrollment == null || enrollment.ClassRoom == null)
             {
-                return (false, "Thiếu nhi hiện chưa được xếp lớp trong niên khóa này.");
+                return (false, GenericParentVerificationFailedMessage);
             }
 
             // 2. Chống Spam: Giới hạn tối đa 5 yêu cầu PENDING trên mỗi học sinh
@@ -231,7 +240,10 @@ namespace ManagerStudentCaltholic.Services
                 status = d.Status,
                 teacherResponseNote = d.TeacherResponseNote ?? "",
                 reviewedBy = d.ReviewedBy ?? "",
-                createdAt = d.CreatedAt.AddHours(7).ToString("dd/MM/yyyy HH:mm")
+                createdAt = VietnamTimeHelper.ToVietnamTime(
+                    d.CreatedAt.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(d.CreatedAt, DateTimeKind.Utc)
+                        : d.CreatedAt).ToString("dd/MM/yyyy HH:mm")
             }).ToList();
         }
 
@@ -243,6 +255,7 @@ namespace ManagerStudentCaltholic.Services
             var dispute = await _context.AttendanceDisputeRequests
                 .Include(d => d.Student)
                 .Include(d => d.ClassRoom)
+                .Include(d => d.Enrollment)
                 .FirstOrDefaultAsync(d => d.Id == dto.DisputeId);
 
             if (dispute == null)
@@ -253,6 +266,18 @@ namespace ManagerStudentCaltholic.Services
             if (!await CanUserManageClassDisputesAsync(user, dispute.ClassRoomId))
             {
                 return (false, "Bạn không có thẩm quyền xét duyệt yêu cầu của lớp này.");
+            }
+
+            // SEC-APP-02: Chặn tài khoản có LinkedStudentId tự duyệt báo sai sót điểm danh của chính mình
+            var callerUserIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (long.TryParse(callerUserIdStr, out long callerUserId) && callerUserId > 0)
+            {
+                var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+                var targetStudentId = dispute.Enrollment?.StudentId ?? dispute.StudentId;
+                if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, targetStudentId))
+                {
+                    return (false, "Bạn không có quyền tự xét duyệt yêu cầu đính chính điểm danh của chính mình.");
+                }
             }
 
             if (dispute.Status != "PENDING")
@@ -390,6 +415,8 @@ namespace ManagerStudentCaltholic.Services
                 if (decision == "APPROVED")
                 {
                     await _cache.RemoveAsync(RedisAttendanceKeys.ClassSheet(dispute.ClassRoomId, dispute.AttendanceDate));
+                    await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(dispute.ClassRoomId, dispute.AttendanceDate));
+                    await _cache.RemoveAsync($"staff_lookup:student_360:{dispute.StudentId}");
                 }
 
                 _logger.LogInformation(
@@ -425,19 +452,31 @@ namespace ManagerStudentCaltholic.Services
             if (user.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(managedGrade.Trim(), classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                    return false; // Fail CLOSED khi Trưởng khối chưa được gán khối
+
+                return string.Equals(managedGrade.Trim(), classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (user.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(classRoom.Session, classRoom.GradeLevel))
+            {
+                return false;
+            }
+
+            if (!user.IsInRole(UserRole.Teacher) && !user.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                return false;
             }
 
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (long.TryParse(userIdStr, out long userId))
+            if (long.TryParse(userIdStr, out long userId) && userId > 0)
             {
                 return await _context.ClassTeachers
                     .AsNoTracking()
-                    .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == userId);
+                    .AnyAsync(ct => ct.ClassRoomId == classId &&
+                                    ct.UserId == userId &&
+                                    ct.AcademicYearId == classRoom.AcademicYearId);
             }
 
             return false;

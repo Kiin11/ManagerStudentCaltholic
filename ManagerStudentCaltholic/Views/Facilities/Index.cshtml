@@ -123,11 +123,12 @@
                 var isHdgx = r.RoomName.Contains("HĐGX");
                 var icon = isHdgx ? "bi-briefcase-fill" : "bi-people-fill";
                 var badgeText = isHdgx ? "Phòng Hội Đồng Giáo Xứ" : "Sảnh Sinh Hoạt Chung / Hội Trường";
-                var desc = $"Không bố trí lớp học giáo lý (Phòng {r.RoomName})";
+                var encodedRoomName = System.Net.WebUtility.HtmlEncode(r.RoomName);
+                var desc = $"Không bố trí lớp học giáo lý (Phòng {encodedRoomName})";
 
                 sb.Append($@"
         <div class='d-flex justify-content-between align-items-center mb-2'>
-        <strong class='text-dark fs-6'><i class='bi {icon} text-primary me-1'></i>{r.RoomName}</strong>
+        <strong class='text-dark fs-6'><i class='bi {icon} text-primary me-1'></i>{encodedRoomName}</strong>
         <span class='badge bg-light text-secondary border'>{r.Capacity} chỗ</span>
         </div>
         <div class='p-3 rounded-3 bg-light border border-dashed text-center flex-grow-1 d-flex flex-column justify-content-center align-items-center my-1'>
@@ -145,10 +146,11 @@
             var mCount = pair.MorningPresent;
             var a = pair.Afternoon;
             var aCount = pair.AfternoonPresent;
+            var safeRoomName = System.Net.WebUtility.HtmlEncode(r.RoomName);
 
             // Header phòng: Tên phòng & Sức chứa
             sb.Append($@"<div class='d-flex justify-content-between align-items-center mb-1'>
-        <strong class='text-dark'>{r.RoomName}</strong>
+        <strong class='text-dark'>{safeRoomName}</strong>
         <small class='badge bg-light text-secondary border' title='Sức chứa thiết kế'>{r.Capacity} chỗ</small>
         </div>");
 
@@ -157,10 +159,11 @@
             {
                 var isOverflow = mCount > r.Capacity;
                 var badgeClass = mCount > 0 ? (isOverflow ? "bg-danger text-white" : "bg-success text-white") : "bg-secondary-subtle text-secondary";
+                var safeMorningName = System.Net.WebUtility.HtmlEncode(m.Name);
 
                 sb.Append($@"<div class='shift-slot slot-morning d-flex justify-content-between align-items-center'>
         <div>
-        <div class='fw-bold text-dark'><i class='bi bi-sun-fill text-warning me-1'></i>{m.Name}</div>
+        <div class='fw-bold text-dark'><i class='bi bi-sun-fill text-warning me-1'></i>{safeMorningName}</div>
         <div class='small text-muted'>Có mặt: <span class='badge {badgeClass} px-2 py-0'>{mCount}</span> / {m.Enrollments.Count} em</div>
         </div>
         <button type='button' class='btn-close btn-sm' style='font-size: 0.6rem;' title='Hủy xếp phòng' onclick='event.stopPropagation(); unassignRoom({m.Id});'></button>
@@ -178,10 +181,11 @@
             {
                 var isOverflow = aCount > r.Capacity;
                 var badgeClass = aCount > 0 ? (isOverflow ? "bg-danger text-white" : "bg-primary text-white") : "bg-secondary-subtle text-secondary";
+                var safeAfternoonName = System.Net.WebUtility.HtmlEncode(a.Name);
 
                 sb.Append($@"<div class='shift-slot slot-afternoon d-flex justify-content-between align-items-center mt-1'>
         <div>
-        <div class='fw-bold text-dark'><i class='bi bi-moon-stars-fill text-primary me-1'></i>{a.Name}</div>
+        <div class='fw-bold text-dark'><i class='bi bi-moon-stars-fill text-primary me-1'></i>{safeAfternoonName}</div>
         <div class='small text-muted'>Có mặt: <span class='badge {badgeClass} px-2 py-0'>{aCount}</span> / {a.Enrollments.Count} em</div>
         </div>
         <button type='button' class='btn-close btn-sm' style='font-size: 0.6rem;' title='Hủy xếp phòng' onclick='event.stopPropagation(); unassignRoom({a.Id});'></button>
@@ -447,7 +451,7 @@
                                 </td>
                                 <td>
                                     <div class="fw-semibold text-dark small"><i class="bi bi-person me-1 text-secondary"></i>@reporterName</div>
-                                    <small class="text-muted">@inc.ReportedAt.ToString("dd/MM/yyyy HH:mm")</small>
+                                    <small class="text-muted">@ManagerStudentCaltholic.Services.VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(inc.ReportedAt, DateTimeKind.Utc)).ToString("dd/MM/yyyy HH:mm")</small>
                                 </td>
                                 @if (canResolveIncidents)
                                 {

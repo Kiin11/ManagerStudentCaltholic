@@ -139,7 +139,8 @@
                             </a>
                         </div>
                         <button type="button" class="btn btn-success btn-sm rounded-pill px-3 fw-bold shadow-sm"
-                                onclick="enqueueBackgroundParishExport(@Model.SelectedYearId, '@Html.Raw(Model.SelectedGrade)')">
+                                data-grade="@Model.SelectedGrade"
+                                onclick="enqueueBackgroundParishExport(@Model.SelectedYearId, this.dataset.grade)">
                             <i class="bi bi-cloud-arrow-down-fill me-1"></i> Xuất Excel Toàn Xứ (Chạy Nền)
                         </button>
                     </form>

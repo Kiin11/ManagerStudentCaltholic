@@ -8,12 +8,19 @@ const ParishOfflineEngine = (function () {
     'use strict';
 
     const DB_NAME = 'ParishOfflineDB';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const STORE_STUDENTS = 'students_cache';
     const STORE_PENDING = 'pending_attendances';
 
     let dbPromise = null;
     let isSyncing = false;
+
+    function formatLocalDateYyyyMmDd(dateObj = new Date()) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
 
     // 1. Khởi tạo và mở kết nối IndexedDB
     function openDatabase() {
@@ -29,12 +36,24 @@ const ParishOfflineEngine = (function () {
 
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
+                const tx = event.target.transaction;
 
                 // Store 1: students_cache (Key: studentCode)
+                // by_enrollmentId phải là unique: false để hỗ trợ các bản ghi mã năm cũ (historicalCodes) trỏ cùng enrollmentId
+                let studentStore;
                 if (!db.objectStoreNames.contains(STORE_STUDENTS)) {
-                    const studentStore = db.createObjectStore(STORE_STUDENTS, { keyPath: 'studentCode' });
+                    studentStore = db.createObjectStore(STORE_STUDENTS, { keyPath: 'studentCode' });
                     studentStore.createIndex('by_classId', 'classId', { unique: false });
-                    studentStore.createIndex('by_enrollmentId', 'enrollmentId', { unique: true });
+                    studentStore.createIndex('by_enrollmentId', 'enrollmentId', { unique: false });
+                } else {
+                    studentStore = tx.objectStore(STORE_STUDENTS);
+                    if (!studentStore.indexNames.contains('by_classId')) {
+                        studentStore.createIndex('by_classId', 'classId', { unique: false });
+                    }
+                    if (studentStore.indexNames.contains('by_enrollmentId')) {
+                        studentStore.deleteIndex('by_enrollmentId');
+                    }
+                    studentStore.createIndex('by_enrollmentId', 'enrollmentId', { unique: false });
                 }
 
                 // Store 2: pending_attendances (Key: clientRecordId)
@@ -346,7 +365,7 @@ const ParishOfflineEngine = (function () {
         const mainStudentCode = student.originalStudentCode || student.studentCode;
 
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
+        const todayStr = formatLocalDateYyyyMmDd(now);
         const evalResult = evaluateOfflineCheckInTime(now, student.gradeLevel, sessionMode);
         const activityKey = evalResult.isMass ? 'MASS' : 'CLASS';
         const clientRecordId = `QR_${todayStr}_${student.enrollmentId}_${activityKey}`;
@@ -409,6 +428,8 @@ const ParishOfflineEngine = (function () {
                 : null,
             enrollmentId: student.enrollmentId,
             classId: student.classId,
+            sessionMode: sessionMode,
+            scanDate: todayStr,
             clientRecordId: clientRecordId,
             message: isDuplicate
                 ? `[Offline] Thiếu nhi đã được quét ${evalResult.activityTitle} trên máy này!`
@@ -521,16 +542,44 @@ const ParishOfflineEngine = (function () {
             if (res.ok) {
                 const data = await res.json();
                 if (data.success) {
-                    const idsToRemove = data.syncedClientIds && data.syncedClientIds.length > 0
+                    const idsToRemove = Array.isArray(data.syncedClientIds)
                         ? data.syncedClientIds
-                        : pendingList.map(x => x.clientRecordId);
+                        : [];
 
-                    await removeSyncedRecords(idsToRemove);
-                    toggleSyncProgressBar(true, 100, data.message);
+                    if (idsToRemove.length > 0) {
+                        await removeSyncedRecords(idsToRemove);
+                    }
+
+                    const skippedCount = Array.isArray(data.skippedRecords) ? data.skippedRecords.length : 0;
+                    const statusText = skippedCount > 0
+                        ? `${data.message || 'Đã đồng bộ.'} (${skippedCount} mục bị từ chối/bỏ qua)`
+                        : (data.message || 'Đã đồng bộ dữ liệu điểm danh.');
+
+                    toggleSyncProgressBar(true, 100, statusText);
 
                     if (showFeedback && typeof window.showAlert === 'function') {
-                        window.showAlert(data.message, true);
+                        window.showAlert(statusText, skippedCount === 0);
                     }
+                } else {
+                    const errMsg = data.message || 'Máy chủ từ chối đồng bộ hàng đợi điểm danh.';
+                    console.warn('[OfflineEngine] Sync rejected by server:', errMsg);
+                    toggleSyncProgressBar(true, 100, errMsg);
+                    if (showFeedback && typeof window.showAlert === 'function') {
+                        window.showAlert(errMsg, false);
+                    }
+                }
+            } else {
+                let errMsg = `Đồng bộ thất bại (HTTP ${res.status}). Dữ liệu vẫn được giữ an toàn trên thiết bị.`;
+                try {
+                    const errData = await res.json();
+                    if (errData && errData.message) {
+                        errMsg = errData.message;
+                    }
+                } catch {}
+                console.warn('[OfflineEngine] Sync HTTP error:', res.status, errMsg);
+                toggleSyncProgressBar(true, 100, errMsg);
+                if (showFeedback && typeof window.showAlert === 'function') {
+                    window.showAlert(errMsg, false);
                 }
             }
         } catch (err) {
@@ -630,14 +679,27 @@ const ParishOfflineEngine = (function () {
         if (!clientRecordId) return { success: false, message: 'Thiếu mã định danh bản ghi ngoại tuyến.' };
         try {
             const db = await openDatabase();
-            await new Promise((resolve, reject) => {
+            const existed = await new Promise((resolve, reject) => {
                 const tx = db.transaction(STORE_PENDING, 'readwrite');
                 const store = tx.objectStore(STORE_PENDING);
-                store.delete(clientRecordId);
-                tx.oncomplete = () => resolve();
+                const getReq = store.get(clientRecordId);
+                let found = false;
+
+                getReq.onsuccess = () => {
+                    if (getReq.result) {
+                        found = true;
+                        store.delete(clientRecordId);
+                    }
+                };
+
+                tx.oncomplete = () => resolve(found);
                 tx.onerror = (e) => reject(e.target.error);
             });
+
             await updateOfflineUiCounters();
+            if (!existed) {
+                return { success: false, alreadySynced: true, message: 'Bản ghi đã được đồng bộ lên máy chủ trước đó.' };
+            }
             return { success: true, message: 'Đã hoàn tác lượt quét điểm danh ngoại tuyến!' };
         } catch (err) {
             console.error('Lỗi khi hoàn tác offline:', err);
@@ -649,6 +711,7 @@ const ParishOfflineEngine = (function () {
         prefetchStudentsCache,
         cacheStudentsFromDomTable,
         getCachedStudentByCode,
+        getStorageStats,
         processOfflineQrScan,
         undoOfflineQrScan,
         saveBatchAttendanceOffline,

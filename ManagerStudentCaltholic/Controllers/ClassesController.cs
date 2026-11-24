@@ -41,6 +41,16 @@ namespace ManagerStudentCaltholic.Controllers
         private async Task<bool> CanAccessClassRosterAsync(ClassRoom targetClass)
         {
             if (IsLeadership) return true;
+            if (CurrentUserId <= 0) return false;
+
+            var currentYear = await _context.AcademicYears
+                .AsNoTracking()
+                .FirstOrDefaultAsync(y => y.IsCurrent);
+
+            if (currentYear == null || targetClass.AcademicYearId != currentYear.Id)
+            {
+                return false;
+            }
 
             if (User.IsInRole(UserRole.ProbationaryTeacher) &&
                 GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
@@ -50,18 +60,20 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (User.IsInRole(UserRole.BranchHead))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    return true;
+                    return false;
                 }
+
+                return string.Equals(targetClass.GradeLevel?.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase);
             }
 
-            if (CurrentUserId <= 0) return false;
-
             return await _context.ClassTeachers
-                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id
+                    && ct.AcademicYearId == currentYear.Id
+                    && ct.UserId == CurrentUserId);
         }
 
         /// <summary>
@@ -86,49 +98,84 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             // Mặc định chọn Niên khóa đang kích hoạt (IsCurrent), nếu không có thì lấy niên khóa mới nhất
-            var defaultYear = academicYears.FirstOrDefault(y => y.IsCurrent) ?? academicYears.First();
+            var currentYear = academicYears.FirstOrDefault(y => y.IsCurrent);
+            var defaultYear = currentYear ?? academicYears.First();
             var selectedYearId = academicYearId ?? defaultYear.Id;
 
             // Truy vấn danh sách lớp học theo niên khóa đã chọn
             var query = _context.Classes
                 .Include(c => c.AcademicYear)
                 .Include(c => c.Enrollments)
-                .Include(c=> c.ClassTeachers)
+                .Include(c => c.ClassTeachers)
                 .AsSplitQuery()
                 .Where(c => c.AcademicYearId == selectedYearId);
 
-            // BỘ LỌC PHẠM VI (SCOPE FILTER CHO TRƯỞNG KHỐI)
+            // BỘ LỌC PHẠM VI (SCOPE FILTER THEO VAI TRÒ)
             if (User.IsInRole(UserRole.BranchHead))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade))
+                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                if (!string.IsNullOrWhiteSpace(managedGrade))
                 {
+                    var gradeLower = managedGrade.ToLowerInvariant();
                     // Ép buộc chỉ lấy các lớp thuộc đúng khối phụ trách
-                    query = query.Where(c => c.GradeLevel == managedGrade);
+                    query = query.Where(c => c.GradeLevel.ToLower() == gradeLower);
                     ViewBag.SelectedGrade = managedGrade;
                     ViewBag.IsGradeLocked = true; // Cờ báo cho Razor View khóa dropdown chọn khối
                 }
                 else
                 {
-                    ViewBag.SelectedGrade = "ALL";
-                }
-            }
-            else if (!string.IsNullOrEmpty(gradeLevel) && gradeLevel != "ALL")
-            {
-                if (GradeLevel.IsProbationaryGrade(gradeLevel))
-                {
-                    query = query.Where(c => c.GradeLevel == GradeLevel.DuBi || c.GradeLevel == GradeLevel.DuBiCode);
-                    ViewBag.SelectedGrade = GradeLevel.DuBi;
-                }
-                else
-                {
-                    query = query.Where(c => c.GradeLevel == gradeLevel);
-                    ViewBag.SelectedGrade = gradeLevel;
+                    // Fail-closed: Trưởng khối chưa được gán ManagedGradeLevel không thấy lớp nào
+                    query = query.Where(_ => false);
+                    ViewBag.SelectedGrade = "NONE";
+                    ViewBag.IsGradeLocked = true;
                 }
             }
             else
             {
-                ViewBag.SelectedGrade = "ALL";
+                if (!IsLeadership)
+                {
+                    var uid = CurrentUserId;
+                    if (uid <= 0 || currentYear == null || selectedYearId != currentYear.Id)
+                    {
+                        query = query.Where(_ => false);
+                    }
+                    else
+                    {
+                        query = query.Where(c =>
+                            c.AcademicYearId == currentYear.Id &&
+                            c.AcademicYear.IsCurrent &&
+                            c.ClassTeachers.Any(ct => ct.UserId == uid && ct.AcademicYearId == currentYear.Id));
+
+                        if (User.IsInRole(UserRole.ProbationaryTeacher))
+                        {
+                            query = query.Where(c =>
+                                c.Session != GradeLevel.SessionAfternoon &&
+                                c.GradeLevel != GradeLevel.BaoDong &&
+                                c.GradeLevel != "Bao Dong" &&
+                                c.GradeLevel != GradeLevel.DuBi &&
+                                c.GradeLevel != "Du Bi" &&
+                                c.GradeLevel != GradeLevel.DuBiCode);
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(gradeLevel) && gradeLevel != "ALL")
+                {
+                    if (GradeLevel.IsProbationaryGrade(gradeLevel))
+                    {
+                        query = query.Where(c => c.GradeLevel == GradeLevel.DuBi || c.GradeLevel == GradeLevel.DuBiCode);
+                        ViewBag.SelectedGrade = GradeLevel.DuBi;
+                    }
+                    else
+                    {
+                        query = query.Where(c => c.GradeLevel == gradeLevel);
+                        ViewBag.SelectedGrade = gradeLevel;
+                    }
+                }
+                else
+                {
+                    ViewBag.SelectedGrade = "ALL";
+                }
             }
 
             var classes = await query
@@ -345,6 +392,25 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetTeachers(int classId)
         {
+            if (classId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã lớp học không hợp lệ." });
+            }
+
+            var targetClass = await _context.Classes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == classId);
+
+            if (targetClass == null)
+            {
+                return NotFound(new { success = false, message = "Không tìm thấy lớp học yêu cầu." });
+            }
+
+            if (!await CanAccessClassRosterAsync(targetClass))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền xem danh sách GLV của lớp này." });
+            }
+
             var teachers = await _context.ClassTeachers
                 .Where(t => t.ClassRoomId == classId)
                 .OrderBy(t => t.RoleInClass == "HEAD" ? 1 : (t.RoleInClass == "MEMBER" ? 2 : 3))
@@ -388,8 +454,9 @@ namespace ManagerStudentCaltholic.Controllers
                 // 1. Kiểm tra Scope phân quyền cho Trưởng khối (BranchHead)
                 if (User.IsInRole(UserRole.BranchHead))
                 {
-                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                    if (!string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                    if (string.IsNullOrWhiteSpace(managedGrade) ||
+                        !string.Equals(targetClass.GradeLevel?.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase))
                     {
                         return Json(new { success = false, message = $"Bạn chỉ có quyền phân công cho các lớp thuộc khối {managedGrade}!" });
                     }
@@ -402,9 +469,9 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Tài khoản GLV không tồn tại hoặc đã bị khóa." });
                 }
 
-                if (user.Role == UserRole.Admin || user.Role == UserRole.SpiritualDirector)
+                if (user.Role == UserRole.Admin || user.Role == UserRole.SpiritualDirector || user.Role == UserRole.Parent)
                 {
-                    return Json(new { success = false, message = "Không thể phân công Cha Tuyên Úy hoặc Admin làm GLV giảng dạy." });
+                    return Json(new { success = false, message = "Không thể phân công Quản trị viên, Cha Tuyên Úy hoặc Phụ huynh làm GLV giảng dạy." });
                 }
 
                 // 3. Kiểm tra xem GLV đã được phân công vào chính lớp này trong niên khóa chưa
@@ -607,10 +674,29 @@ namespace ManagerStudentCaltholic.Controllers
         /// </summary>
         /// <returns></returns>
         [HttpGet]
+        [Authorize(Roles = UserRole.Admin + "," + UserRole.SpiritualDirector + "," + UserRole.ExecutiveBoard + "," + UserRole.BranchHead)]
         public async Task<IActionResult> GetAvailableTeachers(int? classRoomId)
         {
             try
             {
+                if (User.IsInRole(UserRole.BranchHead))
+                {
+                    var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                    if (string.IsNullOrWhiteSpace(managedGrade))
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Tài khoản Trưởng khối chưa được gán Khối phụ trách." });
+                    }
+
+                    if (classRoomId.HasValue && classRoomId.Value > 0)
+                    {
+                        var scopedClass = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classRoomId.Value);
+                        if (scopedClass != null && !string.Equals(scopedClass.GradeLevel?.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = $"Bạn chỉ có quyền xem danh sách phân công cho khối {managedGrade}." });
+                        }
+                    }
+                }
+
                 // 1. Xác định niên khóa hiện tại
                 var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
                 var yearId = currentYear?.Id ?? 0;

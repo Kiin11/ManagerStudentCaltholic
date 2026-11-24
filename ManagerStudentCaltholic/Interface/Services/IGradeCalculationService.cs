@@ -26,6 +26,14 @@ namespace ManagerStudentCaltholic.Interface.Services
             Dictionary<string, decimal> scores,
             IEnumerable<string>? allColumnCodes = null);
 
+        /// <summary>
+        /// Tính điểm theo biểu thức động với giá trị nullable; trả về null nếu cột điểm bắt buộc trong công thức chưa nhập (null).
+        /// </summary>
+        decimal? EvaluateGradeFormula(
+            string formulaExpression,
+            Dictionary<string, decimal?> scores,
+            IEnumerable<string>? allColumnCodes = null);
+
         string DetermineClassification(decimal average, string evaluationRulesJson);
     }
 }

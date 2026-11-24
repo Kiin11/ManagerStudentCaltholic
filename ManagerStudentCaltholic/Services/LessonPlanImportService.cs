@@ -11,6 +11,7 @@ namespace ManagerStudentCaltholic.Services
 {
     public class LessonPlanImportService : ILessonPlanImportService
     {
+        private const long MaxImportFileBytes = 15L * 1024 * 1024;
         private readonly ILogger<LessonPlanImportService> _logger;
 
         public LessonPlanImportService(ILogger<LessonPlanImportService> logger)
@@ -20,9 +21,30 @@ namespace ManagerStudentCaltholic.Services
 
         public async Task<List<ClassLessonPlan>> ParseFileAsync(IFormFile file, int classRoomId, int academicYearId)
         {
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (file == null || file.Length == 0)
+            {
+                throw new InvalidOperationException("Vui lòng chọn tệp kế hoạch hợp lệ.");
+            }
+
+            if (file.Length > MaxImportFileBytes)
+            {
+                throw new InvalidOperationException("Dung lượng tệp vượt quá giới hạn tối đa 15 MB.");
+            }
+
+            var ext = Path.GetExtension(Path.GetFileName(file.FileName)).ToLowerInvariant();
+            if (ext is not (".xlsx" or ".xls" or ".docx" or ".pdf"))
+            {
+                throw new NotSupportedException($"Định dạng file '{ext}' chưa được hỗ trợ. Vui lòng chọn .xlsx, .docx hoặc .pdf.");
+            }
+
             using var stream = new MemoryStream();
             await file.CopyToAsync(stream);
+            stream.Position = 0;
+
+            if (!await FileUploadSecurityHelper.ValidateStreamMagicBytesAsync(stream, ext))
+            {
+                throw new InvalidOperationException("Nội dung tệp không đúng chữ ký định dạng hợp lệ hoặc tệp đã bị hỏng.");
+            }
             stream.Position = 0;
 
             return ext switch
@@ -172,7 +194,7 @@ namespace ManagerStudentCaltholic.Services
             {
                 ClassRoomId = classId,
                 AcademicYearId = yearId,
-                LessonDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc),
+                LessonDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(date),
                 LiturgicalDay = liturgical,
                 LessonCode = code,
                 TopicTitle = string.IsNullOrWhiteSpace(topic) ? (code ?? "Kế hoạch tuần") : topic,

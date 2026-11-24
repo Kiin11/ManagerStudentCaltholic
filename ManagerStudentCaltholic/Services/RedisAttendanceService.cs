@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
@@ -18,6 +19,9 @@ namespace ManagerStudentCaltholic.Services
         private static readonly TimeSpan CurrentYearCacheTtl = TimeSpan.FromHours(12);
         private static readonly TimeSpan ActiveCampaignCacheTtl = TimeSpan.FromMinutes(5);
         private static readonly TimeSpan NegativeQrLookupTtl = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan MetadataCacheTtl = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan QrScanUndoMetaTtl = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan UndoGraceWindow = TimeSpan.FromSeconds(15);
         private const int RedisWriteBatchSize = 20;
 
         // TASK-INF-08: Striped locks cố định dung lượng RAM để tránh race condition read-modify-write trên Redis
@@ -39,11 +43,11 @@ namespace ManagerStudentCaltholic.Services
             return locks;
         }
 
-        private static SemaphoreSlim GetClassFlushLock(int classId, DateTime dateUtc)
-        {
-            var idx = (uint)HashCode.Combine(classId, dateUtc.Date) % ClassLockStripes;
-            return ClassFlushLocks[idx];
-        }
+        private static int GetClassFlushStripeIndex(int classId, DateTime dateUtc) =>
+            (int)((uint)HashCode.Combine(classId, dateUtc.Date) % ClassLockStripes);
+
+        private static SemaphoreSlim GetClassFlushLock(int classId, DateTime dateUtc) =>
+            ClassFlushLocks[GetClassFlushStripeIndex(classId, dateUtc)];
 
         private static SemaphoreSlim GetClassSheetLock(int classId, DateTime dateUtc)
         {
@@ -57,7 +61,26 @@ namespace ManagerStudentCaltholic.Services
             return DirtyIndexLocks[idx];
         }
 
-        private static DateTime GetVietnamNow() => DateTime.UtcNow.AddHours(7);
+        private static DateTime GetVietnamNow() => VietnamTimeHelper.Now;
+
+        private static DateTime NormalizeDateParamUtcKind(DateTime? targetDate)
+        {
+            if (!targetDate.HasValue)
+            {
+                return VietnamTimeHelper.TodayUtcKind;
+            }
+
+            var raw = targetDate.Value;
+            if (raw.Kind == DateTimeKind.Utc && raw.TimeOfDay != TimeSpan.Zero)
+            {
+                raw = VietnamTimeHelper.ToVietnamTime(raw);
+            }
+
+            return VietnamTimeHelper.NormalizeBusinessDateUtcKind(raw);
+        }
+
+        private static string QrScanUndoMetaKey(long enrollmentId, DateTime dateUtc) =>
+            $"ATT:QR:SCAN_META:ENR:{enrollmentId}:DATE:{dateUtc:yyyy-MM-dd}";
 
         public RedisAttendanceService(
             ParishDbContext context,
@@ -77,7 +100,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task<int> PreWarmDailyAttendanceAndTasksAsync(DateTime? targetDate = null)
         {
             // Dùng ngày theo múi giờ Việt Nam (UTC+7) để tránh lệch ngày trong container Linux UTC lúc 05:30 sáng CN
-            var dateUtc = DateTime.SpecifyKind((targetDate ?? GetVietnamNow().Date).Date, DateTimeKind.Utc);
+            var dateUtc = NormalizeDateParamUtcKind(targetDate);
             var currentYear = await GetCurrentAcademicYearCachedAsync();
 
             if (currentYear == null)
@@ -315,7 +338,7 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         public async Task<ClassAttendanceSheetViewModel> GetOrLoadClassSheetAsync(int classId, DateTime date)
         {
-            var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            var dateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(date);
             var sheetKey = RedisAttendanceKeys.ClassSheet(classId, dateUtc);
 
             var cachedSheet = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
@@ -345,7 +368,7 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         public async Task<ClassSessionContextDto> GetOrLoadSessionContextAsync(int classId, DateTime date)
         {
-            var dateUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            var dateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(date);
             var sessionKey = RedisAttendanceKeys.ClassSessionInfo(classId, dateUtc);
 
             var cachedSession = await _cache.GetAsync<ClassSessionContextDto>(sessionKey);
@@ -422,7 +445,7 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         public async Task<(bool Success, string Message)> SaveBatchToRedisAsync(AttendanceBatchSubmitDto request)
         {
-            var dateUtc = DateTime.SpecifyKind(request.AttendanceDate.Date, DateTimeKind.Utc);
+            var dateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(request.AttendanceDate);
             var sheetKey = RedisAttendanceKeys.ClassSheet(request.ClassId, dateUtc);
             var modifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "GLV";
             var clientIp = SafeTruncate(request.IpAddress, 45);
@@ -496,7 +519,7 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         public async Task<(bool Success, string Message, StudentAttendanceRowItem? UpdatedRow)> QuickUpdateSingleAttendanceAsync(AttendanceSingleUpdateDto request)
         {
-            var dateUtc = DateTime.SpecifyKind(request.AttendanceDate.Date, DateTimeKind.Utc);
+            var dateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(request.AttendanceDate);
             var sheetKey = RedisAttendanceKeys.ClassSheet(request.ClassId, dateUtc);
 
             var updateTarget = (request.UpdateTarget ?? "ALL").Trim().ToUpperInvariant();
@@ -788,17 +811,50 @@ namespace ManagerStudentCaltholic.Services
         /// - Khi Redis khỏe: cập nhật Redis ClassSheet (IsDirty = true) + báo tín hiệu gom nhóm Write-Behind ~5s xuống PostgreSQL.
         /// - Khi Redis sự cố (Circuit Breaker mở): tự động Fallback ghi trực tiếp 1 bản ghi duy nhất xuống PostgreSQL để không mất dữ liệu.
         /// </summary>
-        public async Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request)
+        public Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request) =>
+            ProcessQrCheckInViaRedisAsync(request, caller: null);
+
+        public async Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request, ClaimsPrincipal? caller)
         {
+            if (request == null || string.IsNullOrWhiteSpace(request.StudentCode))
+            {
+                return new QrScanResponseDto
+                {
+                    Success = false,
+                    Message = "Mã QR không hợp lệ hoặc để trống!"
+                };
+            }
+
             var cleanCode = request.StudentCode.Trim().ToUpperInvariant();
-            var scanTime = request.ScanTimestamp ?? GetVietnamNow();
-            var todayUtc = DateTime.SpecifyKind(scanTime.Date, DateTimeKind.Utc);
+            var scanTime = request.ScanTimestamp.HasValue
+                ? VietnamTimeHelper.ToVietnamTime(request.ScanTimestamp.Value)
+                : VietnamTimeHelper.Now;
+            var todayUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(scanTime);
+
+            var callerUserId = ParseCallerUserId(caller);
+            long? linkedStudentId = null;
+            if (caller != null)
+            {
+                if (caller.Identity == null || !caller.Identity.IsAuthenticated)
+                {
+                    return new QrScanResponseDto
+                    {
+                        Success = false,
+                        IsForbidden = true,
+                        StudentCode = cleanCode,
+                        Message = "Phiên đăng nhập không hợp lệ để điểm danh."
+                    };
+                }
+
+                linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+            }
 
             var qrKey = RedisAttendanceKeys.QrStudentLookup(todayUtc, cleanCode);
             var lookupItem = await _cache.GetAsync<RedisQrStudentLookupItem>(qrKey);
 
             bool isHistoricalCode = false;
             string? oldCode = null;
+            RedisClassMetaItem? resolvedClassMeta = null;
 
             // Nếu chưa có trên Redis (Cache Miss) -> kiểm tra Negative Cache 30s trước, sau đó mới truy vấn PostgreSQL với projection gọn
             if (lookupItem == null)
@@ -837,7 +893,9 @@ namespace ManagerStudentCaltholic.Services
                         e.Student.LastName,
                         e.Student.Gender,
                         ClassName = e.ClassRoom.Name,
-                        e.ClassRoom.GradeLevel
+                        e.ClassRoom.GradeLevel,
+                        ClassSession = e.ClassRoom.Session,
+                        e.ClassRoom.AcademicYearId
                     })
                     .FirstOrDefaultAsync();
 
@@ -870,7 +928,9 @@ namespace ManagerStudentCaltholic.Services
                                 e.Student.LastName,
                                 e.Student.Gender,
                                 ClassName = e.ClassRoom.Name,
-                                e.ClassRoom.GradeLevel
+                                e.ClassRoom.GradeLevel,
+                                ClassSession = e.ClassRoom.Session,
+                                e.ClassRoom.AcademicYearId
                             })
                             .FirstOrDefaultAsync();
 
@@ -908,8 +968,14 @@ namespace ManagerStudentCaltholic.Services
                     GradeLevel = enrollmentMeta.GradeLevel
                 };
 
-                // Đảm bảo sổ lớp & các khóa QR của lớp đã nạp lên Redis (single-flight)
-                await GetOrLoadClassSheetAsync(enrollmentMeta.ClassRoomId, todayUtc);
+                resolvedClassMeta = new RedisClassMetaItem
+                {
+                    Id = enrollmentMeta.ClassRoomId,
+                    Name = enrollmentMeta.ClassName,
+                    GradeLevel = enrollmentMeta.GradeLevel,
+                    Session = enrollmentMeta.ClassSession,
+                    AcademicYearId = enrollmentMeta.AcademicYearId
+                };
 
                 // Đảm bảo khóa chính và alias thẻ năm cũ luôn có trong Redis cho lần quét kế tiếp đạt O(1)
                 await _cache.SetAsync(RedisAttendanceKeys.QrStudentLookup(todayUtc, officialCode), lookupItem, DefaultCacheTtl);
@@ -917,6 +983,20 @@ namespace ManagerStudentCaltholic.Services
                 {
                     await _cache.SetAsync(qrKey, lookupItem, DefaultCacheTtl);
                 }
+                await _cache.SetAsync(RedisAttendanceKeys.ClassMetadata(resolvedClassMeta.Id), resolvedClassMeta, MetadataCacheTtl);
+
+                // Kiểm tra phạm vi quyền & tự điểm danh TRƯỚC khi nạp/thao tác sổ lớp
+                if (caller != null)
+                {
+                    var authErr = await ValidateCallerScanAccessAsync(caller, callerUserId, linkedStudentId, lookupItem, resolvedClassMeta);
+                    if (authErr != null)
+                    {
+                        return authErr;
+                    }
+                }
+
+                // Đảm bảo sổ lớp & các khóa QR của lớp đã nạp lên Redis (single-flight)
+                await GetOrLoadClassSheetAsync(enrollmentMeta.ClassRoomId, todayUtc);
             }
             else
             {
@@ -926,78 +1006,33 @@ namespace ManagerStudentCaltholic.Services
                     isHistoricalCode = true;
                     oldCode = cleanCode;
                 }
+
+                if (caller != null)
+                {
+                    var authErr = await ValidateCallerScanAccessAsync(caller, callerUserId, linkedStudentId, lookupItem, resolvedClassMeta);
+                    if (authErr != null)
+                    {
+                        return authErr;
+                    }
+                }
             }
 
             // TASK-P5-04.2: Xử lý theo SessionMode được chọn nhanh trên giao diện Camera
-            bool isMass = false;
-            bool isClass = false;
-            string status = AttendanceStatus.Present;
             var timeOfDay = scanTime.TimeOfDay;
-            string sessionMode = (request.SessionMode ?? "AUTO").ToUpperInvariant();
+            string sessionMode = (request.SessionMode ?? "AUTO").Trim().ToUpperInvariant();
+            var (isMass, isClass, status, activityTitle) = EvaluateSessionCheckIn(scanTime, lookupItem.GradeLevel, sessionMode);
             long? activeCampaignId = null;
 
-            switch (sessionMode)
+            if (sessionMode == "CAMPAIGN_MONTH")
             {
-                case "SUNDAY_MASS":
-                    isMass = true;
-                    isClass = false;
-                    if (timeOfDay < new TimeSpan(6, 35, 0)) status = AttendanceStatus.LinedUp;
-                    else if (timeOfDay < new TimeSpan(7, 0, 0)) status = AttendanceStatus.Present;
-                    else status = AttendanceStatus.Late;
-                    break;
-
-                case "THURSDAY_MASS":
-                    isMass = true;
-                    isClass = false;
-                    status = AttendanceStatus.Present;
-                    break;
-
-                case "CATECHISM_CLASS":
-                    isMass = false;
-                    isClass = true;
-                    bool isMorning = !GradeLevel.IsAfternoonGrade(lookupItem.GradeLevel);
-                    if (isMorning)
-                    {
-                        status = timeOfDay < new TimeSpan(9, 30, 0) ? AttendanceStatus.Present : AttendanceStatus.Late;
-                    }
-                    else
-                    {
-                        status = timeOfDay < new TimeSpan(15, 15, 0) ? AttendanceStatus.Present : AttendanceStatus.Late;
-                    }
-                    break;
-
-                case "CAMPAIGN_MONTH":
-                    isMass = true;
-                    isClass = false;
-                    status = AttendanceStatus.Present;
-                    activeCampaignId = request.CampaignId.HasValue && request.CampaignId.Value > 0
-                        ? request.CampaignId.Value
-                        : await GetActiveCampaignIdCachedAsync(lookupItem.ClassId, todayUtc);
-                    break;
-
-                default: // "AUTO"
-                    var eval = AttendanceTimeHelper.EvaluateCheckIn(scanTime, lookupItem.GradeLevel);
-                    isMass = eval.isMass;
-                    isClass = eval.isClass;
-                    status = eval.calculatedStatus;
-                    if (!isMass && !isClass)
-                    {
-                        isClass = true;
-                        status = AttendanceStatus.Present;
-                    }
-                    break;
+                activeCampaignId = request.CampaignId.HasValue && request.CampaignId.Value > 0
+                    ? request.CampaignId.Value
+                    : await GetActiveCampaignIdCachedAsync(lookupItem.ClassId, todayUtc);
             }
 
-            string activityTitle = sessionMode switch
-            {
-                "CAMPAIGN_MONTH" => "CHIẾN DỊCH 1 THÁNG",
-                "THURSDAY_MASS" => "THÁNH LỄ THỨ NĂM",
-                "SUNDAY_MASS" => "THÁNH LỄ CHÚA NHẬT",
-                "CATECHISM_CLASS" => "GIỜ HỌC GIÁO LÝ",
-                _ => (isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ")
-            };
-
-            var modifiedBy = SafeTruncate(request.ModifiedBy, 100) ?? "Camera QR HUD";
+            var modifiedBy = SafeTruncate(request.ModifiedBy, 100)
+                             ?? SafeTruncate(ResolveOperatorName(caller), 100)
+                             ?? "Camera QR HUD";
             var clientIp = SafeTruncate(request.IpAddress, 45);
             var sheetKey = RedisAttendanceKeys.ClassSheet(lookupItem.ClassId, todayUtc);
 
@@ -1005,6 +1040,11 @@ namespace ManagerStudentCaltholic.Services
             bool shouldPersistState = false;
             bool shouldQueueCampaign = false;
             StudentAttendanceRowItem? updatedRowSnapshot = null;
+            bool preMassAttended = false;
+            string preMassStatus = AttendanceStatus.AbsentUnpermitted;
+            bool preClassAttended = false;
+            string preClassStatus = AttendanceStatus.AbsentUnpermitted;
+            string? preNote = null;
 
             // Kiểm tra dedup chiến dịch (nếu ở chế độ CAMPAIGN_MONTH có chiến dịch đang mở)
             if (activeCampaignId.HasValue)
@@ -1034,6 +1074,12 @@ namespace ManagerStudentCaltholic.Services
                         Message = "Học sinh chưa có trong danh sách bộ đệm của lớp."
                     };
                 }
+
+                preMassAttended = targetRow.AttendedMass;
+                preMassStatus = targetRow.MassStatus;
+                preClassAttended = targetRow.ClassAttended;
+                preClassStatus = targetRow.ClassStatus;
+                preNote = targetRow.Note;
 
                 if (isMass)
                 {
@@ -1127,6 +1173,21 @@ namespace ManagerStudentCaltholic.Services
 
             if (shouldPersistState || shouldQueueCampaign)
             {
+                await _cache.SetAsync(
+                    QrScanUndoMetaKey(lookupItem.EnrollmentId, todayUtc),
+                    new RedisQrScanUndoMeta
+                    {
+                        ScannerUserId = callerUserId,
+                        ModifiedBy = modifiedBy,
+                        ScannedAtUtc = DateTime.UtcNow,
+                        PreMassAttended = preMassAttended,
+                        PreMassStatus = preMassStatus,
+                        PreClassAttended = preClassAttended,
+                        PreClassStatus = preClassStatus,
+                        PreNote = preNote
+                    },
+                    QrScanUndoMetaTtl);
+
                 if (_cache.IsRedisAvailable)
                 {
                     // Đường nóng (Hot Path): Redis AOF khỏe -> đánh dấu phân vùng dirty + báo tín hiệu gom nhóm Write-Behind (~5s)
@@ -1195,134 +1256,311 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         public async Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto)
         {
-            if (dto.EnrollmentId <= 0 || dto.ClassId <= 0)
+            var (success, message, _) = await UndoScanCheckInAsync(dto, caller: null);
+            return (success, message);
+        }
+
+        /// <summary>
+        /// TASK-P5-04.3 / LOG-CON-02: Hoàn tác lượt quét QR nguyên tử trong cửa sổ ân hạn (15 giây), xác thực người quét &amp; quyền lớp.
+        /// </summary>
+        public async Task<(bool Success, string Message, bool IsForbidden)> UndoScanCheckInAsync(UndoScanRequestDto dto, ClaimsPrincipal? caller)
+        {
+            if (dto == null || dto.EnrollmentId <= 0)
             {
-                return (false, "Dữ liệu yêu cầu hoàn tác không hợp lệ.");
+                return (false, "Dữ liệu yêu cầu hoàn tác không hợp lệ.", false);
             }
 
-            var date = dto.AttendanceDate ?? GetVietnamNow().Date;
-            var todayUtc = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
-            var sheetKey = RedisAttendanceKeys.ClassSheet(dto.ClassId, todayUtc);
-            var undoOperator = SafeTruncate(dto.ModifiedBy, 100) ?? "Camera QR HUD";
+            var enrMeta = await _context.Enrollments
+                .AsNoTracking()
+                .Where(e => e.Id == dto.EnrollmentId)
+                .Select(e => new { e.Id, e.StudentId, e.ClassRoomId })
+                .FirstOrDefaultAsync();
+
+            if (enrMeta == null)
+            {
+                return (false, "Không tìm thấy hồ sơ thiếu nhi để hoàn tác.", false);
+            }
+
+            if (dto.ClassId > 0 && dto.ClassId != enrMeta.ClassRoomId)
+            {
+                return (false, "Học sinh không thuộc lớp được chỉ định.", true);
+            }
+
+            int effectiveClassId = enrMeta.ClassRoomId;
+            long targetStudentId = enrMeta.StudentId;
+            long callerUserId = ParseCallerUserId(caller);
+            bool isLeadership = IsLeadershipCaller(caller);
+
+            if (caller != null)
+            {
+                if (caller.Identity == null || !caller.Identity.IsAuthenticated)
+                {
+                    return (false, "Phiên đăng nhập không hợp lệ.", true);
+                }
+
+                var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+                if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, targetStudentId))
+                {
+                    return (false, "Bạn không thể tự hoàn tác điểm danh cho chính mình.", true);
+                }
+
+                if (!await CanCallerAccessClassAsync(caller, callerUserId, effectiveClassId, null))
+                {
+                    return (false, "Bạn không có quyền hoàn tác điểm danh cho lớp này.", true);
+                }
+            }
+
+            var todayUtc = NormalizeDateParamUtcKind(dto.AttendanceDate);
+            var sheetKey = RedisAttendanceKeys.ClassSheet(effectiveClassId, todayUtc);
+            var undoOperator = SafeTruncate(dto.ModifiedBy, 100)
+                               ?? SafeTruncate(ResolveOperatorName(caller), 100)
+                               ?? "Camera QR HUD";
             var undoIp = SafeTruncate(dto.IpAddress, 45);
 
             bool undoMass = string.IsNullOrWhiteSpace(dto.ActivityType) ||
-                            dto.ActivityType.Contains("LỄ") ||
-                            dto.ActivityType.Contains("MASS") ||
-                            dto.ActivityType.Contains("CHIẾN DỊCH");
+                            dto.ActivityType.Contains("LỄ", StringComparison.OrdinalIgnoreCase) ||
+                            dto.ActivityType.Contains("MASS", StringComparison.OrdinalIgnoreCase) ||
+                            dto.ActivityType.Contains("CHIẾN DỊCH", StringComparison.OrdinalIgnoreCase);
 
             bool undoClass = string.IsNullOrWhiteSpace(dto.ActivityType) ||
-                             dto.ActivityType.Contains("GIÁO LÝ") ||
-                             dto.ActivityType.Contains("CLASS");
+                             dto.ActivityType.Contains("GIÁO LÝ", StringComparison.OrdinalIgnoreCase) ||
+                             dto.ActivityType.Contains("CLASS", StringComparison.OrdinalIgnoreCase);
 
-            bool undoCampaign = !string.IsNullOrWhiteSpace(dto.ActivityType) &&
-                                dto.ActivityType.Contains("CHIẾN DỊCH");
+            bool undoCampaign = (!string.IsNullOrWhiteSpace(dto.ActivityType) &&
+                                 dto.ActivityType.Contains("CHIẾN DỊCH", StringComparison.OrdinalIgnoreCase)) ||
+                                string.Equals(dto.SessionMode, "CAMPAIGN_MONTH", StringComparison.OrdinalIgnoreCase);
 
             string studentName = dto.StudentCode ?? "Thiếu nhi";
-            long? targetStudentId = null;
-            List<long>? removedCampaignIds = null;
+            var campaignIdsToClear = new HashSet<long>();
 
-            // 1. Thu hồi trạng thái trên Redis ClassSheet dưới per-class lock (ngăn race với luồng quét/flush)
-            var sheetLock = GetClassSheetLock(dto.ClassId, todayUtc);
-            await sheetLock.WaitAsync();
+            // Tuần tự hóa toàn bộ Undo dưới thứ tự khóa chuẩn: ClassFlushLock (ngoài) -> ClassSheetLock (trong)
+            // để Write-Behind Flush không thể đọc/hồi sinh trạng thái PRESENT cũ trong lúc hoàn tác.
+            var flushLock = GetClassFlushLock(effectiveClassId, todayUtc);
+            var sheetLock = GetClassSheetLock(effectiveClassId, todayUtc);
+
+            await flushLock.WaitAsync();
             try
             {
-                var payload = await GetOrLoadClassSheetPayloadLockedAsync(dto.ClassId, todayUtc);
-                var targetRow = payload?.Students.FirstOrDefault(s => s.EnrollmentId == dto.EnrollmentId);
+                // 1. Xác thực cửa sổ thời gian 15s & đúng người quét ban đầu (trừ Leadership)
+                var scanMetaKey = QrScanUndoMetaKey(dto.EnrollmentId, todayUtc);
+                var scanMeta = await _cache.GetAsync<RedisQrScanUndoMeta>(scanMetaKey);
 
-                if (payload != null && targetRow != null)
+                if (scanMeta != null)
                 {
-                    studentName = targetRow.FullName;
-                    targetStudentId = targetRow.StudentId;
-
-                    if (undoMass)
+                    if ((DateTime.UtcNow - scanMeta.ScannedAtUtc) > UndoGraceWindow)
                     {
-                        targetRow.AttendedMass = false;
-                        targetRow.MassStatus = AttendanceStatus.AbsentUnpermitted;
-                        targetRow.MassCheckInTime = null;
+                        return (false, "Đã quá thời gian hoàn tác cho phép (15 giây).", false);
                     }
 
-                    if (undoClass)
+                    if (!isLeadership)
                     {
-                        targetRow.ClassAttended = false;
-                        targetRow.ClassStatus = AttendanceStatus.AbsentUnpermitted;
-                        targetRow.ClassCheckInTime = null;
+                        bool sameUser = (callerUserId > 0 && scanMeta.ScannerUserId > 0)
+                            ? scanMeta.ScannerUserId == callerUserId
+                            : string.Equals(scanMeta.ModifiedBy, undoOperator, StringComparison.OrdinalIgnoreCase);
+
+                        if (!sameUser)
+                        {
+                            return (false, "Chỉ người đã quét mã này hoặc Ban Điều Hành mới có quyền hoàn tác.", true);
+                        }
                     }
-
-                    if (undoCampaign && payload.PendingCampaignCheckIns != null)
-                    {
-                        removedCampaignIds = payload.PendingCampaignCheckIns
-                            .Where(c => c.EnrollmentId == dto.EnrollmentId && c.AttendanceDate == todayUtc)
-                            .Select(c => c.CampaignId)
-                            .Distinct()
-                            .ToList();
-
-                        payload.PendingCampaignCheckIns.RemoveAll(c =>
-                            c.EnrollmentId == dto.EnrollmentId && c.AttendanceDate == todayUtc);
-                    }
-
-                    payload.DirtyEnrollmentIds ??= new HashSet<long>();
-                    payload.DirtyEnrollmentIds.Add(dto.EnrollmentId);
-                    payload.DirtyAuditMetaByEnrollment ??= new Dictionary<long, RedisDirtyAuditMeta>();
-                    payload.DirtyAuditMetaByEnrollment[dto.EnrollmentId] = new RedisDirtyAuditMeta
-                    {
-                        ActionType = "QR_UNDO",
-                        ModifiedBy = undoOperator,
-                        IpAddress = undoIp
-                    };
-
-                    payload.LastModifiedAtUtc = DateTime.UtcNow;
-                    payload.LastModifiedBy = undoOperator;
-                    payload.LastModifiedIp = undoIp;
-                    payload.LastActionType = "QR_UNDO";
-                    payload.IsDirty = true;
-                    payload.Revision++;
-
-                    await _cache.SetAsync(sheetKey, payload, DefaultCacheTtl);
                 }
-            }
-            finally
-            {
-                sheetLock.Release();
-            }
-
-            if (removedCampaignIds != null)
-            {
-                foreach (var campId in removedCampaignIds)
+                else
                 {
-                    await _cache.RemoveAsync(RedisAttendanceKeys.CampaignScanMarker(campId, dto.EnrollmentId, todayUtc));
-                }
-            }
+                    var latestAudit = await _context.AttendanceAuditLogs
+                        .AsNoTracking()
+                        .Where(l => l.Attendance.EnrollmentId == dto.EnrollmentId && l.Attendance.AttendanceDate == todayUtc)
+                        .OrderByDescending(l => l.CreatedAt)
+                        .Select(l => new { l.ActionType, l.ModifiedBy, l.CreatedAt })
+                        .FirstOrDefaultAsync();
 
-            // 2. Nếu bản ghi đã tồn tại trong PostgreSQL (hoặc thuộc chiến dịch), cập nhật thu hồi trong Transaction an toàn
-            var strategy = _context.Database.CreateExecutionStrategy();
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                var att = await _context.Attendances
-                    .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == todayUtc);
-
-                if (att != null)
-                {
-                    bool oldMassAtt = att.AttendedMass;
-                    string oldMassSt = att.MassStatus;
-                    bool oldClassAtt = att.ClassAttended;
-                    string oldClassSt = att.ClassStatus;
-                    string? oldNote = att.Note;
-
-                    if (undoMass)
+                    if (latestAudit == null ||
+                        (latestAudit.ActionType != "QR_SCAN" && latestAudit.ActionType != "OFFLINE_QR_SYNC"))
                     {
-                        att.AttendedMass = false;
-                        att.MassStatus = AttendanceStatus.AbsentUnpermitted;
-                        att.MassCheckInTime = null;
+                        return (false, "Không tìm thấy lượt quét QR hợp lệ gần đây để hoàn tác.", false);
                     }
 
-                    if (undoClass)
+                    var latestCreatedUtc = latestAudit.CreatedAt.Kind == DateTimeKind.Unspecified
+                        ? DateTime.SpecifyKind(latestAudit.CreatedAt, DateTimeKind.Utc)
+                        : latestAudit.CreatedAt.ToUniversalTime();
+
+                    if ((DateTime.UtcNow - latestCreatedUtc) > UndoGraceWindow)
                     {
-                        att.ClassAttended = false;
-                        att.ClassStatus = AttendanceStatus.AbsentUnpermitted;
-                        att.ClassCheckInTime = null;
+                        return (false, "Đã quá thời gian hoàn tác cho phép (15 giây).", false);
+                    }
+
+                    if (!isLeadership &&
+                        !string.Equals(latestAudit.ModifiedBy, undoOperator, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (false, "Chỉ người đã quét mã này hoặc Ban Điều Hành mới có quyền hoàn tác.", true);
+                    }
+                }
+
+                bool preUndoMassAtt = false;
+                string preUndoMassSt = AttendanceStatus.AbsentUnpermitted;
+                bool preUndoClassAtt = false;
+                string preUndoClassSt = AttendanceStatus.AbsentUnpermitted;
+                string? preUndoNote = null;
+
+                string restoredMassStatus = (scanMeta != null && !scanMeta.PreMassAttended)
+                    ? scanMeta.PreMassStatus
+                    : AttendanceStatus.AbsentUnpermitted;
+                string restoredClassStatus = (scanMeta != null && !scanMeta.PreClassAttended)
+                    ? scanMeta.PreClassStatus
+                    : AttendanceStatus.AbsentUnpermitted;
+
+                long undoRevision = 0;
+                bool hadRedisPayload = false;
+
+                // 2. Thu hồi trạng thái trên Redis ClassSheet dưới ClassSheetLock (nằm trong ClassFlushLock)
+                await sheetLock.WaitAsync();
+                try
+                {
+                    var payload = await GetOrLoadClassSheetPayloadLockedAsync(effectiveClassId, todayUtc);
+                    var targetRow = payload?.Students.FirstOrDefault(s => s.EnrollmentId == dto.EnrollmentId);
+
+                    if (payload != null && targetRow != null)
+                    {
+                        hadRedisPayload = true;
+                        studentName = targetRow.FullName;
+
+                        preUndoMassAtt = targetRow.AttendedMass;
+                        preUndoMassSt = targetRow.MassStatus;
+                        preUndoClassAtt = targetRow.ClassAttended;
+                        preUndoClassSt = targetRow.ClassStatus;
+                        preUndoNote = targetRow.Note;
+
+                        if (undoMass)
+                        {
+                            targetRow.AttendedMass = false;
+                            targetRow.MassStatus = restoredMassStatus;
+                            targetRow.MassCheckInTime = null;
+                        }
+
+                        if (undoClass)
+                        {
+                            targetRow.ClassAttended = false;
+                            targetRow.ClassStatus = restoredClassStatus;
+                            targetRow.ClassCheckInTime = null;
+                        }
+
+                        if (undoCampaign && payload.PendingCampaignCheckIns != null)
+                        {
+                            foreach (var campId in payload.PendingCampaignCheckIns
+                                         .Where(c => c.EnrollmentId == dto.EnrollmentId && c.AttendanceDate == todayUtc)
+                                         .Select(c => c.CampaignId))
+                            {
+                                campaignIdsToClear.Add(campId);
+                            }
+
+                            payload.PendingCampaignCheckIns.RemoveAll(c =>
+                                c.EnrollmentId == dto.EnrollmentId && c.AttendanceDate == todayUtc);
+                        }
+
+                        // Tạm gắn Dirty phòng trường hợp Transaction DB gặp sự cố; sẽ xóa sạch ngay sau khi DB commit
+                        payload.DirtyEnrollmentIds ??= new HashSet<long>();
+                        payload.DirtyEnrollmentIds.Add(dto.EnrollmentId);
+                        payload.DirtyAuditMetaByEnrollment ??= new Dictionary<long, RedisDirtyAuditMeta>();
+                        payload.DirtyAuditMetaByEnrollment[dto.EnrollmentId] = new RedisDirtyAuditMeta
+                        {
+                            ActionType = "QR_UNDO",
+                            ModifiedBy = undoOperator,
+                            IpAddress = undoIp
+                        };
+
+                        payload.LastModifiedAtUtc = DateTime.UtcNow;
+                        payload.LastModifiedBy = undoOperator;
+                        payload.LastModifiedIp = undoIp;
+                        payload.LastActionType = "QR_UNDO";
+                        payload.IsDirty = true;
+                        payload.Revision++;
+                        undoRevision = payload.Revision;
+
+                        await _cache.SetAsync(sheetKey, payload, DefaultCacheTtl);
+                    }
+                }
+                finally
+                {
+                    sheetLock.Release();
+                }
+
+                // Truy vấn thêm mọi CampaignId đang mở trong ngày để đảm bảo xóa CampaignScanMarker kể cả khi PendingCampaignCheckIns đã flush
+                if (undoCampaign)
+                {
+                    var activeCampaignIds = await _context.MassCampaigns
+                        .AsNoTracking()
+                        .Where(c => c.ClassRoomId == effectiveClassId &&
+                                    c.Status == "ACTIVE" &&
+                                    todayUtc >= c.StartDate.Date &&
+                                    todayUtc <= c.EndDate.Date)
+                        .Select(c => c.Id)
+                        .ToListAsync();
+
+                    foreach (var cid in activeCampaignIds)
+                    {
+                        campaignIdsToClear.Add(cid);
+                    }
+                }
+
+                // 3. Thu hồi đồng bộ trong PostgreSQL (luôn ghi QR_UNDO AuditLog kể cả khi lượt quét chưa kịp flush từ Redis)
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    var att = await _context.Attendances
+                        .FirstOrDefaultAsync(a => a.EnrollmentId == dto.EnrollmentId && a.AttendanceDate == todayUtc);
+
+                    bool oldMassAtt = att?.AttendedMass ?? preUndoMassAtt;
+                    string oldMassSt = att?.MassStatus ?? preUndoMassSt;
+                    bool oldClassAtt = att?.ClassAttended ?? preUndoClassAtt;
+                    string oldClassSt = att?.ClassStatus ?? preUndoClassSt;
+                    string? oldNote = att?.Note ?? preUndoNote;
+
+                    if (att == null)
+                    {
+                        att = new Attendance
+                        {
+                            EnrollmentId = dto.EnrollmentId,
+                            AttendanceDate = todayUtc,
+                            DayOfWeek = todayUtc.DayOfWeek,
+                            AttendedMass = false,
+                            MassStatus = restoredMassStatus,
+                            MassCheckInTime = null,
+                            ClassAttended = false,
+                            ClassStatus = restoredClassStatus,
+                            ClassCheckInTime = null,
+                            Note = preUndoNote,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Attendances.Add(att);
+                    }
+                    else
+                    {
+                        // Nếu lượt quét vừa nằm trên Redis chưa kịp flush, ưu tiên snapshot Redis để OldValues phản ánh đúng trạng thái bị thu hồi
+                        if (preUndoMassAtt && !att.AttendedMass)
+                        {
+                            oldMassAtt = preUndoMassAtt;
+                            oldMassSt = preUndoMassSt;
+                        }
+                        if (preUndoClassAtt && !att.ClassAttended)
+                        {
+                            oldClassAtt = preUndoClassAtt;
+                            oldClassSt = preUndoClassSt;
+                        }
+
+                        if (undoMass)
+                        {
+                            att.AttendedMass = false;
+                            att.MassStatus = restoredMassStatus;
+                            att.MassCheckInTime = null;
+                        }
+
+                        if (undoClass)
+                        {
+                            att.ClassAttended = false;
+                            att.ClassStatus = restoredClassStatus;
+                            att.ClassCheckInTime = null;
+                        }
                     }
 
                     await _context.SaveChangesAsync();
@@ -1340,42 +1578,87 @@ namespace ManagerStudentCaltholic.Services
                         IpAddress = undoIp,
                         CreatedAt = DateTime.UtcNow
                     });
-                    await _context.SaveChangesAsync();
 
-                    _logger.LogInformation(
-                        "AUDIT QR_UNDO: EnrollmentId={EnrollmentId}, Date={Date:yyyy-MM-dd}, By={User}, IP={IP}",
-                        dto.EnrollmentId, todayUtc, undoOperator, undoIp ?? "unknown");
-                }
-
-                if (undoCampaign)
-                {
-                    var campRecord = await _context.MassCampaignRecords
-                        .FirstOrDefaultAsync(r => r.EnrollmentId == dto.EnrollmentId && r.AttendanceDate == todayUtc);
-                    if (campRecord != null)
+                    if (undoCampaign)
                     {
-                        campRecord.Status = "ABSENT";
-                        campRecord.LastModifiedBy = "Camera QR HUD (Undo)";
-                        campRecord.LastModifiedAt = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
+                        var campRecords = await _context.MassCampaignRecords
+                            .Where(r => r.EnrollmentId == dto.EnrollmentId && r.AttendanceDate == todayUtc)
+                            .ToListAsync();
+
+                        foreach (var campRecord in campRecords)
+                        {
+                            campaignIdsToClear.Add(campRecord.CampaignId);
+                            campRecord.Status = "ABSENT";
+                            campRecord.LastModifiedBy = undoOperator;
+                            campRecord.LastModifiedAt = DateTime.UtcNow;
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                });
+
+                _logger.LogInformation(
+                    "AUDIT QR_UNDO: EnrollmentId={EnrollmentId}, ClassId={ClassId}, Date={Date:yyyy-MM-dd}, By={User}, IP={IP}",
+                    dto.EnrollmentId, effectiveClassId, todayUtc, undoOperator, undoIp ?? "unknown");
+
+                // 4. Dọn cờ Dirty trên Redis sau khi cả Redis và DB đều đã thu hồi thành công (tránh đánh dấu dirty thừa)
+                bool stillDirty = false;
+                if (hadRedisPayload)
+                {
+                    await sheetLock.WaitAsync();
+                    try
+                    {
+                        var latestPayload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
+                        if (latestPayload != null)
+                        {
+                            if (latestPayload.Revision == undoRevision)
+                            {
+                                latestPayload.DirtyEnrollmentIds?.Remove(dto.EnrollmentId);
+                                latestPayload.DirtyAuditMetaByEnrollment?.Remove(dto.EnrollmentId);
+                                if ((latestPayload.DirtyEnrollmentIds == null || latestPayload.DirtyEnrollmentIds.Count == 0) &&
+                                    (latestPayload.PendingCampaignCheckIns == null || latestPayload.PendingCampaignCheckIns.Count == 0))
+                                {
+                                    latestPayload.IsDirty = false;
+                                }
+                                await _cache.SetAsync(sheetKey, latestPayload, DefaultCacheTtl);
+                            }
+
+                            stillDirty = latestPayload.IsDirty;
+                        }
+                    }
+                    finally
+                    {
+                        sheetLock.Release();
                     }
                 }
 
-                await transaction.CommitAsync();
-            });
+                await _cache.RemoveAsync(scanMetaKey);
 
-            if (_cache.IsRedisAvailable)
-            {
-                await MarkClassDirtyAsync(dto.ClassId, todayUtc);
-                _flushSignal.NotifyDirty(todayUtc, dto.ClassId);
+                foreach (var campId in campaignIdsToClear)
+                {
+                    await _cache.RemoveAsync(RedisAttendanceKeys.CampaignScanMarker(campId, dto.EnrollmentId, todayUtc));
+                }
+
+                if (!stillDirty)
+                {
+                    await RemoveCleanClassesFromDirtyIndexAsync(todayUtc, new[] { effectiveClassId });
+                }
+                else if (_cache.IsRedisAvailable)
+                {
+                    await MarkClassDirtyAsync(effectiveClassId, todayUtc);
+                    _flushSignal.NotifyDirty(todayUtc, effectiveClassId);
+                }
+
+                await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(effectiveClassId, todayUtc));
+                await _cache.RemoveAsync($"staff_lookup:student_360:{targetStudentId}");
+
+                return (true, $"Đã hoàn tác điểm danh thành công cho thiếu nhi {studentName}!", false);
             }
-
-            await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(dto.ClassId, todayUtc));
-            if (targetStudentId.HasValue)
+            finally
             {
-                await _cache.RemoveAsync($"staff_lookup:student_360:{targetStudentId.Value}");
+                flushLock.Release();
             }
-
-            return (true, $"Đã hoàn tác điểm danh thành công cho thiếu nhi {studentName}!");
         }
 
         /// <summary>
@@ -1443,7 +1726,7 @@ namespace ManagerStudentCaltholic.Services
         {
             if (classId <= 0) return (0, 0);
 
-            var dt = DateTime.SpecifyKind(targetDate.Date, DateTimeKind.Utc);
+            var dt = VietnamTimeHelper.NormalizeBusinessDateUtcKind(targetDate);
             var (affected, stillDirty) = await FlushSingleClassByIdAsync(classId, dt);
 
             if (!stillDirty)
@@ -1461,7 +1744,7 @@ namespace ManagerStudentCaltholic.Services
         {
             var groupedByDate = partitions
                 .Where(p => p.ClassId > 0)
-                .Select(p => (p.ClassId, DateUtc: DateTime.SpecifyKind(p.DateUtc.Date, DateTimeKind.Utc)))
+                .Select(p => (p.ClassId, DateUtc: VietnamTimeHelper.NormalizeBusinessDateUtcKind(p.DateUtc)))
                 .Distinct()
                 .GroupBy(p => p.DateUtc);
 
@@ -1513,11 +1796,109 @@ namespace ManagerStudentCaltholic.Services
             return (classesSynced, recordsUpserted);
         }
 
+        /// <summary>
+        /// LOG-CON-01: Khóa tuần tự các phân vùng theo thứ tự stripe index tăng dần (tránh deadlock)
+        /// để tiền đồng bộ Redis -> PostgreSQL và chạy SyncOfflineQueue mà không race với FlushSingleClassByIdAsync.
+        /// </summary>
+        public async Task ExecuteWithPartitionsFlushLockAsync(
+            IEnumerable<(int ClassId, DateTime DateUtc)> partitions,
+            Func<Task> action,
+            CancellationToken cancellationToken = default)
+        {
+            var distinctPartitions = partitions
+                .Where(p => p.ClassId > 0)
+                .Select(p => (p.ClassId, DateUtc: VietnamTimeHelper.NormalizeBusinessDateUtcKind(p.DateUtc)))
+                .Distinct()
+                .ToList();
+
+            if (distinctPartitions.Count == 0)
+            {
+                await action();
+                return;
+            }
+
+            var stripeIndices = distinctPartitions
+                .Select(p => GetClassFlushStripeIndex(p.ClassId, p.DateUtc))
+                .Distinct()
+                .OrderBy(i => i)
+                .ToList();
+
+            int acquiredCount = 0;
+            try
+            {
+                foreach (var idx in stripeIndices)
+                {
+                    await ClassFlushLocks[idx].WaitAsync(cancellationToken);
+                    acquiredCount++;
+                }
+
+                foreach (var group in distinctPartitions.GroupBy(p => p.DateUtc))
+                {
+                    var dt = group.Key;
+                    var cleanedClassIds = new HashSet<int>();
+
+                    foreach (var (classId, _) in group)
+                    {
+                        var (_, stillDirty) = await FlushSingleClassByIdCoreLockedAsync(classId, dt);
+                        if (!stillDirty)
+                        {
+                            cleanedClassIds.Add(classId);
+                        }
+                    }
+
+                    if (cleanedClassIds.Count > 0)
+                    {
+                        await RemoveCleanClassesFromDirtyIndexAsync(dt, cleanedClassIds);
+                    }
+                }
+
+                await action();
+            }
+            finally
+            {
+                for (int i = acquiredCount - 1; i >= 0; i--)
+                {
+                    ClassFlushLocks[stripeIndices[i]].Release();
+                }
+            }
+        }
+
+        /// <summary>
+        /// LOG-CON-01: Xóa cache ClassSheet nếu không còn dirty (bảo toàn lượt quét QR live nếu IsDirty vừa phát sinh song song).
+        /// </summary>
+        public async Task FinalizePartitionsAfterExternalSyncAsync(IEnumerable<(int ClassId, DateTime DateUtc)> partitions)
+        {
+            var distinctPartitions = partitions
+                .Where(p => p.ClassId > 0)
+                .Select(p => (p.ClassId, DateUtc: VietnamTimeHelper.NormalizeBusinessDateUtcKind(p.DateUtc)))
+                .Distinct()
+                .ToList();
+
+            foreach (var (classId, dateUtc) in distinctPartitions)
+            {
+                var sheetKey = RedisAttendanceKeys.ClassSheet(classId, dateUtc);
+                var sheetLock = GetClassSheetLock(classId, dateUtc);
+                await sheetLock.WaitAsync();
+                try
+                {
+                    var payload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
+                    if (payload != null && !payload.IsDirty)
+                    {
+                        await _cache.RemoveAsync(sheetKey);
+                    }
+                }
+                finally
+                {
+                    sheetLock.Release();
+                }
+
+                await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(classId, dateUtc));
+            }
+        }
+
         public async Task<int> AutoMarkAbsentUncheckedStudentsAsync(DateTime? targetDate = null)
         {
-            var vnNow = GetVietnamNow();
-            var rawDate = targetDate?.Date ?? vnNow.Date;
-            var dateUtc = DateTime.SpecifyKind(rawDate, DateTimeKind.Utc);
+            var dateUtc = NormalizeDateParamUtcKind(targetDate);
 
             // Chỉ tự động đánh vắng cho ngày sinh hoạt định kỳ: Thứ Năm (Lễ T5) và Chúa Nhật (Lễ CN + Học GL)
             if (dateUtc.DayOfWeek != DayOfWeek.Thursday && dateUtc.DayOfWeek != DayOfWeek.Sunday)
@@ -1868,15 +2249,15 @@ namespace ManagerStudentCaltholic.Services
         {
             if (targetDate.HasValue)
             {
-                return new[] { DateTime.SpecifyKind(targetDate.Value.Date, DateTimeKind.Utc) };
+                return new[] { NormalizeDateParamUtcKind(targetDate) };
             }
 
-            var vnToday = DateTime.SpecifyKind(GetVietnamNow().Date, DateTimeKind.Utc);
+            var vnToday = VietnamTimeHelper.TodayUtcKind;
             var dates = new HashSet<DateTime>
             {
                 vnToday,
                 vnToday.AddDays(-1),
-                DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc)
+                VietnamTimeHelper.NormalizeBusinessDateUtcKind(DateTime.UtcNow)
             };
 
             return dates.ToArray();
@@ -2086,150 +2467,155 @@ namespace ManagerStudentCaltholic.Services
         /// </summary>
         private async Task<(int Affected, bool StillDirty)> FlushSingleClassByIdAsync(int classId, DateTime targetDateUtc)
         {
-            var sheetKey = RedisAttendanceKeys.ClassSheet(classId, targetDateUtc);
             var flushLock = GetClassFlushLock(classId, targetDateUtc);
 
             await flushLock.WaitAsync();
             try
             {
-                long flushedRevision;
-                List<StudentAttendanceRowItem> rowsToFlush;
-                Dictionary<long, RedisDirtyAuditMeta> auditMetaSnapshot;
-                List<RedisPendingCampaignCheckIn> pendingCampaignSnapshot;
-                string fallbackActionType;
-                string fallbackModifiedBy;
-                string? fallbackModifiedIp;
-
-                var sheetLock = GetClassSheetLock(classId, targetDateUtc);
-                await sheetLock.WaitAsync();
-                try
-                {
-                    var payload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
-                    if (payload == null || !payload.IsDirty || payload.Students.Count == 0)
-                    {
-                        return (0, false);
-                    }
-
-                    flushedRevision = payload.Revision;
-                    fallbackActionType = SafeTruncate(payload.LastActionType, 50) ?? "BATCH_SAVE";
-                    fallbackModifiedBy = SafeTruncate(payload.LastModifiedBy, 100) ?? "SYSTEM";
-                    fallbackModifiedIp = SafeTruncate(payload.LastModifiedIp, 45);
-
-                    if (payload.DirtyEnrollmentIds != null && payload.DirtyEnrollmentIds.Count > 0)
-                    {
-                        rowsToFlush = payload.Students
-                            .Where(s => payload.DirtyEnrollmentIds.Contains(s.EnrollmentId))
-                            .Select(CloneRow)
-                            .ToList();
-                    }
-                    else if (string.Equals(fallbackActionType, "BATCH_SAVE", StringComparison.OrdinalIgnoreCase))
-                    {
-                        rowsToFlush = payload.Students.Select(CloneRow).ToList();
-                    }
-                    else
-                    {
-                        // Tương thích ngược với payload Redis cũ trước khi nâng cấp DirtyEnrollmentIds
-                        rowsToFlush = payload.Students
-                            .Where(HasMeaningfulAttendanceState)
-                            .Select(CloneRow)
-                            .ToList();
-                    }
-
-                    auditMetaSnapshot = payload.DirtyAuditMetaByEnrollment != null
-                        ? new Dictionary<long, RedisDirtyAuditMeta>(payload.DirtyAuditMetaByEnrollment)
-                        : new Dictionary<long, RedisDirtyAuditMeta>();
-
-                    pendingCampaignSnapshot = payload.PendingCampaignCheckIns != null && payload.PendingCampaignCheckIns.Count > 0
-                        ? payload.PendingCampaignCheckIns.Select(c => new RedisPendingCampaignCheckIn
-                        {
-                            CampaignId = c.CampaignId,
-                            StudentId = c.StudentId,
-                            EnrollmentId = c.EnrollmentId,
-                            AttendanceDate = c.AttendanceDate,
-                            ModifiedBy = c.ModifiedBy,
-                            CheckInTimeUtc = c.CheckInTimeUtc
-                        }).ToList()
-                        : new List<RedisPendingCampaignCheckIn>();
-                }
-                finally
-                {
-                    sheetLock.Release();
-                }
-
-                int affected = 0;
-                if (rowsToFlush.Count > 0 || pendingCampaignSnapshot.Count > 0)
-                {
-                    affected = await FlushSnapshotToDbAsync(
-                        rowsToFlush,
-                        auditMetaSnapshot,
-                        pendingCampaignSnapshot,
-                        targetDateUtc,
-                        fallbackActionType,
-                        fallbackModifiedBy,
-                        fallbackModifiedIp);
-                }
-
-                bool stillDirty = false;
-                await sheetLock.WaitAsync();
-                try
-                {
-                    var latestPayload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
-                    if (latestPayload != null)
-                    {
-                        if (latestPayload.Revision == flushedRevision)
-                        {
-                            latestPayload.IsDirty = false;
-                            latestPayload.DirtyEnrollmentIds = null;
-                            latestPayload.DirtyAuditMetaByEnrollment = null;
-                            latestPayload.PendingCampaignCheckIns = null;
-                            await _cache.SetAsync(sheetKey, latestPayload, DefaultCacheTtl);
-                            stillDirty = false;
-                        }
-                        else
-                        {
-                            // Có lượt quét QR mới đến trong lúc đang ghi DB -> giữ IsDirty = true để chu kỳ kế tiếp đồng bộ tiếp
-                            if (pendingCampaignSnapshot.Count > 0 && latestPayload.PendingCampaignCheckIns != null)
-                            {
-                                var flushedCampKeys = pendingCampaignSnapshot
-                                    .Select(c => (c.CampaignId, c.EnrollmentId, c.AttendanceDate))
-                                    .ToHashSet();
-
-                                latestPayload.PendingCampaignCheckIns.RemoveAll(c =>
-                                    flushedCampKeys.Contains((c.CampaignId, c.EnrollmentId, c.AttendanceDate)));
-                                await _cache.SetAsync(sheetKey, latestPayload, DefaultCacheTtl);
-                            }
-
-                            stillDirty = true;
-                        }
-                    }
-                }
-                finally
-                {
-                    sheetLock.Release();
-                }
-
-                if (stillDirty && _cache.IsRedisAvailable)
-                {
-                    _flushSignal.NotifyDirty(targetDateUtc, classId);
-                }
-
-                // Xóa cache phiên học và hồ sơ 360 của đúng các em vừa đồng bộ
-                var keysToInvalidate = new List<string>(rowsToFlush.Count + 1)
-                {
-                    RedisAttendanceKeys.ClassSessionInfo(classId, targetDateUtc)
-                };
-                foreach (var studentId in rowsToFlush.Select(r => r.StudentId).Distinct())
-                {
-                    keysToInvalidate.Add($"staff_lookup:student_360:{studentId}");
-                }
-                await RemoveManyKeysAsync(keysToInvalidate);
-
-                return (affected, stillDirty);
+                return await FlushSingleClassByIdCoreLockedAsync(classId, targetDateUtc);
             }
             finally
             {
                 flushLock.Release();
             }
+        }
+
+        private async Task<(int Affected, bool StillDirty)> FlushSingleClassByIdCoreLockedAsync(int classId, DateTime targetDateUtc)
+        {
+            var sheetKey = RedisAttendanceKeys.ClassSheet(classId, targetDateUtc);
+            long flushedRevision;
+            List<StudentAttendanceRowItem> rowsToFlush;
+            Dictionary<long, RedisDirtyAuditMeta> auditMetaSnapshot;
+            List<RedisPendingCampaignCheckIn> pendingCampaignSnapshot;
+            string fallbackActionType;
+            string fallbackModifiedBy;
+            string? fallbackModifiedIp;
+
+            var sheetLock = GetClassSheetLock(classId, targetDateUtc);
+            await sheetLock.WaitAsync();
+            try
+            {
+                var payload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
+                if (payload == null || !payload.IsDirty || payload.Students.Count == 0)
+                {
+                    return (0, false);
+                }
+
+                flushedRevision = payload.Revision;
+                fallbackActionType = SafeTruncate(payload.LastActionType, 50) ?? "BATCH_SAVE";
+                fallbackModifiedBy = SafeTruncate(payload.LastModifiedBy, 100) ?? "SYSTEM";
+                fallbackModifiedIp = SafeTruncate(payload.LastModifiedIp, 45);
+
+                if (payload.DirtyEnrollmentIds != null && payload.DirtyEnrollmentIds.Count > 0)
+                {
+                    rowsToFlush = payload.Students
+                        .Where(s => payload.DirtyEnrollmentIds.Contains(s.EnrollmentId))
+                        .Select(CloneRow)
+                        .ToList();
+                }
+                else if (string.Equals(fallbackActionType, "BATCH_SAVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    rowsToFlush = payload.Students.Select(CloneRow).ToList();
+                }
+                else
+                {
+                    // Tương thích ngược với payload Redis cũ trước khi nâng cấp DirtyEnrollmentIds
+                    rowsToFlush = payload.Students
+                        .Where(HasMeaningfulAttendanceState)
+                        .Select(CloneRow)
+                        .ToList();
+                }
+
+                auditMetaSnapshot = payload.DirtyAuditMetaByEnrollment != null
+                    ? new Dictionary<long, RedisDirtyAuditMeta>(payload.DirtyAuditMetaByEnrollment)
+                    : new Dictionary<long, RedisDirtyAuditMeta>();
+
+                pendingCampaignSnapshot = payload.PendingCampaignCheckIns != null && payload.PendingCampaignCheckIns.Count > 0
+                    ? payload.PendingCampaignCheckIns.Select(c => new RedisPendingCampaignCheckIn
+                    {
+                        CampaignId = c.CampaignId,
+                        StudentId = c.StudentId,
+                        EnrollmentId = c.EnrollmentId,
+                        AttendanceDate = c.AttendanceDate,
+                        ModifiedBy = c.ModifiedBy,
+                        CheckInTimeUtc = c.CheckInTimeUtc
+                    }).ToList()
+                    : new List<RedisPendingCampaignCheckIn>();
+            }
+            finally
+            {
+                sheetLock.Release();
+            }
+
+            int affected = 0;
+            if (rowsToFlush.Count > 0 || pendingCampaignSnapshot.Count > 0)
+            {
+                affected = await FlushSnapshotToDbAsync(
+                    rowsToFlush,
+                    auditMetaSnapshot,
+                    pendingCampaignSnapshot,
+                    targetDateUtc,
+                    fallbackActionType,
+                    fallbackModifiedBy,
+                    fallbackModifiedIp);
+            }
+
+            bool stillDirty = false;
+            await sheetLock.WaitAsync();
+            try
+            {
+                var latestPayload = await _cache.GetAsync<RedisClassAttendancePayload>(sheetKey);
+                if (latestPayload != null)
+                {
+                    if (latestPayload.Revision == flushedRevision)
+                    {
+                        latestPayload.IsDirty = false;
+                        latestPayload.DirtyEnrollmentIds = null;
+                        latestPayload.DirtyAuditMetaByEnrollment = null;
+                        latestPayload.PendingCampaignCheckIns = null;
+                        await _cache.SetAsync(sheetKey, latestPayload, DefaultCacheTtl);
+                        stillDirty = false;
+                    }
+                    else
+                    {
+                        // Có lượt quét QR mới đến trong lúc đang ghi DB -> giữ IsDirty = true để chu kỳ kế tiếp đồng bộ tiếp
+                        if (pendingCampaignSnapshot.Count > 0 && latestPayload.PendingCampaignCheckIns != null)
+                        {
+                            var flushedCampKeys = pendingCampaignSnapshot
+                                .Select(c => (c.CampaignId, c.EnrollmentId, c.AttendanceDate))
+                                .ToHashSet();
+
+                            latestPayload.PendingCampaignCheckIns.RemoveAll(c =>
+                                flushedCampKeys.Contains((c.CampaignId, c.EnrollmentId, c.AttendanceDate)));
+                            await _cache.SetAsync(sheetKey, latestPayload, DefaultCacheTtl);
+                        }
+
+                        stillDirty = true;
+                    }
+                }
+            }
+            finally
+            {
+                sheetLock.Release();
+            }
+
+            if (stillDirty && _cache.IsRedisAvailable)
+            {
+                _flushSignal.NotifyDirty(targetDateUtc, classId);
+            }
+
+            // Xóa cache phiên học và hồ sơ 360 của đúng các em vừa đồng bộ
+            var keysToInvalidate = new List<string>(rowsToFlush.Count + 1)
+            {
+                RedisAttendanceKeys.ClassSessionInfo(classId, targetDateUtc)
+            };
+            foreach (var studentId in rowsToFlush.Select(r => r.StudentId).Distinct())
+            {
+                keysToInvalidate.Add($"staff_lookup:student_360:{studentId}");
+            }
+            await RemoveManyKeysAsync(keysToInvalidate);
+
+            return (affected, stillDirty);
         }
 
         private async Task<int> FlushSnapshotToDbAsync(
@@ -2602,7 +2988,7 @@ namespace ManagerStudentCaltholic.Services
             return SafeTruncate(summary, 255) ?? prefix;
         }
 
-        private static string NormalizeAttendanceStatus(bool isAttended, string? status, bool allowLinedUp)
+        internal static string NormalizeAttendanceStatus(bool isAttended, string? status, bool allowLinedUp)
         {
             var normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
 
@@ -2713,6 +3099,187 @@ namespace ManagerStudentCaltholic.Services
                 IsServedFromRedis = true,
                 Tasks = tasks
             };
+        }
+
+        private async Task<QrScanResponseDto?> ValidateCallerScanAccessAsync(
+            ClaimsPrincipal caller,
+            long callerUserId,
+            long? linkedStudentId,
+            RedisQrStudentLookupItem lookupItem,
+            RedisClassMetaItem? resolvedClassMeta)
+        {
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, lookupItem.StudentId))
+            {
+                return new QrScanResponseDto
+                {
+                    Success = false,
+                    IsForbidden = true,
+                    StudentCode = lookupItem.StudentCode,
+                    Message = "Bạn không thể tự điểm danh cho chính hồ sơ thiếu nhi của mình."
+                };
+            }
+
+            if (!await CanCallerAccessClassAsync(caller, callerUserId, lookupItem.ClassId, resolvedClassMeta))
+            {
+                return new QrScanResponseDto
+                {
+                    Success = false,
+                    IsForbidden = true,
+                    StudentCode = lookupItem.StudentCode,
+                    Message = "Bạn không có quyền quét điểm danh cho lớp của thiếu nhi này."
+                };
+            }
+
+            return null;
+        }
+
+        private async Task<bool> CanCallerAccessClassAsync(
+            ClaimsPrincipal caller,
+            long callerUserId,
+            int classId,
+            RedisClassMetaItem? prefetchedMeta)
+        {
+            if (classId <= 0 || caller.Identity == null || !caller.Identity.IsAuthenticated)
+            {
+                return false;
+            }
+
+            if (IsLeadershipCaller(caller))
+            {
+                return true;
+            }
+
+            var targetClass = prefetchedMeta ?? await _cache.GetOrSetAsync(
+                RedisAttendanceKeys.ClassMetadata(classId),
+                async () => await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.Id == classId)
+                    .Select(c => new RedisClassMetaItem
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        GradeLevel = c.GradeLevel,
+                        Session = c.Session,
+                        AcademicYearId = c.AcademicYearId
+                    })
+                    .FirstOrDefaultAsync(),
+                MetadataCacheTtl);
+
+            if (targetClass == null)
+            {
+                return false;
+            }
+
+            if (caller.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = caller.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return false;
+                }
+
+                return string.Equals(targetClass.GradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (caller.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                if (GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+                {
+                    return false;
+                }
+            }
+            else if (!caller.IsInRole(UserRole.Teacher))
+            {
+                return false;
+            }
+
+            if (callerUserId <= 0)
+            {
+                return false;
+            }
+
+            return await _context.ClassTeachers
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == classId &&
+                                ct.UserId == callerUserId &&
+                                ct.AcademicYearId == targetClass.AcademicYearId);
+        }
+
+        private static long ParseCallerUserId(ClaimsPrincipal? caller) =>
+            long.TryParse(caller?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : 0;
+
+        private static bool IsLeadershipCaller(ClaimsPrincipal? caller) =>
+            caller != null &&
+            (caller.IsInRole(UserRole.Admin) ||
+             caller.IsInRole(UserRole.SpiritualDirector) ||
+             caller.IsInRole(UserRole.ExecutiveBoard));
+
+        private static string? ResolveOperatorName(ClaimsPrincipal? caller)
+        {
+            if (caller?.Identity == null) return null;
+            var fullName = caller.FindFirst("FullName")?.Value;
+            var username = caller.Identity.Name;
+            if (!string.IsNullOrWhiteSpace(fullName) && !string.IsNullOrWhiteSpace(username))
+            {
+                return $"{fullName} ({username})";
+            }
+
+            return !string.IsNullOrWhiteSpace(fullName) ? fullName : username;
+        }
+
+        internal static (bool IsMass, bool IsClass, string Status, string ActivityTitle) EvaluateSessionCheckIn(
+            DateTime vnScanTime,
+            string gradeLevel,
+            string? sessionMode)
+        {
+            var timeOfDay = vnScanTime.TimeOfDay;
+            var mode = (sessionMode ?? "AUTO").Trim().ToUpperInvariant();
+
+            switch (mode)
+            {
+                case "SUNDAY_MASS":
+                    var sundayMassStatus = timeOfDay < new TimeSpan(6, 35, 0)
+                        ? AttendanceStatus.LinedUp
+                        : (timeOfDay < new TimeSpan(7, 0, 0) ? AttendanceStatus.Present : AttendanceStatus.Late);
+                    return (true, false, sundayMassStatus, "THÁNH LỄ CHÚA NHẬT");
+
+                case "THURSDAY_MASS":
+                    return (true, false, AttendanceStatus.Present, "THÁNH LỄ THỨ NĂM");
+
+                case "CATECHISM_CLASS":
+                    bool isMorning = !GradeLevel.IsAfternoonGrade(gradeLevel);
+                    var classStatus = isMorning
+                        ? (timeOfDay < new TimeSpan(9, 30, 0) ? AttendanceStatus.Present : AttendanceStatus.Late)
+                        : (timeOfDay < new TimeSpan(15, 15, 0) ? AttendanceStatus.Present : AttendanceStatus.Late);
+                    return (false, true, classStatus, "GIỜ HỌC GIÁO LÝ");
+
+                case "CAMPAIGN_MONTH":
+                    return (true, false, AttendanceStatus.Present, "CHIẾN DỊCH 1 THÁNG");
+
+                default:
+                    var eval = AttendanceTimeHelper.EvaluateCheckIn(vnScanTime, gradeLevel);
+                    bool isMass = eval.isMass;
+                    bool isClass = eval.isClass;
+                    string status = eval.calculatedStatus;
+                    if (!isMass && !isClass)
+                    {
+                        isClass = true;
+                        status = AttendanceStatus.Present;
+                    }
+                    return (isMass, isClass, status, isMass ? "THÁNH LỄ" : "GIỜ HỌC GIÁO LÝ");
+            }
+        }
+
+        private sealed class RedisQrScanUndoMeta
+        {
+            public long ScannerUserId { get; set; }
+            public string ModifiedBy { get; set; } = string.Empty;
+            public DateTime ScannedAtUtc { get; set; }
+            public bool PreMassAttended { get; set; }
+            public string PreMassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+            public bool PreClassAttended { get; set; }
+            public string PreClassStatus { get; set; } = AttendanceStatus.AbsentUnpermitted;
+            public string? PreNote { get; set; }
         }
         #endregion
     }

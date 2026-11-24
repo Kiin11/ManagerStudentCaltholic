@@ -537,6 +537,24 @@
             return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
+        function escapeHtml(value) {
+            if (value === null || value === undefined) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getLocalTodayIsoDate() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
         async function openSacramentModal(studentId) {
             document.getElementById('sacInputStudentId').value = studentId;
             document.getElementById('sacActionAlert').classList.add('d-none');
@@ -570,7 +588,7 @@
                 loadingEl.classList.add('d-none');
 
                 if (!data.success) {
-                    containerEl.innerHTML = `<div class="alert alert-danger small">${data.message || 'Không thể tải dữ liệu Bí tích.'}</div>`;
+                    containerEl.innerHTML = `<div class="alert alert-danger small">${escapeHtml(data.message || 'Không thể tải dữ liệu Bí tích.')}</div>`;
                     return;
                 }
 
@@ -604,7 +622,7 @@
 
                     const dotSpan = document.createElement('span');
                     dotSpan.className = `sacrament-dot ${item.isCompleted ? 'done' : 'todo'}`;
-                    dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>' : item.sacramentType;
+                    dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>' : escapeHtml(item.sacramentType);
                     stepDiv.appendChild(dotSpan);
 
                     const headerDiv = document.createElement('div');
@@ -646,7 +664,7 @@
                         detailDiv.className = 'small text-dark mt-1';
 
                         const line1 = document.createElement('div');
-                        line1.innerHTML = `<i class="bi bi-calendar-check text-success me-1"></i>Ngày nhận: <strong>${item.receivedDateDisplay || '--'}</strong> | Nơi nhận: <strong>${item.parishName || 'Giáo xứ Phú Trung'}</strong>`;
+                        line1.innerHTML = `<i class="bi bi-calendar-check text-success me-1"></i>Ngày nhận: <strong>${escapeHtml(item.receivedDateDisplay || '--')}</strong> | Nơi nhận: <strong>${escapeHtml(item.parishName || 'Giáo xứ Phú Trung')}</strong>`;
                         detailDiv.appendChild(line1);
 
                         const line2 = document.createElement('div');
@@ -769,7 +787,7 @@
                 selectSacramentStepForEdit(targetStep);
             } catch (err) {
                 loadingEl.classList.add('d-none');
-                containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${err.message}</div>`;
+                containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${escapeHtml(err?.message || 'Không xác định')}</div>`;
             }
         }
 
@@ -792,7 +810,7 @@
                 document.getElementById('sacInputNotes').value = (item.notes && !item.notes.includes('Chưa cập nhật Số sổ bộ')) ? item.notes : '';
             } else {
                 document.getElementById('sacInputRecordId').value = 0;
-                document.getElementById('sacInputDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('sacInputDate').value = getLocalTodayIsoDate();
                 document.getElementById('sacInputParish').value = 'Giáo xứ Phú Trung';
                 document.getElementById('sacInputPriest').value = '';
                 document.getElementById('sacInputGodparent').value = '';

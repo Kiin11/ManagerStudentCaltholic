@@ -140,6 +140,9 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public int ClassId { get; set; }
         public string? SessionMode { get; set; }
         public DateTime ScanDate { get; set; }
+
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsForbidden { get; set; }
     }
 
     // TASK-P5-04.3: DTO yêu cầu hoàn tác lượt quét QR
@@ -337,6 +340,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         public string? ClassCheckInTimeStr { get; set; }
 
         public string? Note { get; set; }
+        public string? SessionMode { get; set; }
         public DateTime ClientTimestampUtc { get; set; } = DateTime.UtcNow;
     }
 

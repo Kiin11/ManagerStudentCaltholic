@@ -14,6 +14,8 @@ namespace ManagerStudentCaltholic.Services
 {
     public class DriveLogUploadService : IDriveLogUploadService
     {
+        private const long MaxLogFileBytes = 200L * 1024 * 1024; // 200 MB compression guard
+        private static readonly TimeSpan MaxInlineRetryWait = TimeSpan.FromSeconds(30);
         private static readonly SemaphoreSlim RunLock = new(1, 1);
         private static readonly Regex LogDateRegex = new(@"(\d{4})(\d{2})(\d{2})", RegexOptions.Compiled);
 
@@ -68,12 +70,13 @@ namespace ManagerStudentCaltholic.Services
                     return result;
                 }
 
-                var vnTimeZone = GetVietnamTimeZone();
-                var todayVn = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vnTimeZone).Date;
+                var vnTimeZone = VietnamTimeHelper.VietnamTimeZone;
+                var todayVn = VietnamTimeHelper.Today;
                 int retentionDays = Math.Max(1, _options.LocalRetentionDays);
                 var cutoffDate = todayVn.AddDays(-(retentionDays - 1));
                 bool isScheduledTrigger = string.Equals(normalizedTrigger, "SCHEDULED", StringComparison.OrdinalIgnoreCase);
                 int maxRetriesPerFile = Math.Max(1, _options.MaxRetriesPerFile);
+                int retryDelaySeconds = Math.Max(0, _options.RetryDelaySeconds);
                 int bufferSize = Math.Clamp(_options.UploadBufferSizeBytes, 4096, 1024 * 1024);
 
                 var tmpLogsDir = Path.GetFullPath(Path.Combine(_env.ContentRootPath, "PrivateUploads", "tmp_logs"));
@@ -109,7 +112,42 @@ namespace ManagerStudentCaltholic.Services
 
                     if (verifiedExisting != null)
                     {
-                        result.Messages.Add($"Bỏ qua {fileInfo.Name}: đã lưu xác thực trên Google Drive (CloudMediaId={verifiedExisting.Id}).");
+                        if (_options.DeleteLocalAfterVerifiedUpload
+                            && !IsProtectedActiveLogFile(fileInfo, todayVn, cutoffDate, vnTimeZone))
+                        {
+                            try
+                            {
+                                File.Delete(fileInfo.FullName);
+                                result.DeletedLocalCount++;
+                                result.Messages.Add($"Bỏ qua upload {fileInfo.Name} (đã xác thực trên Google Drive CloudMediaId={verifiedExisting.Id}) và đã xóa file cục bộ còn sót.");
+                            }
+                            catch (Exception deleteEx)
+                            {
+                                _logger.LogWarning(
+                                    deleteEx,
+                                    "Tệp {FileName} đã lưu xác thực trên Drive (CloudMediaId={CloudMediaId}) nhưng không thể xóa file cục bộ còn sót.",
+                                    fileInfo.Name,
+                                    verifiedExisting.Id);
+                                result.Messages.Add($"Bỏ qua {fileInfo.Name}: đã lưu trên Drive (CloudMediaId={verifiedExisting.Id}) nhưng không xóa được file cục bộ: {deleteEx.Message}");
+                            }
+                        }
+                        else
+                        {
+                            result.Messages.Add($"Bỏ qua {fileInfo.Name}: đã lưu xác thực trên Google Drive (CloudMediaId={verifiedExisting.Id}).");
+                        }
+                        continue;
+                    }
+
+                    if (fileInfo.Length > MaxLogFileBytes)
+                    {
+                        var sizeMb = Math.Round(fileInfo.Length / (1024.0 * 1024.0), 1);
+                        _logger.LogWarning(
+                            "Bỏ qua nén/upload tệp log {FileName} vì dung lượng ({SizeMb} MB) vượt ngưỡng an toàn {MaxMb} MB.",
+                            fileInfo.Name,
+                            sizeMb,
+                            MaxLogFileBytes / (1024 * 1024));
+                        result.FailedCount++;
+                        result.Messages.Add($"Bỏ qua {fileInfo.Name}: dung lượng {sizeMb} MB vượt giới hạn {MaxLogFileBytes / (1024 * 1024)} MB.");
                         continue;
                     }
 
@@ -124,6 +162,27 @@ namespace ManagerStudentCaltholic.Services
                         result.FailedCount++;
                         result.Messages.Add($"Bỏ qua {fileInfo.Name}: đã đạt ngưỡng {maxRetriesPerFile} lần thử ({latestPrior.LastError}).");
                         continue;
+                    }
+
+                    if (latestPrior != null
+                        && string.Equals(latestPrior.SyncStatus, CloudSyncStatus.Retry, StringComparison.OrdinalIgnoreCase)
+                        && retryDelaySeconds > 0)
+                    {
+                        var lastAttemptUtc = DateTime.SpecifyKind(latestPrior.UpdatedAt ?? latestPrior.CreatedAt, DateTimeKind.Utc);
+                        var nextAllowedRetryUtc = lastAttemptUtc.AddSeconds(retryDelaySeconds);
+                        var remainingDelay = nextAllowedRetryUtc - DateTime.UtcNow;
+
+                        if (remainingDelay > TimeSpan.Zero)
+                        {
+                            if (isScheduledTrigger && remainingDelay > MaxInlineRetryWait)
+                            {
+                                result.Messages.Add(
+                                    $"Hoãn thử lại {fileInfo.Name} đến {nextAllowedRetryUtc:HH:mm:ss} UTC (RetryDelaySeconds={retryDelaySeconds}s).");
+                                continue;
+                            }
+
+                            await Task.Delay(remainingDelay, ct);
+                        }
                     }
 
                     string yearMonth = ResolveLogYearMonth(fileInfo, vnTimeZone);
@@ -399,28 +458,6 @@ namespace ManagerStudentCaltholic.Services
             }
 
             return false;
-        }
-
-        private static TimeZoneInfo GetVietnamTimeZone()
-        {
-            var preferredId = OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh";
-            var fallbackId = OperatingSystem.IsWindows() ? "Asia/Ho_Chi_Minh" : "SE Asia Standard Time";
-
-            try
-            {
-                return TimeZoneInfo.FindSystemTimeZoneById(preferredId);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                try
-                {
-                    return TimeZoneInfo.FindSystemTimeZoneById(fallbackId);
-                }
-                catch (TimeZoneNotFoundException)
-                {
-                    return TimeZoneInfo.CreateCustomTimeZone("ICT", TimeSpan.FromHours(7), "Vietnam Standard Time", "Vietnam Standard Time");
-                }
-            }
         }
 
         private string ResolveConfiguredPath(string? configuredPath, string defaultRelative)

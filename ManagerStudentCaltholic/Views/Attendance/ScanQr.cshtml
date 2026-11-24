@@ -580,7 +580,7 @@
         let isCameraRunning = false;
         let currentFacingMode = "environment";
         let isMuted = false;
-        let currentSessionMode = "@recommendedMode";
+        let currentSessionMode = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(recommendedMode));
         let mediaStreamTrack = null;
         let isTorchOn = false;
 
@@ -646,9 +646,10 @@
             }
 
             if (typeof ParishOfflineEngine !== "undefined") {
-                const stats = await ParishOfflineEngine.updateOfflineUiCounters();
-                if (badgeOfflinePendingCount = document.getElementById('badgeOfflinePendingCount')) {
-                    const count = parseInt(badgeOfflinePendingCount.textContent || "0");
+                await ParishOfflineEngine.updateOfflineUiCounters();
+                if (typeof ParishOfflineEngine.getStorageStats === "function") {
+                    const stats = await ParishOfflineEngine.getStorageStats();
+                    const count = stats ? stats.pendingCount : 0;
                     if (pendingBadge) pendingBadge.textContent = count;
                     if (syncBtn) syncBtn.classList.toggle('d-none', count === 0 || !isOnline);
                 }
@@ -900,6 +901,16 @@
 
                     if (res.ok) {
                         result = await res.json();
+                    } else if (res.status === 403 || res.status === 400) {
+                        let errJson = null;
+                        try { errJson = await res.json(); } catch {}
+                        result = errJson || {
+                            success: false,
+                            studentCode: code,
+                            message: res.status === 403
+                                ? "Bạn không có quyền điểm danh mã QR này."
+                                : `Yêu cầu không hợp lệ (HTTP ${res.status}).`
+                        };
                     } else {
                         throw new Error(`HTTP ${res.status}`);
                     }
@@ -998,9 +1009,22 @@
             // Thêm vào danh sách lịch sử khay trượt
             addToHistoryList(data);
 
-            // TASK-P5-04.3: KÍCH HOẠT ĐẾM LÙI HOÀN TÁC 5 GIÂY (UNDO)
-            lastScanResult = data;
-            startUndoCountdown();
+            // TASK-P5-04.3 / LOG-CON-02: Chỉ bật nút Hoàn tác 5 giây khi KHÔNG phải quét trùng (isDuplicate === false)
+            if (isDuplicate) {
+                clearTimeout(undoTimer);
+                clearInterval(undoProgressInterval);
+                lastScanResult = null;
+                const undoWrapper = document.getElementById("undoWrapper");
+                const btnUndo = document.getElementById("btnUndoScan");
+                if (undoWrapper) {
+                    undoWrapper.style.opacity = "0";
+                    undoWrapper.style.visibility = "hidden";
+                }
+                if (btnUndo) btnUndo.disabled = true;
+            } else {
+                lastScanResult = data;
+                startUndoCountdown();
+            }
         }
 
         function showHudFeedback(type, message = null) {
@@ -1026,8 +1050,10 @@
             const undoWrapper = document.getElementById("undoWrapper");
             const undoBar = document.getElementById("undoProgressBar");
             const undoSecLabel = document.getElementById("undoSeconds");
+            const btnUndo = document.getElementById("btnUndoScan");
 
             if (!undoWrapper) return;
+            if (btnUndo) btnUndo.disabled = false;
             undoWrapper.style.visibility = "visible";
             undoWrapper.style.opacity = "1";
 
@@ -1050,10 +1076,39 @@
 
             undoTimer = setTimeout(() => {
                 clearInterval(undoProgressInterval);
+                if (btnUndo) btnUndo.disabled = true;
                 undoWrapper.style.opacity = "0";
                 setTimeout(() => { undoWrapper.style.visibility = "hidden"; }, 300);
                 lastScanResult = null;
             }, UNDO_DURATION_MS);
+        }
+
+        async function callServerUndoCheckIn(dataToUndo) {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const res = await fetch('/Attendance/UndoScanCheckIn', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': token,
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify({
+                    enrollmentId: dataToUndo.enrollmentId,
+                    classId: dataToUndo.classId,
+                    studentCode: dataToUndo.studentCode,
+                    attendanceDate: dataToUndo.scanDate || dataToUndo.attendanceDate || null,
+                    activityType: dataToUndo.activityType,
+                    sessionMode: dataToUndo.sessionMode
+                })
+            });
+
+            let json = null;
+            try { json = await res.json(); } catch {}
+            return {
+                success: Boolean(res.ok && json && json.success),
+                message: (json && json.message) ? json.message : `Lỗi hoàn tác (HTTP ${res.status}).`
+            };
         }
 
         async function triggerUndoLastScan() {
@@ -1063,6 +1118,8 @@
             clearInterval(undoProgressInterval);
 
             const undoWrapper = document.getElementById("undoWrapper");
+            const btnUndo = document.getElementById("btnUndoScan");
+            if (btnUndo) btnUndo.disabled = true;
             if (undoWrapper) undoWrapper.style.visibility = "hidden";
 
             const dataToUndo = lastScanResult;
@@ -1072,36 +1129,25 @@
                 let success = false;
                 let message = "";
 
-                // Hoàn tác Ngoại tuyến nếu kết quả từ Offline
+                // Hoàn tác Ngoại tuyến nếu kết quả từ Offline; nếu đã tự đồng bộ lên server khi có mạng lại -> gọi Undo trên Server
                 if (dataToUndo.isOfflineSaved && typeof ParishOfflineEngine !== "undefined" && dataToUndo.clientRecordId) {
                     const offRes = await ParishOfflineEngine.undoOfflineQrScan(dataToUndo.clientRecordId);
-                    success = offRes.success;
-                    message = offRes.message;
-                } else {
-                    // Hoàn tác Trực tuyến qua Server
-                    const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-                    const res = await fetch('/Attendance/UndoScanCheckIn', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': token,
-                            'RequestVerificationToken': token
-                        },
-                        body: JSON.stringify({
-                            enrollmentId: dataToUndo.enrollmentId,
-                            classId: dataToUndo.classId,
-                            studentCode: dataToUndo.studentCode,
-                            activityType: dataToUndo.activityType,
-                            sessionMode: dataToUndo.sessionMode
-                        })
-                    });
-
-                    if (res.ok) {
-                        const json = await res.json();
-                        success = json.success;
-                        message = json.message;
+                    const undoneLocally = offRes === true || (offRes && offRes.success === true);
+                    if (undoneLocally) {
+                        success = true;
+                        message = (offRes && offRes.message) ? offRes.message : "Đã hoàn tác lượt quét ngoại tuyến!";
+                    } else if (navigator.onLine) {
+                        const srvRes = await callServerUndoCheckIn(dataToUndo);
+                        success = srvRes.success;
+                        message = srvRes.message;
+                    } else {
+                        success = false;
+                        message = (offRes && offRes.message) ? offRes.message : "Không thể hoàn tác lượt quét ngoại tuyến.";
                     }
+                } else {
+                    const srvRes = await callServerUndoCheckIn(dataToUndo);
+                    success = srvRes.success;
+                    message = srvRes.message;
                 }
 
                 if (success) {
@@ -1116,7 +1162,7 @@
                     updateSessionStatsUi();
 
                     // Đánh dấu dòng trong lịch sử thành "Đã hoàn tác"
-                    markHistoryRowUndone(dataToUndo.studentCode);
+                    markHistoryRowUndone(dataToUndo.currentCode || dataToUndo.studentCode);
 
                     // Cập nhật lại thẻ kết quả
                     const statusBadge = document.getElementById("lblScanStatus");
@@ -1126,9 +1172,15 @@
                     }
 
                     showHudFeedback("WARNING", `Đã hoàn tác cho: ${dataToUndo.fullName}`);
+                } else {
+                    playBeep(false);
+                    triggerVibration("ERROR");
+                    showHudFeedback("ERROR", message || "Không thể hoàn tác lượt quét.");
                 }
             } catch (err) {
                 console.error("Lỗi khi hoàn tác:", err);
+                playBeep(false);
+                showHudFeedback("ERROR", "Lỗi kết nối khi hoàn tác lượt quét.");
             }
         }
 
@@ -1148,23 +1200,55 @@
             }
 
             const tr = document.createElement("tr");
-            tr.setAttribute("data-code", data.currentCode || data.studentCode);
+            const codeText = data.currentCode || data.studentCode || "";
+            tr.setAttribute("data-code", codeText);
             const isLate = data.status === "LATE";
             const isOldCode = data.isHistoricalCode === true;
 
-            tr.innerHTML = `
-                <td class="ps-3 small font-monospace text-muted py-2">${data.checkInTimeStr || '--:--:--'}</td>
-                <td class="py-2">
-                    <div class="fw-bold text-dark">${data.christianName || ''} ${data.fullName || ''}</div>
-                    <small class="text-muted font-monospace">${data.currentCode || data.studentCode}</small>
-                    ${isOldCode ? `<span class="badge bg-warning-subtle text-dark border border-warning ms-1 py-0 px-1" style="font-size:0.7rem;"><i class="bi bi-exclamation-triangle"></i> Mã cũ: ${data.oldCode}</span>` : ''}
-                </td>
-                <td class="py-2"><span class="badge bg-light text-dark border">${data.className || ''}</span></td>
-                <td class="text-center py-2 status-cell">
-                    <span class="badge ${isLate ? 'bg-warning text-dark' : 'bg-success'} rounded-pill">
-                        ${isLate ? 'Trễ' : 'Có mặt'}
-                    </span>
-                </td>`;
+            const tdTime = document.createElement("td");
+            tdTime.className = "ps-3 small font-monospace text-muted py-2";
+            tdTime.textContent = data.checkInTimeStr || "--:--:--";
+
+            const tdStudent = document.createElement("td");
+            tdStudent.className = "py-2";
+            const nameDiv = document.createElement("div");
+            nameDiv.className = "fw-bold text-dark";
+            nameDiv.textContent = `${data.christianName || ""} ${data.fullName || ""}`.trim();
+            const codeSmall = document.createElement("small");
+            codeSmall.className = "text-muted font-monospace";
+            codeSmall.textContent = codeText;
+            tdStudent.appendChild(nameDiv);
+            tdStudent.appendChild(codeSmall);
+
+            if (isOldCode) {
+                const oldBadge = document.createElement("span");
+                oldBadge.className = "badge bg-warning-subtle text-dark border border-warning ms-1 py-0 px-1";
+                oldBadge.style.fontSize = "0.7rem";
+                const warnIcon = document.createElement("i");
+                warnIcon.className = "bi bi-exclamation-triangle me-1";
+                oldBadge.appendChild(warnIcon);
+                oldBadge.appendChild(document.createTextNode(`Mã cũ: ${data.oldCode || ""}`));
+                tdStudent.appendChild(oldBadge);
+            }
+
+            const tdClass = document.createElement("td");
+            tdClass.className = "py-2";
+            const classBadge = document.createElement("span");
+            classBadge.className = "badge bg-light text-dark border";
+            classBadge.textContent = data.className || "";
+            tdClass.appendChild(classBadge);
+
+            const tdStatus = document.createElement("td");
+            tdStatus.className = "text-center py-2 status-cell";
+            const statusBadge = document.createElement("span");
+            statusBadge.className = `badge ${isLate ? "bg-warning text-dark" : "bg-success"} rounded-pill`;
+            statusBadge.textContent = isLate ? "Trễ" : "Có mặt";
+            tdStatus.appendChild(statusBadge);
+
+            tr.appendChild(tdTime);
+            tr.appendChild(tdStudent);
+            tr.appendChild(tdClass);
+            tr.appendChild(tdStatus);
 
             tbody.insertBefore(tr, tbody.firstChild);
 
@@ -1175,7 +1259,8 @@
         }
 
         function markHistoryRowUndone(code) {
-            const row = document.querySelector(`#tbodyHistoryRecent tr[data-code="${code}"]`);
+            const rows = document.querySelectorAll("#tbodyHistoryRecent tr");
+            const row = Array.from(rows).find(r => r.getAttribute("data-code") === code);
             if (row) {
                 const cell = row.querySelector(".status-cell");
                 if (cell) {

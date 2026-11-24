@@ -26,7 +26,7 @@ namespace ManagerStudentCaltholic.Services
         // 1. Tính ĐTB Học Kỳ: Tổng(Điểm * Hệ số) / Tổng Hệ số
         public decimal? CalculateSemesterAverage(Dictionary<int, decimal?> scores, List<GradeConfiguration> configs)
         {
-            if (configs == null || !configs.Any()) return null;
+            if (scores == null || configs == null || !configs.Any()) return null;
 
             decimal totalWeightedScore = 0;
             int totalWeight = 0;
@@ -34,21 +34,29 @@ namespace ManagerStudentCaltholic.Services
 
             foreach (var col in configs)
             {
+                if (col.WeightFactor < 0)
+                    return null;
+
                 if (scores.TryGetValue(col.Id, out var score) && score.HasValue)
                 {
+                    if (col.WeightFactor == 0)
+                        continue;
+
                     totalWeightedScore += score.Value * col.WeightFactor;
                     totalWeight += col.WeightFactor;
                     countValid++;
                 }
             }
 
-            if (totalWeight == 0 || countValid == 0) return null;
+            if (totalWeight <= 0 || countValid == 0) return null;
             return Math.Round(totalWeightedScore / totalWeight, 2, MidpointRounding.AwayFromZero);
         }
 
         // 2. Tính ĐTB Cả Năm: (ĐTB_HK1 * 1 + ĐTB_HK2 * 2) / 3 (hoặc theo hệ số cấu hình)
         public decimal? CalculateYearAverage(decimal? hk1Average, decimal? hk2Average, int hk1Weight = 1, int hk2Weight = 2)
         {
+            if (hk1Weight < 0 || hk2Weight < 0 || (hk1Weight + hk2Weight) <= 0) return null;
+
             if (!hk1Average.HasValue && !hk2Average.HasValue) return null;
             if (hk1Average.HasValue && !hk2Average.HasValue) return hk1Average;
             if (!hk1Average.HasValue && hk2Average.HasValue) return hk2Average;
@@ -82,27 +90,37 @@ namespace ManagerStudentCaltholic.Services
             Dictionary<string, decimal> scores,
             IEnumerable<string>? allColumnCodes = null)
         {
-            if (string.IsNullOrWhiteSpace(formulaExpression)) return null;
+            if (scores == null) return null;
+            var nullableScores = scores.ToDictionary(kvp => kvp.Key, kvp => (decimal?)kvp.Value);
+            return EvaluateGradeFormula(formulaExpression, nullableScores, allColumnCodes);
+        }
+
+        public decimal? EvaluateGradeFormula(
+            string formulaExpression,
+            Dictionary<string, decimal?> scores,
+            IEnumerable<string>? allColumnCodes = null)
+        {
+            if (string.IsNullOrWhiteSpace(formulaExpression) || scores == null) return null;
 
             try
             {
                 var expr = new Expression(formulaExpression);
+                bool hasMissingOrNullColumn = false;
 
-                if (allColumnCodes != null)
+                expr.EvaluateParameter += (name, args) =>
                 {
-                    foreach (var code in allColumnCodes)
+                    if (scores.TryGetValue(name, out var val) && val.HasValue)
                     {
-                        expr.Parameters[code] = 0.0;
+                        args.Result = (double)val.Value;
+                        return;
                     }
-                }
 
-                foreach (var kvp in scores)
-                {
-                    expr.Parameters[kvp.Key] = (double)kvp.Value;
-                }
+                    // Cột điểm chưa nhập (null hoặc thiếu trong scores) tuyệt đối không tự quy đổi thành 0.0
+                    hasMissingOrNullColumn = true;
+                };
 
                 var result = expr.Evaluate();
-                if (result == null) return null;
+                if (hasMissingOrNullColumn || result == null) return null;
 
                 double numericResult = Convert.ToDouble(result);
                 if (double.IsNaN(numericResult) || double.IsInfinity(numericResult))

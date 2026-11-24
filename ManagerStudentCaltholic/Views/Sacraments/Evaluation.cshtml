@@ -191,7 +191,7 @@
                     else
                     {
                         <span class="badge bg-success w-100 py-2 text-center">
-                            <i class="bi bi-patch-check-fill me-1"></i>Đã duyệt bởi @Model.ApprovedBy (@Model.ApprovedAt?.ToLocalTime().ToString("dd/MM/yyyy"))
+                            <i class="bi bi-patch-check-fill me-1"></i>Đã duyệt bởi @Model.ApprovedBy (@(Model.ApprovedAt.HasValue ? ManagerStudentCaltholic.Services.VietnamTimeHelper.ToVietnamTime(Model.ApprovedAt.Value).ToString("dd/MM/yyyy") : ""))
                         </span>
                     }
                 </div>
@@ -393,7 +393,7 @@
             const payload = {
                 batchId: batchIdVal > 0 ? batchIdVal : null,
                 academicYearId: @Model.AcademicYearId,
-                gradeLevel: '@Html.Raw(Model.SelectedGrade)',
+                gradeLevel: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SelectedGrade ?? "")),
                 classRoomId: @(Model.SelectedClassId.HasValue? Model.SelectedClassId.Value.ToString() : "null"),
                 sacramentType: @Model.SacramentType,
                 title: document.getElementById('batchTitleInput').value.trim(),

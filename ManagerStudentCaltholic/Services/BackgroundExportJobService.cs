@@ -36,6 +36,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task GenerateClassExcelReportJobAsync(string jobTrackerId, int classId, string requestedBy)
         {
             var cacheKey = GetJobCacheKey(jobTrackerId);
+            string? fullPath = null;
             try
             {
                 var targetClass = await _context.Classes
@@ -48,15 +49,32 @@ namespace ManagerStudentCaltholic.Services
                     return;
                 }
 
-                var bytes = await _studentExcelService.ExportClassListToExcelAsync(classId);
                 var safeClassName = SanitizeFileNamePart(targetClass.Name);
-                var fileName = $"DanhSach_Lop_{safeClassName}_{DateTime.Now:yyyyMMdd_HHmmss}_{jobTrackerId[..6]}.xlsx";
+                var fileName = $"DanhSach_Lop_{safeClassName}_{VietnamTimeHelper.Now:yyyyMMdd_HHmmss}_{jobTrackerId[..6]}.xlsx";
 
                 var exportsDir = Path.Combine(_env.ContentRootPath, "PrivateUploads", "exports");
                 Directory.CreateDirectory(exportsDir);
 
-                var fullPath = Path.Combine(exportsDir, fileName);
-                await File.WriteAllBytesAsync(fullPath, bytes);
+                fullPath = Path.Combine(exportsDir, fileName);
+
+                await using (var fs = new FileStream(
+                    fullPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 65536,
+                    options: FileOptions.Asynchronous))
+                {
+                    if (_studentExcelService is StudentExcelService concreteExcelService)
+                    {
+                        await concreteExcelService.ExportClassListToStreamAsync(classId, fs);
+                    }
+                    else
+                    {
+                        var bytes = await _studentExcelService.ExportClassListToExcelAsync(classId);
+                        await fs.WriteAsync(bytes);
+                    }
+                }
 
                 await _cache.SetAsync(cacheKey, new BackgroundExportMetaDto
                 {
@@ -72,6 +90,10 @@ namespace ManagerStudentCaltholic.Services
             }
             catch (Exception ex)
             {
+                if (!string.IsNullOrWhiteSpace(fullPath))
+                {
+                    try { if (File.Exists(fullPath)) File.Delete(fullPath); } catch { }
+                }
                 _logger.LogError(ex, "[Hangfire] Lỗi khi xuất Excel ngầm cho lớp ID {ClassId}", classId);
                 await MarkJobFailedAsync(cacheKey, jobTrackerId, "Đã xảy ra lỗi khi tạo tệp báo cáo.");
                 throw;
@@ -84,6 +106,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task GenerateParishFullExcelReportJobAsync(string jobTrackerId, int academicYearId, string? gradeLevel, string requestedBy)
         {
             var cacheKey = GetJobCacheKey(jobTrackerId);
+            string? fullPath = null;
             try
             {
                 var year = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.Id == academicYearId)
@@ -96,8 +119,7 @@ namespace ManagerStudentCaltholic.Services
                 }
 
                 var classesQuery = _context.Classes
-                    .Include(c => c.Enrollments)
-                        .ThenInclude(e => e.Student)
+                    .AsNoTracking()
                     .Where(c => c.AcademicYearId == year.Id);
 
                 if (!string.IsNullOrWhiteSpace(gradeLevel) && gradeLevel != "ALL")
@@ -108,14 +130,61 @@ namespace ManagerStudentCaltholic.Services
                 var classes = await classesQuery
                     .OrderBy(c => c.GradeLevel)
                     .ThenBy(c => c.Name)
-                    .AsNoTracking()
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.GradeLevel,
+                        c.Name,
+                        c.RoomName
+                    })
                     .ToListAsync();
 
-                var allEnrollmentIds = classes.SelectMany(c => c.Enrollments.Select(e => e.Id)).ToList();
-                var allAttendances = await _context.Attendances
-                    .Where(a => allEnrollmentIds.Contains(a.EnrollmentId))
-                    .AsNoTracking()
-                    .ToListAsync();
+                var classIds = classes.Select(c => c.Id).ToList();
+
+                var activeEnrollments = classIds.Count == 0
+                    ? new List<ParishExportStudentRow>()
+                    : await _context.Enrollments
+                        .AsNoTracking()
+                        .Where(e => classIds.Contains(e.ClassRoomId) && e.Student.IsActive)
+                        .OrderBy(e => e.Student.LastName)
+                        .ThenBy(e => e.Student.FirstName)
+                        .Select(e => new ParishExportStudentRow(
+                            e.Id,
+                            e.ClassRoomId,
+                            e.Student.StudentCode,
+                            e.Student.ChristianName,
+                            e.Student.FirstName,
+                            e.Student.LastName,
+                            e.Student.Gender,
+                            e.Student.DateOfBirth))
+                        .ToListAsync();
+
+                var attendanceStats = classIds.Count == 0
+                    ? new List<ParishAttendanceSummaryRow>()
+                    : await _context.Attendances
+                        .AsNoTracking()
+                        .Where(a => a.DayOfWeek == DayOfWeek.Sunday
+                            && (a.AttendedMass || a.ClassAttended)
+                            && classIds.Contains(a.Enrollment.ClassRoomId)
+                            && a.Enrollment.Student.IsActive)
+                        .GroupBy(a => new { a.EnrollmentId, a.Enrollment.ClassRoomId })
+                        .Select(g => new ParishAttendanceSummaryRow(
+                            g.Key.EnrollmentId,
+                            g.Key.ClassRoomId,
+                            g.Sum(a => a.AttendedMass ? 1 : 0),
+                            g.Sum(a => a.ClassAttended ? 1 : 0)))
+                        .ToListAsync();
+
+                var enrollmentsByClass = activeEnrollments
+                    .GroupBy(e => e.ClassRoomId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                var enrollmentCounts = attendanceStats
+                    .ToDictionary(x => x.EnrollmentId, x => (x.MassCount, x.ClassCount));
+
+                var classSundayMassCounts = attendanceStats
+                    .GroupBy(x => x.ClassRoomId)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.MassCount));
 
                 using var workbook = new XLWorkbook();
 
@@ -140,15 +209,14 @@ namespace ManagerStudentCaltholic.Services
                 int sIdx = 1;
                 foreach (var cls in classes)
                 {
-                    var activeEnrollments = cls.Enrollments.Where(e => e.Student.IsActive).ToList();
-                    var clsEnrIds = activeEnrollments.Select(e => e.Id).ToHashSet();
-                    int sunPresentTotal = allAttendances.Count(a => clsEnrIds.Contains(a.EnrollmentId) && a.DayOfWeek == DayOfWeek.Sunday && a.AttendedMass);
+                    int activeCount = enrollmentsByClass.TryGetValue(cls.Id, out var clsStudents) ? clsStudents.Count : 0;
+                    int sunPresentTotal = classSundayMassCounts.GetValueOrDefault(cls.Id, 0);
 
                     summarySheet.Cell(sRow, 1).Value = sIdx++;
                     summarySheet.Cell(sRow, 2).Value = SanitizeExcelCell(cls.GradeLevel);
                     summarySheet.Cell(sRow, 3).Value = SanitizeExcelCell(cls.Name);
                     summarySheet.Cell(sRow, 4).Value = SanitizeExcelCell(cls.RoomName);
-                    summarySheet.Cell(sRow, 5).Value = activeEnrollments.Count;
+                    summarySheet.Cell(sRow, 5).Value = activeCount;
                     summarySheet.Cell(sRow, 6).Value = sunPresentTotal;
 
                     for (int c = 1; c <= 6; c++)
@@ -180,26 +248,22 @@ namespace ManagerStudentCaltholic.Services
                         cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
                     }
 
-                    var students = cls.Enrollments
-                        .Where(e => e.Student.IsActive)
-                        .OrderBy(e => e.Student.LastName)
-                        .ThenBy(e => e.Student.FirstName)
-                        .ToList();
+                    var students = enrollmentsByClass.TryGetValue(cls.Id, out var clsList)
+                        ? clsList
+                        : new List<ParishExportStudentRow>();
 
                     int rIdx = 4;
                     int stt = 1;
                     foreach (var en in students)
                     {
-                        var stuAtts = allAttendances.Where(a => a.EnrollmentId == en.Id && a.DayOfWeek == DayOfWeek.Sunday).ToList();
-                        int massCount = stuAtts.Count(a => a.AttendedMass);
-                        int classCount = stuAtts.Count(a => a.ClassAttended);
+                        var (massCount, classCount) = enrollmentCounts.GetValueOrDefault(en.EnrollmentId, (0, 0));
 
                         ws.Cell(rIdx, 1).Value = stt++;
-                        ws.Cell(rIdx, 2).Value = SanitizeExcelCell(en.Student.StudentCode);
-                        ws.Cell(rIdx, 3).Value = SanitizeExcelCell(en.Student.ChristianName);
-                        ws.Cell(rIdx, 4).Value = SanitizeExcelCell($"{en.Student.FirstName} {en.Student.LastName}");
-                        ws.Cell(rIdx, 5).Value = SanitizeExcelCell(en.Student.Gender);
-                        ws.Cell(rIdx, 6).Value = en.Student.DateOfBirth.ToString("dd/MM/yyyy");
+                        ws.Cell(rIdx, 2).Value = SanitizeExcelCell(en.StudentCode);
+                        ws.Cell(rIdx, 3).Value = SanitizeExcelCell(en.ChristianName);
+                        ws.Cell(rIdx, 4).Value = SanitizeExcelCell($"{en.FirstName} {en.LastName}");
+                        ws.Cell(rIdx, 5).Value = SanitizeExcelCell(en.Gender);
+                        ws.Cell(rIdx, 6).Value = en.DateOfBirth.ToString("dd/MM/yyyy");
                         ws.Cell(rIdx, 7).Value = massCount;
                         ws.Cell(rIdx, 8).Value = classCount;
 
@@ -216,10 +280,10 @@ namespace ManagerStudentCaltholic.Services
                 Directory.CreateDirectory(exportsDir);
 
                 var scopePart = string.IsNullOrWhiteSpace(gradeLevel) || gradeLevel == "ALL" ? "ToanXu" : SanitizeFileNamePart(gradeLevel);
-                var fileName = $"BaoCao_GiaoLy_{scopePart}_{DateTime.Now:yyyyMMdd_HHmmss}_{jobTrackerId[..6]}.xlsx";
-                var fullPath = Path.Combine(exportsDir, fileName);
+                var fileName = $"BaoCao_GiaoLy_{scopePart}_{VietnamTimeHelper.Now:yyyyMMdd_HHmmss}_{jobTrackerId[..6]}.xlsx";
+                fullPath = Path.Combine(exportsDir, fileName);
 
-                using (var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write))
+                await using (var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 65536, options: FileOptions.Asynchronous))
                 {
                     workbook.SaveAs(fs);
                 }
@@ -238,11 +302,31 @@ namespace ManagerStudentCaltholic.Services
             }
             catch (Exception ex)
             {
+                if (!string.IsNullOrWhiteSpace(fullPath))
+                {
+                    try { if (File.Exists(fullPath)) File.Delete(fullPath); } catch { }
+                }
                 _logger.LogError(ex, "[Hangfire] Lỗi khi xuất Báo cáo Excel toàn xứ");
                 await MarkJobFailedAsync(cacheKey, jobTrackerId, "Lỗi hệ thống khi tổng hợp báo cáo nhiều lớp.");
                 throw;
             }
         }
+
+        private sealed record ParishExportStudentRow(
+            long EnrollmentId,
+            int ClassRoomId,
+            string StudentCode,
+            string ChristianName,
+            string FirstName,
+            string LastName,
+            string Gender,
+            DateTime DateOfBirth);
+
+        private sealed record ParishAttendanceSummaryRow(
+            long EnrollmentId,
+            int ClassRoomId,
+            int MassCount,
+            int ClassCount);
 
         private async Task MarkJobFailedAsync(string cacheKey, string jobTrackerId, string errorMsg)
         {

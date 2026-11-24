@@ -1,5 +1,6 @@
 ﻿using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ManagerStudentCaltholic.Extensions
 {
@@ -11,7 +12,60 @@ namespace ManagerStudentCaltholic.Extensions
         public const string PolicyQrAttendance = "PolicyQrAttendance"; // TASK-INF-08: High-concurrency QR burst behind 1 shared NAT IP
 
         /// <summary>
-        /// TASK-705: Đăng ký dịch vụ Rate Limiting
+        /// Chuẩn hóa IP client (quy đổi IPv4-mapped IPv6 về IPv4) để tránh phân mảnh/lách Rate Limiter.
+        /// </summary>
+        public static string GetClientIpKey(HttpContext? httpContext)
+        {
+            var ip = httpContext?.Connection.RemoteIpAddress;
+            if (ip == null)
+            {
+                return "anonymous";
+            }
+
+            return ip.IsIPv4MappedToIPv6
+                ? ip.MapToIPv4().ToString()
+                : ip.ToString();
+        }
+
+        private static bool ShouldBypassGlobalRateLimit(HttpContext httpContext)
+        {
+            var path = httpContext.Request.Path.Value ?? string.Empty;
+
+            if (path.Equals("/health", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/image/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/icons/", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("/sw.js", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("/manifest.json", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("/manifest.webmanifest", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var rateLimitPolicy = httpContext.GetEndpoint()?.Metadata
+                .GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+            if (string.Equals(rateLimitPolicy, PolicyQrAttendance, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (path.StartsWith("/Attendance/ScanCheckIn", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// TASK-705 / SEC-APP-05: Đăng ký dịch vụ Rate Limiting
         /// </summary>
         public static IServiceCollection AddAppRateLimiter(this IServiceCollection services)
         {
@@ -29,10 +83,28 @@ namespace ManagerStudentCaltholic.Extensions
                         cancellationToken: token);
                 };
 
+                // 0. Global Limiter: Bảo vệ toàn bộ endpoint (200 req/phút/IP), miễn trừ /health, static assets và các endpoint QR
+                options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+                {
+                    if (ShouldBypassGlobalRateLimit(httpContext))
+                    {
+                        return RateLimitPartition.GetNoLimiter("bypass");
+                    }
+
+                    var clientIp = GetClientIpKey(httpContext);
+                    return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 200,
+                        Window = TimeSpan.FromMinutes(1),
+                        SegmentsPerWindow = 6,
+                        QueueLimit = 0
+                    });
+                });
+
                 // 1. Policy Global (Sliding Window): 60 request / phút cho mỗi Client IP
                 options.AddPolicy(PolicyGlobal, httpContext =>
                 {
-                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    var clientIp = GetClientIpKey(httpContext);
                     return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
                     {
                         PermitLimit = 60,
@@ -45,7 +117,7 @@ namespace ManagerStudentCaltholic.Extensions
                 // 2. Policy nghiêm ngặt cho Đăng nhập (Fixed Window): 5 lần / 15 giây
                 options.AddPolicy(PolicyAuth, httpContext =>
                 {
-                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    var clientIp = GetClientIpKey(httpContext);
                     return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 5,
@@ -57,7 +129,7 @@ namespace ManagerStudentCaltholic.Extensions
                 // 3. Policy cho Tra cứu công khai / Nộp đơn xin nghỉ (Chống spam SĐT / Brute-force): 10 lần / phút
                 options.AddPolicy(PolicyPublicLookup, httpContext =>
                 {
-                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    var clientIp = GetClientIpKey(httpContext);
                     return RateLimitPartition.GetSlidingWindowLimiter(clientIp, _ => new SlidingWindowRateLimiterOptions
                     {
                         PermitLimit = 10,
@@ -72,7 +144,7 @@ namespace ManagerStudentCaltholic.Extensions
                 // mà KHÔNG bao giờ bị HTTP 429, đồng thời vẫn giữ nguyên PolicyPublicLookup & PolicyAuth nghiêm ngặt.
                 options.AddPolicy(PolicyQrAttendance, httpContext =>
                 {
-                    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                    var clientIp = GetClientIpKey(httpContext);
                     return RateLimitPartition.GetTokenBucketLimiter(clientIp, _ => new TokenBucketRateLimiterOptions
                     {
                         TokenLimit = 180,

@@ -9,6 +9,7 @@
         public string SessionType { get; set; } = "ALL";
         public string Reason { get; set; } = string.Empty;
         public string? ParentPhone { get; set; }
+        public string? WebsiteUrlHoneypot { get; set; }
     }
 
     // DTO duyệt đơn

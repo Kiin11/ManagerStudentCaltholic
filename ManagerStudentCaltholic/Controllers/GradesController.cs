@@ -3,6 +3,7 @@ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -57,18 +58,33 @@ namespace ManagerStudentCaltholic.Controllers
                 return false;
             }
 
+            bool isCurrentYear = targetClass.AcademicYear != null
+                ? targetClass.AcademicYear.IsCurrent
+                : await _context.AcademicYears
+                    .AsNoTracking()
+                    .AnyAsync(y => y.Id == targetClass.AcademicYearId && y.IsCurrent);
+
+            if (!isCurrentYear)
+                return false;
+
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade) &&
-                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                    return false;
+
+                return string.Equals(targetClass.GradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase);
             }
 
+            var uid = CurrentUserId;
+            if (uid <= 0) return false;
+
             return await _context.ClassTeachers
-                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id && ct.UserId == CurrentUserId);
+                .AsNoTracking()
+                .AnyAsync(ct => ct.ClassRoomId == targetClass.Id
+                             && ct.UserId == uid
+                             && ct.AcademicYearId == targetClass.AcademicYearId
+                             && ct.ClassRoom.AcademicYear.IsCurrent);
         }
 
         /// <summary>
@@ -94,25 +110,24 @@ namespace ManagerStudentCaltholic.Controllers
             else if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                var uid = CurrentUserId;
 
-                // SEC-08 FIX (Fail-Closed): Nếu có ManagedGradeLevel thì lấy theo khối,
-                // nếu chưa gán khối thì chỉ lấy lớp đứng dạy trực tiếp, tuyệt đối không mở toang toàn bộ lớp!
+                // SEC-08 FIX (Fail-Closed): Trưởng khối bắt buộc phải có ManagedGradeLevel hợp lệ
                 if (!string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade || c.ClassTeachers.Any(ct => ct.UserId == uid));
+                    var normalizedGrade = managedGrade.Trim();
+                    classesQuery = classesQuery.Where(c => c.GradeLevel == normalizedGrade);
                 }
                 else
                 {
-                    classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
+                    classesQuery = classesQuery.Where(_ => false);
                 }
             }
             else if (User.IsInRole(UserRole.ProbationaryTeacher))
             {
-                // TASK-02.3: GLV Dự Bị chỉ được phép truy cập các lớp được phân công thuộc Ca Sáng
+                // TASK-02.3: GLV Dự Bị chỉ được phép truy cập các lớp được phân công thuộc Ca Sáng trong niên khóa hiện hành
                 var uid = CurrentUserId;
                 classesQuery = classesQuery.Where(c =>
-                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
+                    c.ClassTeachers.Any(ct => ct.UserId == uid && ct.AcademicYearId == currentYear.Id) &&
                     c.Session != GradeLevel.SessionAfternoon &&
                     c.GradeLevel != GradeLevel.BaoDong &&
                     c.GradeLevel != GradeLevel.DuBi &&
@@ -121,7 +136,7 @@ namespace ManagerStudentCaltholic.Controllers
             else
             {
                 var uid = CurrentUserId;
-                classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid));
+                classesQuery = classesQuery.Where(c => c.ClassTeachers.Any(ct => ct.UserId == uid && ct.AcademicYearId == currentYear.Id));
             }
 
             var allowedClasses = await classesQuery
@@ -129,6 +144,13 @@ namespace ManagerStudentCaltholic.Controllers
                 .ThenBy(c => c.Name)
                 .AsNoTracking()
                 .ToListAsync();
+
+            if (!IsLeadership && User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                allowedClasses = allowedClasses
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
 
             if (!allowedClasses.Any())
             {
@@ -184,7 +206,11 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
-            var totalSessions = Math.Max(1, attendances.Select(a => a.AttendanceDate).Distinct().Count());
+            var totalSessions = attendances
+                .Where(a => a.DayOfWeek == DayOfWeek.Sunday)
+                .Select(a => a.AttendanceDate.Date)
+                .Distinct()
+                .Count();
 
             var rows = enrollments.Select(e =>
             {
@@ -201,9 +227,14 @@ namespace ManagerStudentCaltholic.Controllers
                     .ToDictionary(r => r.GradeConfigurationId, r => r.Score);
 
                 var attList = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
-                var presentCount = attList.Count(a => a.ClassAttended && (a.ClassStatus == "PRESENT" || a.ClassStatus == "LATE"));
-                var attRate = attendances.Any()
-                    ? Math.Round((presentCount / (double)totalSessions) * 100, 1)
+                var presentCount = attList.Count(a =>
+                    a.DayOfWeek == DayOfWeek.Sunday &&
+                    a.ClassAttended &&
+                    (a.ClassStatus == AttendanceStatus.Present ||
+                     a.ClassStatus == AttendanceStatus.Late ||
+                     a.ClassStatus == AttendanceStatus.LinedUp));
+                var attRate = totalSessions > 0
+                    ? Math.Min(100.0, Math.Round((presentCount / (double)totalSessions) * 100.0, 1))
                     : 100.0;
 
                 var sem1Avg = _gradeService.CalculateSemesterAverage(hk1Dict, hk1Configs);
@@ -261,77 +292,153 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveSingleCell([FromBody] SaveGradeItemDto dto)
         {
-            if (dto == null) return Json(new { success = false, message = "Dữ liệu không hợp lệ." });
-
-            if (dto.Score.HasValue && (dto.Score.Value < 0m || dto.Score.Value > 10m))
+            if (dto == null || !ModelState.IsValid || dto.EnrollmentId <= 0 || dto.GradeConfigurationId <= 0)
             {
-                return Json(new { success = false, message = "Điểm số phải từ 0.0 đến 10.0." });
+                return BadRequest(new { success = false, message = "Dữ liệu điểm không hợp lệ." });
             }
 
-            var enrollment = await _context.Enrollments
-                .Include(e => e.ClassRoom)
-                .FirstOrDefaultAsync(e => e.Id == dto.EnrollmentId);
-
-            if (enrollment == null)
-                return Json(new { success = false, message = "Không tìm thấy học sinh." });
-
-            if (!await HasAccessToClassAsync(enrollment.ClassRoom))
-                return Forbid();
-
-            if (enrollment.ClassRoom.IsGradeLocked)
-                return Json(new { success = false, message = "Sổ điểm lớp này đã bị khóa bởi Ban Điều Hành!" });
-
-            var config = await _context.GradeConfigurations.FindAsync(dto.GradeConfigurationId);
-            if (config == null)
-                return Json(new { success = false, message = "Cột điểm không tồn tại." });
-
-            // SEC-NEW-05 FIX: Chặn truyền GradeConfigurationId của lớp khác hoặc niên khóa khác
-            if (config.AcademicYearId != enrollment.ClassRoom.AcademicYearId ||
-                (config.GradeLevel != "ALL" && config.GradeLevel != enrollment.ClassRoom.GradeLevel) ||
-                (config.ClassRoomId != null && config.ClassRoomId != enrollment.ClassRoomId))
+            if (dto.Score.HasValue && (dto.Score.Value < 0.00m || dto.Score.Value > 10.00m))
             {
-                return BadRequest(new { success = false, message = "Cột điểm không thuộc phạm vi lớp học này." });
+                return BadRequest(new { success = false, message = "Điểm số phải từ 0.00 đến 10.00." });
             }
 
-            var record = await _context.GradeRecords
-                .FirstOrDefaultAsync(r => r.EnrollmentId == dto.EnrollmentId && r.GradeConfigurationId == dto.GradeConfigurationId);
+            if (!string.IsNullOrEmpty(dto.Note) && dto.Note.Length > 255)
+            {
+                return BadRequest(new { success = false, message = "Ghi chú không được vượt quá 255 ký tự." });
+            }
 
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
             var currentUser = User.Identity?.Name ?? "GLV";
+            decimal? normalizedScore = dto.Score.HasValue
+                ? Math.Round(dto.Score.Value, 2, MidpointRounding.AwayFromZero)
+                : null;
+            string? normalizedNote = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim();
 
-            if (record == null)
+            var strategy = _context.Database.CreateExecutionStrategy();
+            IActionResult? earlyResult = null;
+            int savedSemester = 1;
+            int classId = 0;
+            int academicYearId = 0;
+            string gradeLevel = string.Empty;
+
+            await strategy.ExecuteAsync(async () =>
             {
-                record = new GradeRecord
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                var enrollment = await _context.Enrollments
+                    .FirstOrDefaultAsync(e => e.Id == dto.EnrollmentId);
+
+                if (enrollment == null)
                 {
-                    EnrollmentId = dto.EnrollmentId,
-                    GradeConfigurationId = dto.GradeConfigurationId,
-                    Score = dto.Score,
-                    Note = dto.Note,
-                    UpdatedBy = currentUser,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _context.GradeRecords.Add(record);
-            }
-            else
-            {
-                record.Score = dto.Score;
-                record.Note = dto.Note;
-                record.UpdatedBy = currentUser;
-                record.UpdatedAt = DateTime.UtcNow;
-            }
+                    earlyResult = BadRequest(new { success = false, message = "Không tìm thấy học sinh." });
+                    return;
+                }
 
-            await _context.SaveChangesAsync();
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .FirstOrDefaultAsync(c => c.Id == enrollment.ClassRoomId);
+
+                if (targetClass == null)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Không tìm thấy thông tin lớp học." });
+                    return;
+                }
+
+                if (!await HasAccessToClassAsync(targetClass))
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền thao tác sổ điểm lớp này." });
+                    return;
+                }
+
+                if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, enrollment.StudentId))
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Không được phép tự nhập hoặc sửa điểm cho chính mình." });
+                    return;
+                }
+
+                if (targetClass.AcademicYear == null || !targetClass.AcademicYear.IsCurrent)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Chỉ được phép thao tác sổ điểm thuộc niên khóa hiện hành." });
+                    return;
+                }
+
+                if (targetClass.IsGradeLocked)
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Sổ điểm lớp này đã bị khóa bởi Ban Điều Hành!" });
+                    return;
+                }
+
+                var config = await _context.GradeConfigurations
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(g => g.Id == dto.GradeConfigurationId);
+
+                if (config == null)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Cột điểm không tồn tại." });
+                    return;
+                }
+
+                // SEC-NEW-05 FIX: Chặn truyền GradeConfigurationId của lớp khác hoặc niên khóa khác
+                if (config.AcademicYearId != targetClass.AcademicYearId ||
+                    (config.GradeLevel != "ALL" && config.GradeLevel != targetClass.GradeLevel) ||
+                    (config.ClassRoomId != null && config.ClassRoomId != targetClass.Id))
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Cột điểm không thuộc phạm vi lớp học này." });
+                    return;
+                }
+
+                var record = await _context.GradeRecords
+                    .FirstOrDefaultAsync(r => r.EnrollmentId == dto.EnrollmentId && r.GradeConfigurationId == dto.GradeConfigurationId);
+
+                if (record == null)
+                {
+                    record = new GradeRecord
+                    {
+                        EnrollmentId = dto.EnrollmentId,
+                        GradeConfigurationId = dto.GradeConfigurationId,
+                        Score = normalizedScore,
+                        Note = normalizedNote,
+                        UpdatedBy = currentUser,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.GradeRecords.Add(record);
+                }
+                else
+                {
+                    record.Score = normalizedScore;
+                    record.Note = normalizedNote;
+                    record.UpdatedBy = currentUser;
+                    record.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                savedSemester = config.Semester;
+                classId = targetClass.Id;
+                academicYearId = targetClass.AcademicYearId;
+                gradeLevel = targetClass.GradeLevel;
+            });
+
+            if (earlyResult != null)
+            {
+                return earlyResult;
+            }
 
             // Tính lại Điểm Trung Bình Học kỳ tức thì để cập nhật lên UI
             var semConfigs = await _context.GradeConfigurations
-                .Where(g => g.AcademicYearId == enrollment.ClassRoom.AcademicYearId &&
-                            g.Semester == config.Semester &&
-                            (g.GradeLevel == "ALL" || g.GradeLevel == enrollment.ClassRoom.GradeLevel) &&
-                            (g.ClassRoomId == null || g.ClassRoomId == enrollment.ClassRoomId))
+                .Where(g => g.AcademicYearId == academicYearId &&
+                            g.Semester == savedSemester &&
+                            (g.GradeLevel == "ALL" || g.GradeLevel == gradeLevel) &&
+                            (g.ClassRoomId == null || g.ClassRoomId == classId))
                 .AsNoTracking()
                 .ToListAsync();
 
+            var semConfigIds = semConfigs.Select(c => c.Id).ToList();
             var studentScores = await _context.GradeRecords
-                .Where(r => r.EnrollmentId == enrollment.Id && semConfigs.Select(c => c.Id).Contains(r.GradeConfigurationId))
+                .AsNoTracking()
+                .Where(r => r.EnrollmentId == dto.EnrollmentId && semConfigIds.Contains(r.GradeConfigurationId))
                 .ToDictionaryAsync(r => r.GradeConfigurationId, r => r.Score);
 
             var newAvg = _gradeService.CalculateSemesterAverage(studentScores, semConfigs);
@@ -339,7 +446,7 @@ namespace ManagerStudentCaltholic.Controllers
             return Json(new
             {
                 success = true,
-                score = dto.Score,
+                score = normalizedScore,
                 semesterAverage = newAvg.HasValue ? newAvg.Value.ToString("0.00") : "--"
             });
         }
@@ -373,46 +480,89 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddCustomColumn([FromBody] CreateGradeColumnDto dto)
         {
-            if (!ModelState.IsValid)
+            if (dto == null || !ModelState.IsValid || dto.ClassId <= 0 ||
+                string.IsNullOrWhiteSpace(dto.DisplayName) ||
+                dto.Semester is < 1 or > 2 ||
+                dto.WeightFactor is < 1 or > 5)
             {
-                return Json(new { success = false, message = "Thông tin cột điểm không hợp lệ." });
+                return BadRequest(new { success = false, message = "Thông tin cột điểm không hợp lệ." });
             }
 
-            var targetClass = await _context.Classes.FindAsync(dto.ClassId);
-            if (targetClass == null)
-                return Json(new { success = false, message = "Lớp không tồn tại." });
+            var strategy = _context.Database.CreateExecutionStrategy();
+            IActionResult? earlyResult = null;
+            int invalidatedYearId = 0;
+            string invalidatedGrade = string.Empty;
+            int invalidatedClassId = 0;
 
-            if (!await HasAccessToClassAsync(targetClass))
-                return Forbid();
-
-            if (targetClass.IsGradeLocked)
-                return Json(new { success = false, message = "Sổ điểm đã khóa, không thể thêm cột." });
-
-            var maxIndex = await _context.GradeConfigurations
-                .Where(g => g.AcademicYearId == targetClass.AcademicYearId &&
-                            g.Semester == dto.Semester &&
-                            (g.ClassRoomId == targetClass.Id || g.ClassRoomId == null))
-                .MaxAsync(g => (int?)g.ColumnIndex) ?? 0;
-
-            var config = new GradeConfiguration
+            await strategy.ExecuteAsync(async () =>
             {
-                AcademicYearId = targetClass.AcademicYearId,
-                GradeLevel = targetClass.GradeLevel,
-                ClassRoomId = targetClass.Id,
-                Semester = dto.Semester,
-                ScoreType = string.IsNullOrWhiteSpace(dto.ScoreType) ? "CUSTOM" : dto.ScoreType.Trim(),
-                DisplayName = dto.DisplayName.Trim(),
-                WeightFactor = dto.WeightFactor <= 0 ? 1 : dto.WeightFactor,
-                ColumnIndex = maxIndex + 1,
-                IsSacramentExam = false,
-                IsRequired = false,
-                CreatedAt = DateTime.UtcNow
-            };
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            _context.GradeConfigurations.Add(config);
-            await _context.SaveChangesAsync();
-            await _cacheService.InvalidateGradeConfigsCacheAsync(targetClass.AcademicYearId, targetClass.GradeLevel, targetClass.Id);
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .FirstOrDefaultAsync(c => c.Id == dto.ClassId);
 
+                if (targetClass == null)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Lớp không tồn tại." });
+                    return;
+                }
+
+                if (!await HasAccessToClassAsync(targetClass))
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền thao tác sổ điểm lớp này." });
+                    return;
+                }
+
+                if (targetClass.AcademicYear == null || !targetClass.AcademicYear.IsCurrent)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Chỉ được thêm cột điểm cho lớp thuộc niên khóa hiện hành." });
+                    return;
+                }
+
+                if (targetClass.IsGradeLocked)
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Sổ điểm đã khóa, không thể thêm cột." });
+                    return;
+                }
+
+                var maxIndex = await _context.GradeConfigurations
+                    .Where(g => g.AcademicYearId == targetClass.AcademicYearId &&
+                                g.Semester == dto.Semester &&
+                                (g.ClassRoomId == targetClass.Id || g.ClassRoomId == null))
+                    .MaxAsync(g => (int?)g.ColumnIndex) ?? 0;
+
+                var config = new GradeConfiguration
+                {
+                    AcademicYearId = targetClass.AcademicYearId,
+                    GradeLevel = targetClass.GradeLevel,
+                    ClassRoomId = targetClass.Id,
+                    Semester = dto.Semester,
+                    ScoreType = string.IsNullOrWhiteSpace(dto.ScoreType) ? "CUSTOM" : dto.ScoreType.Trim(),
+                    DisplayName = dto.DisplayName.Trim(),
+                    WeightFactor = dto.WeightFactor,
+                    ColumnIndex = maxIndex + 1,
+                    IsSacramentExam = false,
+                    IsRequired = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.GradeConfigurations.Add(config);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                invalidatedYearId = targetClass.AcademicYearId;
+                invalidatedGrade = targetClass.GradeLevel;
+                invalidatedClassId = targetClass.Id;
+            });
+
+            if (earlyResult != null)
+            {
+                return earlyResult;
+            }
+
+            await _cacheService.InvalidateGradeConfigsCacheAsync(invalidatedYearId, invalidatedGrade, invalidatedClassId);
             return Json(new { success = true, message = "Thêm cột điểm thành công!" });
         }
 
@@ -423,23 +573,74 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteCustomColumn(int columnId)
         {
-            var config = await _context.GradeConfigurations
-                .Include(c => c.ClassRoom)
-                .FirstOrDefaultAsync(c => c.Id == columnId);
+            if (columnId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã cột điểm không hợp lệ." });
+            }
 
-            if (config == null || config.ClassRoomId == null || config.ClassRoom == null)
-                return Json(new { success = false, message = "Chỉ được xóa cột điểm tự tạo của riêng lớp." });
+            var strategy = _context.Database.CreateExecutionStrategy();
+            IActionResult? earlyResult = null;
+            int invalidatedYearId = 0;
+            string invalidatedGrade = string.Empty;
+            int invalidatedClassId = 0;
 
-            if (!await HasAccessToClassAsync(config.ClassRoom))
-                return Forbid();
+            await strategy.ExecuteAsync(async () =>
+            {
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            if (config.ClassRoom.IsGradeLocked)
-                return Json(new { success = false, message = "Sổ điểm đang khóa, không thể xóa cột điểm." });
+                var config = await _context.GradeConfigurations
+                    .FirstOrDefaultAsync(c => c.Id == columnId);
 
-            _context.GradeConfigurations.Remove(config);
-            await _context.SaveChangesAsync();
-            await _cacheService.InvalidateGradeConfigsCacheAsync(config.ClassRoom.AcademicYearId, config.ClassRoom.GradeLevel, config.ClassRoom.Id);
+                if (config == null || config.ClassRoomId == null)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Chỉ được xóa cột điểm tự tạo của riêng lớp." });
+                    return;
+                }
 
+                var targetClass = await _context.Classes
+                    .Include(c => c.AcademicYear)
+                    .FirstOrDefaultAsync(c => c.Id == config.ClassRoomId.Value);
+
+                if (targetClass == null)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Không tìm thấy lớp học của cột điểm." });
+                    return;
+                }
+
+                if (!await HasAccessToClassAsync(targetClass))
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền thao tác sổ điểm lớp này." });
+                    return;
+                }
+
+                if (targetClass.AcademicYear == null || !targetClass.AcademicYear.IsCurrent)
+                {
+                    earlyResult = BadRequest(new { success = false, message = "Chỉ được xóa cột điểm thuộc niên khóa hiện hành." });
+                    return;
+                }
+
+                if (targetClass.IsGradeLocked)
+                {
+                    earlyResult = StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Sổ điểm đang khóa, không thể xóa cột điểm." });
+                    return;
+                }
+
+                _context.GradeConfigurations.Remove(config);
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                invalidatedYearId = targetClass.AcademicYearId;
+                invalidatedGrade = targetClass.GradeLevel;
+                invalidatedClassId = targetClass.Id;
+            });
+
+            if (earlyResult != null)
+            {
+                return earlyResult;
+            }
+
+            await _cacheService.InvalidateGradeConfigsCacheAsync(invalidatedYearId, invalidatedGrade, invalidatedClassId);
             return Json(new { success = true, message = "Đã xóa cột điểm." });
         }
 
@@ -449,7 +650,7 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> GetClassEvaluationSheet(int classId)
         {
             if (!await _classEvaluationService.CanUserEvaluateClassAsync(User, classId))
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền xem bảng xét duyệt lớp này." });
 
             var sheet = await _classEvaluationService.BuildEvaluationSheetAsync(classId);
             return Ok(new { success = true, data = sheet });
@@ -459,17 +660,26 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitClassEvaluation([FromBody] SubmitClassEvaluationRequestDto dto)
         {
-            if (!ModelState.IsValid)
+            if (dto == null || !ModelState.IsValid || dto.ClassId <= 0 || dto.Items == null)
                 return BadRequest(new { success = false, message = "Dữ liệu xét duyệt không hợp lệ." });
 
             if (!await _classEvaluationService.CanUserEvaluateClassAsync(User, dto.ClassId))
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền thực hiện xét duyệt trên lớp này." });
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
             var (success, message, batchId) = await _classEvaluationService.SubmitClassEvaluationAsync(dto, User, ip);
 
             if (!success)
+            {
+                if (message.Contains("bị khóa", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("quyền", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("tự xét duyệt", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message });
+                }
+
                 return BadRequest(new { success = false, message });
+            }
 
             return Ok(new
             {
