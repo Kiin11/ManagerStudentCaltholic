@@ -2,6 +2,7 @@ using System.Security.Claims;
 using ManagerStudentCaltholic.Extensions;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ManagerStudentCaltholic.Controllers
@@ -34,12 +35,12 @@ namespace ManagerStudentCaltholic.Controllers
             workspace.DeviceStudentContext = await _deviceRecognitionService.DetectStudentsAndLoadAnnouncementsAsync(HttpContext);
 
             // FEAT-P5-01: Nếu GLV/BĐH đã đăng nhập, tải trước danh sách tùy chọn tra cứu & danh sách đã tra cứu gần đây
-            if (User.Identity?.IsAuthenticated == true)
+            if (User.Identity?.IsAuthenticated == true && !User.IsInRole(UserRole.Parent))
             {
                 var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (long.TryParse(userIdClaim, out long userId))
                 {
-                    workspace.RecentStaffLookups = await _lookupService.GetRecentLookupsAsync(userId, 5);
+                    workspace.RecentStaffLookups = await _lookupService.GetRecentLookupsAsync(userId, User, 5);
                 }
                 workspace.LookupOptions = await _lookupService.GetViewOptionsAsync();
             }
@@ -49,6 +50,7 @@ namespace ManagerStudentCaltholic.Controllers
 
         // FEAT-P5-01: API Gợi ý tìm kiếm tức thời cho GLV theo Tên, Tên Thánh, Mã hiện hành hoặc Mã năm cũ
         [HttpGet]
+        [Authorize(Policy = "RequireStaff")]
         public async Task<IActionResult> StaffSearchSuggestions(string? term)
         {
             if (User.Identity?.IsAuthenticated != true)
@@ -57,13 +59,14 @@ namespace ManagerStudentCaltholic.Controllers
             if (string.IsNullOrWhiteSpace(term))
                 return Json(new { success = true, data = new List<object>() });
 
-            var results = await _lookupService.SearchStudentsQuickAsync(term, 8);
+            var results = await _lookupService.SearchStudentsQuickAsync(term, User, 8);
             return Json(new { success = true, data = results });
         }
 
         // FEAT-P5-01: API Tra cứu 360 độ Thiếu nhi kèm bộ chuyển Option (OVERVIEW, ATTENDANCE_DETAIL, ACADEMIC_2Y_SACRAMENT, PARENT_CONTACT)
         // Kết hợp Redis Cache TTL 5 phút để chuyển Option tức thời không query lại DB
         [HttpGet]
+        [Authorize(Policy = "RequireStaff")]
         public async Task<IActionResult> StaffStudentLookup(long studentId, string? option = "OVERVIEW", string? searchTerm = null)
         {
             if (User.Identity?.IsAuthenticated != true)
@@ -71,6 +74,15 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (studentId <= 0)
                 return BadRequest(new { success = false, message = "Mã thiếu nhi không hợp lệ." });
+
+            if (!await _lookupService.CanCallerAccessStudentAsync(User, studentId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Bạn không có quyền tra cứu thông tin thiếu nhi ngoài phạm vi lớp/khối phụ trách."
+                });
+            }
 
             var chosenOption = string.IsNullOrWhiteSpace(option) ? "OVERVIEW" : option.ToUpperInvariant();
 
@@ -106,6 +118,7 @@ namespace ManagerStudentCaltholic.Controllers
 
         // FEAT-P5-01: API lấy danh sách học sinh vừa tra cứu gần đây của GLV
         [HttpGet]
+        [Authorize(Policy = "RequireStaff")]
         public async Task<IActionResult> StaffRecentLookups()
         {
             if (User.Identity?.IsAuthenticated != true)
@@ -115,12 +128,13 @@ namespace ManagerStudentCaltholic.Controllers
             if (!long.TryParse(userIdClaim, out long userId))
                 return Json(new { success = true, data = new List<object>() });
 
-            var recents = await _lookupService.GetRecentLookupsAsync(userId, 6);
+            var recents = await _lookupService.GetRecentLookupsAsync(userId, User, 6);
             return Json(new { success = true, data = recents });
         }
 
         // FEAT-P5-01: API lấy danh sách chế độ xem
         [HttpGet]
+        [Authorize(Policy = "RequireStaff")]
         public async Task<IActionResult> StaffLookupOptions()
         {
             var options = await _lookupService.GetViewOptionsAsync();

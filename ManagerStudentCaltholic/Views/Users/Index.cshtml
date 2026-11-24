@@ -185,7 +185,8 @@
                         </div>
                         <div class="col-4">
                             <button type="button" class="btn btn-outline-warning text-dark w-100 rounded-pill touch-target-44"
-                                    onclick="openResetPasswordModal(@u.Id, '@u.Username')">
+                                    data-user-id="@u.Id" data-username="@u.Username"
+                                    onclick="openResetPasswordModal(Number(this.dataset.userId), this.dataset.username || '')">
                                 <i class="bi bi-key-fill me-1"></i> Đổi MK
                             </button>
                         </div>
@@ -327,7 +328,9 @@ else
                                             <i class="bi bi-person-vcard"></i>
                                         </a>
                                         <button class="btn btn-sm btn-outline-warning rounded-circle me-1"
-                                                title="Đặt lại mật khẩu" onclick="openResetPasswordModal(@u.Id, '@u.Username')">
+                                                title="Đặt lại mật khẩu"
+                                                data-user-id="@u.Id" data-username="@u.Username"
+                                                onclick="openResetPasswordModal(Number(this.dataset.userId), this.dataset.username || '')">
                                             <i class="bi bi-key-fill"></i>
                                         </button>
                                         <button class="btn btn-sm @(u.IsActive ? "btn-outline-danger" : "btn-outline-success") rounded-circle"
@@ -824,12 +827,13 @@ else
         let batchCreatedAny = false;
 
         function escapeBatchHtml(str) {
-            if (!str) return '';
+            if (str === null || str === undefined) return '';
             return String(str)
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         async function loadBaoDongGraduatesForBatch() {
@@ -862,7 +866,7 @@ else
                 tbody.innerHTML = baoDongGraduatesCache.map(item => `
                     <tr class="grad-candidate-row">
                         <td class="text-center">
-                            <input type="checkbox" class="form-check-input chk-grad-candidate" value="${item.studentId}" onchange="updateSelectedGradCount()" />
+                            <input type="checkbox" class="form-check-input chk-grad-candidate" value="${Number(item.studentId) || 0}" onchange="updateSelectedGradCount()" />
                         </td>
                         <td>
                             <span class="badge bg-light text-dark border font-monospace">${escapeBatchHtml(item.oldStudentCode)}</span>
@@ -877,7 +881,7 @@ else
                         </td>
                         <td>
                             <input type="text" class="form-control form-control-sm font-monospace grad-username-input"
-                                   data-student-id="${item.studentId}"
+                                   data-student-id="${Number(item.studentId) || 0}"
                                    value="${escapeBatchHtml(item.suggestedUsername)}" maxlength="45" />
                         </td>
                     </tr>
@@ -1122,10 +1126,10 @@ else
                     unassignedTeachersList = json.data;
                     renderUnassignedTeachersTable();
                 } else {
-                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">${json.message}</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">${escapeBatchHtml(json.message)}</td></tr>`;
                 }
             } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">Lỗi kết nối máy chủ: ${e.message}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-danger">Lỗi kết nối máy chủ: ${escapeBatchHtml(e.message)}</td></tr>`;
             }
         }
 
@@ -1142,22 +1146,22 @@ else
             unassignedTeachersList.forEach(t => {
                 const tr = document.createElement('tr');
                 const lastLogin = t.lastLoginAt ? new Date(t.lastLoginAt).toLocaleDateString('vi-VN') : 'Chưa đăng nhập';
-                const gradeBadge = t.managedGradeLevel ? `<span class="badge bg-primary-subtle text-primary border ms-1">${t.managedGradeLevel}</span>` : '';
+                const gradeBadge = t.managedGradeLevel ? `<span class="badge bg-primary-subtle text-primary border ms-1">${escapeBatchHtml(t.managedGradeLevel)}</span>` : '';
 
                 tr.innerHTML = `
                     <td class="text-center">
-                        <input type="checkbox" class="form-check-input chk-teacher-deactivate" value="${t.id}" onchange="updateSelectedDeactivateCount()" />
+                        <input type="checkbox" class="form-check-input chk-teacher-deactivate" value="${Number(t.id) || 0}" onchange="updateSelectedDeactivateCount()" />
                     </td>
                     <td>
-                        <strong class="text-dark">${t.christianName} ${t.fullName}</strong>
+                        <strong class="text-dark">${escapeBatchHtml(t.christianName)} ${escapeBatchHtml(t.fullName)}</strong>
                     </td>
-                    <td><code>${t.username}</code></td>
+                    <td><code>${escapeBatchHtml(t.username)}</code></td>
                     <td>
-                        <span class="badge bg-secondary">${t.role}</span>
+                        <span class="badge bg-secondary">${escapeBatchHtml(t.role)}</span>
                         ${gradeBadge}
                     </td>
-                    <td>${t.phoneNumber || '--'}</td>
-                    <td class="text-muted">${lastLogin}</td>
+                    <td>${escapeBatchHtml(t.phoneNumber || '--')}</td>
+                    <td class="text-muted">${escapeBatchHtml(lastLogin)}</td>
                 `;
                 tbody.appendChild(tr);
             });

@@ -1,5 +1,6 @@
 ﻿using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -67,7 +68,12 @@ namespace ManagerStudentCaltholic.Controllers
             var (success, message, updatedRow) = await _campaignService.UpdateSingleCellAsync(dto, User, ip);
 
             if (!success)
+            {
+                if (IsForbiddenCampaignError(message))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message });
+
                 return BadRequest(new { success = false, message });
+            }
 
             return Ok(new
             {
@@ -100,7 +106,12 @@ namespace ManagerStudentCaltholic.Controllers
             var (success, message, updatedCount) = await _campaignService.BulkMarkDayAsync(dto, User, ip);
 
             if (!success)
+            {
+                if (IsForbiddenCampaignError(message))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message });
+
                 return BadRequest(new { success = false, message });
+            }
 
             return Ok(new { success = true, message, updatedCount });
         }
@@ -116,7 +127,12 @@ namespace ManagerStudentCaltholic.Controllers
             var (success, message, studentInfo) = await _campaignService.RecordQrScanAsync(dto, User, ip);
 
             if (!success)
+            {
+                if (IsForbiddenCampaignError(message))
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message });
+
                 return BadRequest(new { success = false, message });
+            }
 
             return Ok(new { success = true, message, data = studentInfo });
         }
@@ -127,7 +143,7 @@ namespace ManagerStudentCaltholic.Controllers
             try
             {
                 var bytes = await _campaignService.ExportCampaignMatrixToExcelAsync(campaignId, User);
-                var fileName = $"ChienDichDiLe_{campaignId}_{DateTime.UtcNow:yyyyMMdd}.xlsx";
+                var fileName = $"ChienDichDiLe_{campaignId}_{VietnamTimeHelper.Today:yyyyMMdd}.xlsx";
                 return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
             }
             catch (UnauthorizedAccessException)
@@ -138,6 +154,14 @@ namespace ManagerStudentCaltholic.Controllers
             {
                 return NotFound("Không tìm thấy chiến dịch đi lễ yêu cầu.");
             }
+        }
+
+        private static bool IsForbiddenCampaignError(string? message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return false;
+            return message.Contains("không có quyền", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("tự điểm danh", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("tự quét QR", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

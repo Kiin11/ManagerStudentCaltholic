@@ -61,27 +61,36 @@ namespace ManagerStudentCaltholic.Services
 
             var classRoom = await _context.Classes
                 .AsNoTracking()
+                .Include(c => c.AcademicYear)
                 .FirstOrDefaultAsync(c => c.Id == classRoomId);
 
-            if (classRoom == null)
+            if (classRoom == null || classRoom.AcademicYear == null || !classRoom.AcademicYear.IsCurrent)
                 return false;
+
+            if (user.IsInRole(UserRole.ProbationaryTeacher) &&
+                GradeLevel.IsAfternoonSession(classRoom.Session, classRoom.GradeLevel))
+            {
+                return false;
+            }
 
             if (user.IsInRole(UserRole.BranchHead))
             {
-                var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(managedGrade.Trim(), classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                    return false;
+
+                return string.Equals(managedGrade, classRoom.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase);
             }
 
             var userIdStr = user.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (long.TryParse(userIdStr, out long userId))
+            if (long.TryParse(userIdStr, out long userId) && userId > 0)
             {
                 return await _context.ClassTeachers
                     .AsNoTracking()
-                    .AnyAsync(ct => ct.ClassRoomId == classRoomId && ct.UserId == userId);
+                    .AnyAsync(ct => ct.ClassRoomId == classRoomId
+                        && ct.UserId == userId
+                        && ct.AcademicYearId == classRoom.AcademicYearId
+                        && ct.AcademicYear.IsCurrent);
             }
 
             return false;
@@ -118,19 +127,23 @@ namespace ManagerStudentCaltholic.Services
             bool isFullScope = user.IsInRole(UserRole.Admin) ||
                                user.IsInRole(UserRole.SpiritualDirector) ||
                                user.IsInRole(UserRole.ExecutiveBoard);
+            bool isBranchHead = user.IsInRole(UserRole.BranchHead);
+            bool isProbationary = user.IsInRole(UserRole.ProbationaryTeacher);
 
             var assignedClassIds = new HashSet<int>();
-            if (!isFullScope && currentUserId > 0)
+            if (!isFullScope && !isBranchHead && currentUserId > 0 && currentYear.IsCurrent)
             {
                 var teacherClassIds = await _context.ClassTeachers
                     .AsNoTracking()
-                    .Where(ct => ct.UserId == currentUserId)
+                    .Where(ct => ct.UserId == currentUserId
+                        && ct.AcademicYearId == currentYear.Id
+                        && ct.AcademicYear.IsCurrent)
                     .Select(ct => ct.ClassRoomId)
                     .ToListAsync();
                 foreach (var id in teacherClassIds) assignedClassIds.Add(id);
             }
 
-            var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value;
+            var managedGrade = user.FindFirst("ManagedGradeLevel")?.Value?.Trim();
 
             var activeCampaignClassIds = await _context.MassCampaigns
                 .AsNoTracking()
@@ -154,11 +167,24 @@ namespace ManagerStudentCaltholic.Services
                 if (!isEligible)
                     continue;
 
-                bool hasAccess = isFullScope ||
-                                 assignedClassIds.Contains(cls.Id) ||
-                                 (user.IsInRole(UserRole.BranchHead) &&
-                                  !string.IsNullOrWhiteSpace(managedGrade) &&
-                                  string.Equals(managedGrade.Trim(), cls.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (!isFullScope && isProbationary && GradeLevel.IsAfternoonSession(cls.Session, cls.GradeLevel))
+                    continue;
+
+                bool hasAccess;
+                if (isFullScope)
+                {
+                    hasAccess = true;
+                }
+                else if (isBranchHead)
+                {
+                    hasAccess = currentYear.IsCurrent &&
+                                !string.IsNullOrWhiteSpace(managedGrade) &&
+                                string.Equals(managedGrade, cls.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    hasAccess = currentYear.IsCurrent && assignedClassIds.Contains(cls.Id);
+                }
 
                 if (!hasAccess)
                     continue;
@@ -360,6 +386,11 @@ namespace ManagerStudentCaltholic.Services
             if (enrollment == null || enrollment.Student == null)
                 return (false, "Học sinh không thuộc lớp của chiến dịch này.", null);
 
+            long.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var callerUserId);
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, enrollment.StudentId))
+                return (false, "Không được phép tự điểm danh chiến dịch cho chính bản thân.", null);
+
             var operatorName = user.FindFirst("FullName")?.Value ?? user.Identity?.Name ?? "Giáo lý viên";
             var normalizedStatus = dto.Status.Trim().ToUpperInvariant();
 
@@ -457,6 +488,11 @@ namespace ManagerStudentCaltholic.Services
                 .Where(e => e.ClassRoomId == campaign.ClassRoomId && e.Student.IsActive)
                 .ToListAsync();
 
+            long.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var callerUserId);
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+            if (enrollments.Any(e => StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, e.StudentId)))
+                return (false, "Không được phép tự điểm danh chiến dịch cho chính bản thân.", 0);
+
             var existingRecords = await _context.MassCampaignRecords
                 .Where(r => r.CampaignId == campaign.Id && r.AttendanceDate == targetDateUtc)
                 .ToDictionaryAsync(r => r.EnrollmentId);
@@ -524,7 +560,7 @@ namespace ManagerStudentCaltholic.Services
             if (!await CanUserManageClassCampaignAsync(user, campaign.ClassRoomId))
                 return (false, "Bạn không có quyền quét QR cho chiến dịch lớp này.", null);
 
-            DateTime scanDateLocal = DateTime.UtcNow.AddHours(7).Date;
+            DateTime scanDateLocal = VietnamTimeHelper.Today;
             if (!string.IsNullOrWhiteSpace(dto.DateIso) &&
                 DateTime.TryParseExact(dto.DateIso, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime customDate))
             {
@@ -545,6 +581,11 @@ namespace ManagerStudentCaltholic.Services
 
             if (enrollment?.Student == null)
                 return (false, $"Mã thiếu nhi '{cleanCode}' không thuộc lớp {campaign.ClassRoom?.Name}.", null);
+
+            long.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var callerUserId);
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, callerUserId);
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, enrollment.StudentId))
+                return (false, "Không được phép tự quét QR điểm danh chiến dịch cho chính bản thân.", null);
 
             var operatorName = user.FindFirst("FullName")?.Value ?? user.Identity?.Name ?? "Giáo lý viên";
 
@@ -711,7 +752,7 @@ namespace ManagerStudentCaltholic.Services
             if (!allowedDays.Any())
                 allowedDays = new HashSet<int> { 0, 1, 2, 3, 4, 5, 6 };
 
-            var todayVn = DateTime.UtcNow.AddHours(7).Date;
+            var todayVn = VietnamTimeHelper.Today;
             for (var dt = campaign.StartDate.Date; dt <= campaign.EndDate.Date; dt = dt.AddDays(1))
             {
                 if (!allowedDays.Contains((int)dt.DayOfWeek))

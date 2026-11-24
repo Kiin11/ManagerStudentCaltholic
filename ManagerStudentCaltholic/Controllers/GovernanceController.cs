@@ -1,5 +1,6 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -261,6 +262,59 @@ namespace ManagerStudentCaltholic.Controllers
             if (targetUser.Id == operatorUserId)
             {
                 return Json(new { success = false, message = "Bạn không thể tự thay đổi vai trò của chính mình." });
+            }
+
+            if (targetUser.Role == UserRole.ProbationaryTeacher &&
+                (targetRole == UserRole.Teacher || targetRole == UserRole.ExecutiveBoard))
+            {
+                DateTime? effectiveDob = targetUser.DateOfBirth;
+                DateTime? effectivePromiseDate = targetUser.CatechistPromiseDate;
+
+                long? linkedStudentId = targetUser.LinkedStudentId ?? targetUser.StudentId;
+                if (linkedStudentId.HasValue && linkedStudentId.Value > 0 && (!effectiveDob.HasValue || !effectivePromiseDate.HasValue))
+                {
+                    var linkedStudent = await _context.Students
+                        .AsNoTracking()
+                        .Where(s => s.Id == linkedStudentId.Value)
+                        .Select(s => new { s.DateOfBirth, s.CatechistPromiseDate })
+                        .FirstOrDefaultAsync();
+
+                    if (linkedStudent != null)
+                    {
+                        effectiveDob ??= linkedStudent.DateOfBirth;
+                        effectivePromiseDate ??= linkedStudent.CatechistPromiseDate;
+                    }
+                }
+
+                if (!effectiveDob.HasValue)
+                {
+                    return Json(new { success = false, message = "Không thể thăng cấp từ GLV Dự Bị khi hồ sơ chưa có Ngày sinh hợp lệ (quy định đủ 18 tuổi)." });
+                }
+
+                if (!effectivePromiseDate.HasValue)
+                {
+                    return Json(new { success = false, message = "Không thể thăng cấp từ GLV Dự Bị khi chưa có Ngày Hoàn thành Dự Bị & Tuyên hứa GLV (đủ 18 tuổi)." });
+                }
+
+                if (!AgeValidationHelper.IsAtLeastAge(effectiveDob.Value, effectivePromiseDate.Value, 18))
+                {
+                    int ageAtPromise = AgeValidationHelper.CalculateAgeAtDate(effectiveDob.Value, effectivePromiseDate.Value);
+                    return Json(new
+                    {
+                        success = false,
+                        message = $"Không thể thăng cấp: Học viên mới {ageAtPromise} tuổi tại ngày Tuyên hứa GLV ({effectivePromiseDate.Value:dd/MM/yyyy}), chưa đủ 18 tuổi theo quy định."
+                    });
+                }
+
+                if (!AgeValidationHelper.IsAtLeastAge(effectiveDob.Value, VietnamTimeHelper.Today, 18))
+                {
+                    int currentAge = AgeValidationHelper.CalculateAgeAtDate(effectiveDob.Value, VietnamTimeHelper.Today);
+                    return Json(new
+                    {
+                        success = false,
+                        message = $"Không thể thăng cấp: Tài khoản hiện tại mới {currentAge} tuổi, chưa đủ 18 tuổi để đảm nhận vai trò Giáo lý viên hoặc Ban Điều Hành."
+                    });
+                }
             }
 
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);

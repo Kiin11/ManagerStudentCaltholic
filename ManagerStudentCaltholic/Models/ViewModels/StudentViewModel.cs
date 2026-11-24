@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using ManagerStudentCaltholic.Services;
 
 namespace ManagerStudentCaltholic.Models.ViewModels
 {
@@ -34,7 +35,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         [Required(ErrorMessage = "Vui lòng nhập Ngày sinh")]
         [DataType(DataType.Date)]
         [Display(Name = "Ngày Sinh")]
-        public DateTime DateOfBirth { get; set; } = DateTime.UtcNow.AddYears(-10);
+        public DateTime DateOfBirth { get; set; } = VietnamTimeHelper.Today.AddYears(-10);
 
         [DataType(DataType.Date)]
         [Display(Name = "Ngày Rửa Tội")]
@@ -70,16 +71,7 @@ namespace ManagerStudentCaltholic.Models.ViewModels
         /// Tính số tuổi chính xác tại một mốc thời gian bất kỳ (TASK-03.4 / TASK-04.3)
         /// </summary>
         public static int CalculateAgeAtDate(DateTime dateOfBirth, DateTime targetDate)
-        {
-            var dob = dateOfBirth.Date;
-            var target = targetDate.Date;
-            int age = target.Year - dob.Year;
-            if (dob > target.AddYears(-age))
-            {
-                age--;
-            }
-            return age;
-        }
+            => AgeValidationHelper.CalculateAgeAtDate(dateOfBirth, targetDate);
     }
 
     /// <summary>

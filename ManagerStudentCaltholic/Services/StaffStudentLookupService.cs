@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
@@ -50,10 +51,114 @@ namespace ManagerStudentCaltholic.Services
             return options;
         }
 
-        public async Task<List<StaffStudentQuickSearchResultDto>> SearchStudentsQuickAsync(string keyword, int limit = 8)
+        public Task<List<StaffStudentQuickSearchResultDto>> SearchStudentsQuickAsync(string keyword, int limit = 8)
+        {
+            return SearchStudentsQuickInternalAsync(keyword, hasFullAccess: true, authorizedClassIds: null, limit);
+        }
+
+        public async Task<List<StaffStudentQuickSearchResultDto>> SearchStudentsQuickAsync(string keyword, ClaimsPrincipal caller, int limit = 8)
+        {
+            var (hasFullAccess, authorizedClassIds) = await ResolveCallerScopeAsync(caller);
+            return await SearchStudentsQuickInternalAsync(keyword, hasFullAccess, authorizedClassIds, limit);
+        }
+
+        public async Task<bool> CanCallerAccessStudentAsync(ClaimsPrincipal caller, long studentId)
+        {
+            if (studentId <= 0)
+                return false;
+
+            var (hasFullAccess, authorizedClassIds) = await ResolveCallerScopeAsync(caller);
+            if (hasFullAccess)
+                return true;
+
+            if (authorizedClassIds.Count == 0)
+                return false;
+
+            return await _context.Enrollments
+                .AsNoTracking()
+                .AnyAsync(e => e.StudentId == studentId && authorizedClassIds.Contains(e.ClassRoomId));
+        }
+
+        private async Task<(bool HasFullAccess, HashSet<int> AuthorizedClassIds)> ResolveCallerScopeAsync(ClaimsPrincipal? caller)
+        {
+            if (caller?.Identity == null || !caller.Identity.IsAuthenticated)
+                return (false, new HashSet<int>());
+
+            if (caller.IsInRole(UserRole.Admin) ||
+                caller.IsInRole(UserRole.SpiritualDirector) ||
+                caller.IsInRole(UserRole.ExecutiveBoard))
+            {
+                return (true, new HashSet<int>());
+            }
+
+            var currentYearId = await _context.AcademicYears
+                .AsNoTracking()
+                .Where(y => y.IsCurrent)
+                .Select(y => (int?)y.Id)
+                .FirstOrDefaultAsync();
+
+            if (!currentYearId.HasValue)
+                return (false, new HashSet<int>());
+
+            if (caller.IsInRole(UserRole.BranchHead))
+            {
+                var managedGrade = caller.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                    return (false, new HashSet<int>());
+
+                var gradeLower = managedGrade.ToLowerInvariant();
+                var classIds = await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.AcademicYearId == currentYearId.Value && c.GradeLevel.ToLower() == gradeLower)
+                    .Select(c => c.Id)
+                    .ToListAsync();
+
+                return (false, classIds.ToHashSet());
+            }
+
+            if (caller.IsInRole(UserRole.Teacher) || caller.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                var userIdStr = caller.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!long.TryParse(userIdStr, out var userId) || userId <= 0)
+                    return (false, new HashSet<int>());
+
+                bool isProbationary = caller.IsInRole(UserRole.ProbationaryTeacher);
+                var teacherRows = await _context.ClassTeachers
+                    .AsNoTracking()
+                    .Where(ct => ct.UserId == userId
+                        && ct.AcademicYearId == currentYearId.Value
+                        && ct.ClassRoom.AcademicYearId == currentYearId.Value
+                        && ct.ClassRoom.AcademicYear.IsCurrent)
+                    .Select(ct => new
+                    {
+                        ct.ClassRoomId,
+                        ct.ClassRoom.Session,
+                        ct.ClassRoom.GradeLevel
+                    })
+                    .ToListAsync();
+
+                var classIds = teacherRows
+                    .Where(r => !isProbationary || !GradeLevel.IsAfternoonSession(r.Session, r.GradeLevel))
+                    .Select(r => r.ClassRoomId)
+                    .ToHashSet();
+
+                return (false, classIds);
+            }
+
+            return (false, new HashSet<int>());
+        }
+
+        private async Task<List<StaffStudentQuickSearchResultDto>> SearchStudentsQuickInternalAsync(
+            string keyword,
+            bool hasFullAccess,
+            HashSet<int>? authorizedClassIds,
+            int limit)
         {
             var results = new List<StaffStudentQuickSearchResultDto>();
             if (string.IsNullOrWhiteSpace(keyword))
+                return results;
+
+            if (!hasFullAccess && (authorizedClassIds == null || authorizedClassIds.Count == 0))
                 return results;
 
             var cleanKeyword = keyword.Trim();
@@ -61,11 +166,21 @@ namespace ManagerStudentCaltholic.Services
             var noDiacriticsKeyword = VietnameseStringHelper.RemoveDiacritics(cleanKeyword);
 
             // 1. Tìm trong bảng StudentCodeHistories theo mã cũ (OriginalCode hoặc ArchivedYearCode)
-            var matchedHistories = await _context.StudentCodeHistories
+            var historyQuery = _context.StudentCodeHistories
                 .AsNoTracking()
                 .Where(h => h.OriginalCode.ToLower().Contains(lowerKeyword) ||
                             h.ArchivedYearCode.ToLower().Contains(lowerKeyword) ||
-                            h.NewCode.ToLower().Contains(lowerKeyword))
+                            h.NewCode.ToLower().Contains(lowerKeyword));
+
+            if (!hasFullAccess)
+            {
+                historyQuery = historyQuery.Where(h => h.Student != null &&
+                    h.Student.IsActive &&
+                    !h.Student.IsDeleted &&
+                    h.Student.Enrollments.Any(e => authorizedClassIds!.Contains(e.ClassRoomId)));
+            }
+
+            var matchedHistories = await historyQuery
                 .OrderByDescending(h => h.ChangedAt)
                 .Take(limit)
                 .ToListAsync();
@@ -91,17 +206,29 @@ namespace ManagerStudentCaltholic.Services
                      (s.ChristianName + " " + s.FirstName + " " + s.LastName).ToLower().Contains(lowerKeyword) ||
                      historyStudentIds.Contains(s.Id)));
 
+            if (!hasFullAccess)
+            {
+                query = query.Where(s => s.Enrollments.Any(e => authorizedClassIds!.Contains(e.ClassRoomId)));
+            }
+
             var matchedStudents = await query.Take(limit * 2).ToListAsync();
 
             // Lọc thêm theo không dấu nếu cần
             if (!string.IsNullOrWhiteSpace(noDiacriticsKeyword))
             {
-                var candidates = await _context.Students
+                var candidateQuery = _context.Students
                     .AsNoTracking()
                     .Include(s => s.Enrollments)
                         .ThenInclude(e => e.ClassRoom)
                             .ThenInclude(c => c.AcademicYear)
-                    .Where(s => s.IsActive && !s.IsDeleted)
+                    .Where(s => s.IsActive && !s.IsDeleted);
+
+                if (!hasFullAccess)
+                {
+                    candidateQuery = candidateQuery.Where(s => s.Enrollments.Any(e => authorizedClassIds!.Contains(e.ClassRoomId)));
+                }
+
+                var candidates = await candidateQuery
                     .Take(200)
                     .ToListAsync();
 
@@ -578,11 +705,38 @@ namespace ManagerStudentCaltholic.Services
             }
         }
 
-        public async Task<List<RecentLookupItemDto>> GetRecentLookupsAsync(long userId, int limit = 5)
+        public Task<List<RecentLookupItemDto>> GetRecentLookupsAsync(long userId, int limit = 5)
         {
-            var logs = await _context.StaffQuickLookupLogs
+            return GetRecentLookupsInternalAsync(userId, hasFullAccess: true, authorizedClassIds: null, limit);
+        }
+
+        public async Task<List<RecentLookupItemDto>> GetRecentLookupsAsync(long userId, ClaimsPrincipal caller, int limit = 5)
+        {
+            var (hasFullAccess, authorizedClassIds) = await ResolveCallerScopeAsync(caller);
+            return await GetRecentLookupsInternalAsync(userId, hasFullAccess, authorizedClassIds, limit);
+        }
+
+        private async Task<List<RecentLookupItemDto>> GetRecentLookupsInternalAsync(
+            long userId,
+            bool hasFullAccess,
+            HashSet<int>? authorizedClassIds,
+            int limit)
+        {
+            if (!hasFullAccess && (authorizedClassIds == null || authorizedClassIds.Count == 0))
+            {
+                return new List<RecentLookupItemDto>();
+            }
+
+            var query = _context.StaffQuickLookupLogs
                 .AsNoTracking()
-                .Where(l => l.UserId == userId)
+                .Where(l => l.UserId == userId && l.Student != null);
+
+            if (!hasFullAccess)
+            {
+                query = query.Where(l => l.Student!.Enrollments.Any(e => authorizedClassIds!.Contains(e.ClassRoomId)));
+            }
+
+            var logs = await query
                 .OrderByDescending(l => l.LookedUpAt)
                 .Take(limit * 3)
                 .Include(l => l.Student)

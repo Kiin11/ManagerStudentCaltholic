@@ -88,7 +88,11 @@
                                 <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
                                 <td><small class="text-muted">@s.EnrolledAt.ToString("dd/MM/yyyy")</small></td>
                                 <td class="text-end pe-4">
-                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-circle" onclick="removeStudent(@s.EnrollmentId, '@s.FullName')" title="Rút học sinh khỏi lớp">
+                                    <button type="button" class="btn btn-outline-danger btn-sm rounded-circle"
+                                            data-enrollment-id="@s.EnrollmentId"
+                                            data-student-name="@s.FullName"
+                                            onclick="removeStudent(Number(this.dataset.enrollmentId), this.dataset.studentName || '')"
+                                            title="Rút học sinh khỏi lớp">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
@@ -213,7 +217,20 @@
         function showAlert(msg, isSuccess = true) {
             const box = document.getElementById('alertBox');
             box.className = `alert alert-${isSuccess ? 'success' : 'danger'} alert-dismissible fade show shadow-sm border-0`;
-            box.innerHTML = `<i class="bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2"></i>${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            box.innerHTML = '';
+
+            const icon = document.createElement('i');
+            icon.className = `bi bi-${isSuccess ? 'check-circle' : 'exclamation-triangle'}-fill me-2`;
+            box.appendChild(icon);
+
+            box.appendChild(document.createTextNode(msg || ''));
+
+            const closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'btn-close';
+            closeBtn.setAttribute('data-bs-dismiss', 'alert');
+            box.appendChild(closeBtn);
+
             box.classList.remove('d-none');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }

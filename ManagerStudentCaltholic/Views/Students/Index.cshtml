@@ -927,14 +927,70 @@
                 .catch(err => alert('Không thể nạp dữ liệu thiếu nhi: ' + err));
         }
 
+        function escapeStudentHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getLocalTodayIso() {
+            try {
+                return new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Asia/Ho_Chi_Minh',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).format(new Date());
+            } catch {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+        }
+
         // =========================================================================
         // QUẢN LÝ TÀI KHOẢN DỰ BỊ & TUYÊN HỨA GLV (TASK-03.3 & TASK-03.4)
         // =========================================================================
         function showProbAlert(message, type) {
             const box = document.getElementById('probActionAlert');
             box.className = `alert alert-${type} border-0 shadow-sm small mb-3`;
-            box.innerHTML = message;
+            box.textContent = message || '';
             box.classList.remove('d-none');
+        }
+
+        function showProbProvisionSuccess(message, username, initialPassword) {
+            const box = document.getElementById('probActionAlert');
+            box.className = 'alert alert-success border-0 shadow-sm small mb-3';
+            box.innerHTML = '';
+
+            const msgStrong = document.createElement('strong');
+            msgStrong.textContent = message || '';
+            box.appendChild(msgStrong);
+            box.appendChild(document.createElement('br'));
+            box.appendChild(document.createTextNode('Tên đăng nhập: '));
+
+            const userCode = document.createElement('code');
+            userCode.textContent = username || '';
+            box.appendChild(userCode);
+
+            if (initialPassword) {
+                box.appendChild(document.createTextNode(' | Mật khẩu khởi tạo: '));
+                const pwdCode = document.createElement('code');
+                pwdCode.textContent = initialPassword;
+                box.appendChild(pwdCode);
+            }
+
+            box.classList.remove('d-none');
+        }
+
+        function isLeapYear(y) {
+            return (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0);
         }
 
         function calculateExactAge(dobStr, targetDateStr) {
@@ -947,8 +1003,16 @@
             const tgtYear = targetParts[0], tgtMonth = targetParts[1], tgtDay = targetParts[2];
 
             let age = tgtYear - dobYear;
-            if (tgtMonth < dobMonth || (tgtMonth === dobMonth && tgtDay < dobDay)) {
-                age--;
+            if (age > 0) {
+                let anniversaryDay = dobDay;
+                if (dobMonth === 2 && dobDay === 29 && !isLeapYear(tgtYear)) {
+                    anniversaryDay = 28;
+                }
+                if (tgtMonth < dobMonth || (tgtMonth === dobMonth && tgtDay < anniversaryDay)) {
+                    age--;
+                }
+            } else if (age < 0) {
+                age = 0;
             }
             return age;
         }
@@ -1032,12 +1096,12 @@
 
             if (age < 18) {
                 previewBox.className = 'alert alert-danger border-0 fw-semibold small py-2 mb-3';
-                previewBox.innerHTML = `<i class="bi bi-x-octagon-fill me-1"></i> CHẶN LƯU: Tại ngày ${promiseDate}, học viên mới <strong>${age} tuổi</strong> (chưa đủ 18 tuổi theo quy định Tuyên hứa GLV)!`;
+                previewBox.innerHTML = `<i class="bi bi-x-octagon-fill me-1"></i> CHẶN LƯU: Tại ngày ${escapeStudentHtml(promiseDate)}, học viên mới <strong>${Number(age)} tuổi</strong> (chưa đủ 18 tuổi theo quy định Tuyên hứa GLV)!`;
                 upgradeBox.classList.add('d-none');
                 saveBtn.disabled = true;
             } else {
                 previewBox.className = 'alert alert-success border-0 fw-semibold small py-2 mb-3';
-                previewBox.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Hợp lệ: Tại ngày ${promiseDate}, học viên đạt <strong>${age} tuổi</strong> (&ge; 18 tuổi).`;
+                previewBox.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i> Hợp lệ: Tại ngày ${escapeStudentHtml(promiseDate)}, học viên đạt <strong>${Number(age)} tuổi</strong> (&ge; 18 tuổi).`;
                 saveBtn.disabled = false;
                 if (linkedRole === 'ProbationaryTeacher') {
                     upgradeBox.classList.remove('d-none');
@@ -1067,8 +1131,7 @@
                 });
                 const json = await res.json();
                 if (json.success) {
-                    const pwdInfo = json.data?.initialPassword ? ` | Mật khẩu khởi tạo: <code>${json.data.initialPassword}</code>` : '';
-                    showProbAlert(`<strong>${json.message}</strong><br/>Tên đăng nhập: <code>${json.data.username}</code>${pwdInfo}`, 'success');
+                    showProbProvisionSuccess(json.message, json.data?.username, json.data?.initialPassword);
                     document.getElementById('probLinkedRole').value = 'ProbationaryTeacher';
                     document.getElementById('probExistingUsername').textContent = json.data.username;
                     document.getElementById('probExistingRoleLabel').textContent = 'Dự Bị (ProbationaryTeacher)';
@@ -1163,7 +1226,7 @@
                 loadingEl.classList.add('d-none');
 
                 if (!data.success) {
-                    containerEl.innerHTML = `<div class="alert alert-danger small">${data.message || 'Không thể tải dữ liệu Bí tích.'}</div>`;
+                    containerEl.innerHTML = `<div class="alert alert-danger small">${escapeStudentHtml(data.message || 'Không thể tải dữ liệu Bí tích.')}</div>`;
                     return;
                 }
 
@@ -1201,7 +1264,11 @@
 
                     const dotSpan = document.createElement('span');
                     dotSpan.className = `sacrament-dot ${item.isCompleted ? 'done' : 'todo'}`;
-                    dotSpan.innerHTML = item.isCompleted ? '<i class="bi bi-check-lg"></i>' : item.sacramentType;
+                    if (item.isCompleted) {
+                        dotSpan.innerHTML = '<i class="bi bi-check-lg"></i>';
+                    } else {
+                        dotSpan.textContent = item.sacramentType ?? '';
+                    }
                     stepDiv.appendChild(dotSpan);
 
                     const headerDiv = document.createElement('div');
@@ -1244,7 +1311,7 @@
                         detailDiv.className = 'small text-dark mt-1';
 
                         const line1 = document.createElement('div');
-                        line1.innerHTML = `<i class="bi bi-calendar-check text-success me-1"></i>Ngày nhận: <strong>${item.receivedDateDisplay || '--'}</strong> | Nơi nhận: <strong>${item.parishName || 'Giáo xứ Phú Trung'}</strong>`;
+                        line1.innerHTML = `<i class="bi bi-calendar-check text-success me-1"></i>Ngày nhận: <strong>${escapeStudentHtml(item.receivedDateDisplay || '--')}</strong> | Nơi nhận: <strong>${escapeStudentHtml(item.parishName || 'Giáo xứ Phú Trung')}</strong>`;
                         detailDiv.appendChild(line1);
 
                         const line2 = document.createElement('div');
@@ -1274,7 +1341,7 @@
                 selectSacramentStepForEdit(1);
             } catch (err) {
                 loadingEl.classList.add('d-none');
-                containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${err.message}</div>`;
+                containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${escapeStudentHtml(err.message)}</div>`;
             }
         }
 
@@ -1297,7 +1364,7 @@
                 document.getElementById('sacInputNotes').value = (item.notes && !item.notes.includes('Chưa cập nhật Số sổ bộ')) ? item.notes : '';
             } else {
                 document.getElementById('sacInputRecordId').value = 0;
-                document.getElementById('sacInputDate').value = new Date().toISOString().split('T')[0];
+                document.getElementById('sacInputDate').value = getLocalTodayIso();
                 document.getElementById('sacInputParish').value = 'Giáo xứ Phú Trung';
                 document.getElementById('sacInputPriest').value = '';
                 document.getElementById('sacInputGodparent').value = '';
