@@ -61,15 +61,26 @@
                 if (key && key.startsWith('offline_class_')) {
                     try {
                         const item = JSON.parse(localStorage.getItem(key));
-                        if (item && item.classId) {
+                        const classId = Number.parseInt(item?.classId, 10);
+                        if (item && Number.isInteger(classId) && classId > 0) {
                             found = true;
                             const a = document.createElement('a');
-                            a.href = `/Attendance/Index?classId=${item.classId}`;
+                            a.href = `/Attendance/Index?classId=${classId}`;
                             a.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center bg-transparent px-2 py-2';
-                            a.innerHTML = `
-                                <span><i class="bi bi-mortarboard-fill text-primary me-2"></i><strong>${item.className || ('Lớp #' + item.classId)}</strong></span>
-                                <span class="badge bg-primary-subtle text-primary rounded-pill">${(item.students ? item.students.length : 0)} em</span>
-                            `;
+
+                            const leftSpan = document.createElement('span');
+                            const icon = document.createElement('i');
+                            icon.className = 'bi bi-mortarboard-fill text-primary me-2';
+                            const strong = document.createElement('strong');
+                            strong.textContent = item.className ? String(item.className) : `Lớp #${classId}`;
+                            leftSpan.append(icon, strong);
+
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-primary-subtle text-primary rounded-pill';
+                            const studentCount = Array.isArray(item.students) ? item.students.length : 0;
+                            badge.textContent = `${studentCount} em`;
+
+                            a.append(leftSpan, badge);
                             list.appendChild(a);
                         }
                     } catch (e) { }

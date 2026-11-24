@@ -41,8 +41,8 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<(byte[] FileBytes, string ContentType, string DownloadFileName)> ExportCurriculumToExcelAsync(long documentId, long? versionId = null);
 
         /// <summary>
-        /// Tải file đính kèm được lưu trữ của một phiên bản
+        /// Tải file đính kèm được lưu trữ của một phiên bản dưới dạng stream để tránh buffer toàn bộ tệp vào RAM
         /// </summary>
-        Task<(byte[] FileBytes, string ContentType, string DownloadFileName)?> GetVersionFileAsync(long versionId);
+        Task<(Stream FileStream, string ContentType, string DownloadFileName)?> GetVersionFileAsync(long versionId);
     }
 }

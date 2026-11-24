@@ -3,6 +3,7 @@ using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -141,25 +142,24 @@ namespace ManagerStudentCaltholic.Controllers
                 return NotFound("Hồ sơ này không đính kèm ảnh Giấy Rửa Tội.");
             }
 
-            // Chống Path Traversal tuyệt đối bằng Path.GetFileName
-            string safeFileName = Path.GetFileName(req.BaptismCertificatePath);
-            string fullPath = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs", safeFileName);
-
-            if (!System.IO.File.Exists(fullPath))
+            string privateUploadDir = Path.Combine(_env.ContentRootPath, "PrivateUploads", "baptism_certs");
+            if (!FileUploadSecurityHelper.TryResolveContainedPath(privateUploadDir, req.BaptismCertificatePath, out string fullPath)
+                || !System.IO.File.Exists(fullPath))
             {
                 return NotFound("Không tìm thấy tệp chứng từ trên máy chủ.");
             }
 
+            string safeFileName = Path.GetFileName(fullPath);
             string ext = Path.GetExtension(safeFileName).ToLowerInvariant();
-            string contentType = ext switch
-            {
-                ".pdf" => "application/pdf",
-                ".png" => "image/png",
-                _ => "image/jpeg"
-            };
+            string contentType = FileUploadSecurityHelper.GetSafeMimeType(ext);
 
-            var fileBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
-            return File(fileBytes, contentType);
+            if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers["Content-Security-Policy"] = "sandbox";
+                return PhysicalFile(fullPath, contentType, safeFileName);
+            }
+
+            return PhysicalFile(fullPath, contentType);
         }
 
         /// <summary>

@@ -1,4 +1,5 @@
 ﻿@model ManagerStudentCaltholic.Models.ViewModels.ParentMessageCenterViewModel
+@using ManagerStudentCaltholic.Services
 @{
     ViewData["Title"] = "Trung Tâm Tương Tác Phụ Huynh (1-Click Copy)";
 }
@@ -151,7 +152,7 @@
                         <div class="col-md-4">
                             <label class="form-label small fw-bold text-secondary">Ngày ghi nhận:</label>
                             <input type="date" id="customMessageDate" class="form-control form-control-sm"
-                                   value="@DateTime.Today.ToString("yyyy-MM-dd")" onchange="refreshCompiledPreview()" />
+                                   value="@VietnamTimeHelper.Today.ToString("yyyy-MM-dd")" onchange="refreshCompiledPreview()" />
                         </div>
                     </div>
 

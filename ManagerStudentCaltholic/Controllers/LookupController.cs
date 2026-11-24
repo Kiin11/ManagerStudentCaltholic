@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using QRCoder;
 
 namespace ManagerStudentCaltholic.Controllers
@@ -17,11 +16,12 @@ namespace ManagerStudentCaltholic.Controllers
     [Route("TraCuu")]
     public class LookupController : Controller
     {
+        private const int MaxFailedAttempts = 5;
         private readonly ParishDbContext _context;
         private readonly IGradeCalculationService _gradeService;
         private readonly IStudentCodeRolloverService _codeRolloverService;
         private readonly IAttendanceDisputeService _disputeService;
-        private readonly IMemoryCache _cache;
+        private readonly ICacheService _cache;
         private readonly ILogger<LookupController> _logger;
         private readonly IDeviceStudentRecognitionService _deviceRecognitionService;
 
@@ -30,7 +30,7 @@ namespace ManagerStudentCaltholic.Controllers
             IGradeCalculationService gradeService,
             IStudentCodeRolloverService codeRolloverService,
             IAttendanceDisputeService disputeService,
-            IMemoryCache cache,
+            ICacheService cache,
             IDeviceStudentRecognitionService deviceRecognitionService,
             ILogger<LookupController> logger)
         {
@@ -56,6 +56,17 @@ namespace ManagerStudentCaltholic.Controllers
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
         public async Task<IActionResult> Search([FromForm] StudentLookupRequestDto model)
         {
+            if (model == null)
+            {
+                return BadRequest();
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.WebsiteUrlHoneypot))
+            {
+                _logger.LogWarning("SECURITY: Honeypot triggered on Lookup Search from IP {IP}", GetNormalizedClientIp());
+                return BadRequest();
+            }
+
             if (!ModelState.IsValid)
             {
                 return View("Index", model);
@@ -63,20 +74,17 @@ namespace ManagerStudentCaltholic.Controllers
 
             var cleanCode = model.StudentCode.Trim().ToUpperInvariant();
             var cleanLast4 = model.PhoneLast4Digits.Trim();
-            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
+            var clientIp = GetNormalizedClientIp();
 
-            // 1. RATE LIMITING KÉP: Khóa theo IP VÀ khóa theo từng Mã Thiếu Nhi
-            var ipRateKey = $"Lookup_Failed_IP_{clientIp}";
-            var studentRateKey = $"Lookup_Failed_Code_{cleanCode}";
-
-            if ((_cache.TryGetValue(ipRateKey, out int ipFailed) && ipFailed >= 5) ||
-                (_cache.TryGetValue(studentRateKey, out int codeFailed) && codeFailed >= 5))
+            // 1. RATE LIMITING KÉP QUA REDIS/FALLBACK: Khóa theo IP VÀ khóa theo cặp (IP + Mã Thiếu Nhi)
+            var (isLockedOut, ipFailed, ipCodeFailed) = await CheckLockoutAsync(clientIp, cleanCode);
+            if (isLockedOut)
             {
-                ModelState.AddModelError(string.Empty, "Hồ sơ hoặc thiết bị này đã nhập sai quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!");
+                ModelState.AddModelError(string.Empty, "Thiết bị này đã nhập sai quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!");
                 return View("Index", model);
             }
 
-            var startDob = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
+            var startDob = VietnamTimeHelper.NormalizeBusinessDateUtcKind(model.DateOfBirth);
             var endDob = startDob.AddDays(1);
 
             // 2. Tìm học sinh theo mã hiện hành hoặc mã lịch sử năm cũ (FEAT-P4-04)
@@ -105,16 +113,14 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (student == null || !isPhoneValid)
             {
-                _cache.Set(ipRateKey, ipFailed + 1, TimeSpan.FromMinutes(15));
-                _cache.Set(studentRateKey, codeFailed + 1, TimeSpan.FromMinutes(30));
+                await RecordFailedAttemptAsync(clientIp, cleanCode, ipFailed, ipCodeFailed);
 
                 _logger.LogWarning("Tra cứu thất bại cho mã {Code} từ IP {IP}", cleanCode, clientIp);
                 ModelState.AddModelError(string.Empty, "Thông tin Mã Thiếu Nhi, Ngày Sinh hoặc 4 số cuối SĐT Phụ Huynh không chính xác!");
                 return View("Index", model);
             }
 
-            _cache.Remove(ipRateKey);
-            _cache.Remove(studentRateKey);
+            await ResetFailedAttemptsAsync(clientIp, cleanCode);
 
             if (isHistoricalCode)
             {
@@ -273,7 +279,7 @@ namespace ManagerStudentCaltholic.Controllers
                             TargetDaysCount = activeCampaign.TargetDaysCount
                         };
 
-                        var todayVn = DateTime.UtcNow.AddHours(7).Date;
+                        var todayVn = VietnamTimeHelper.Today;
                         int runningStreak = 0, maxStreak = 0, currentStreak = 0;
 
                         for (var dt = activeCampaign.StartDate.Date; dt <= activeCampaign.EndDate.Date; dt = dt.AddDays(1))
@@ -306,7 +312,9 @@ namespace ManagerStudentCaltholic.Controllers
                                 CampaignId = activeCampaign.Id,
                                 AttendedMass = attended,
                                 MassStatus = st,
-                                MassCheckInTime = cRec?.CheckInTime?.AddHours(7).ToString("HH:mm"),
+                                MassCheckInTime = cRec?.CheckInTime.HasValue == true
+                                    ? VietnamTimeHelper.ToVietnamTime(DateTime.SpecifyKind(cRec.CheckInTime.Value, DateTimeKind.Utc)).ToString("HH:mm")
+                                    : null,
                                 HasClassSession = false,
                                 Note = cRec?.Note,
                                 MassCorrectionStatus = campDispute?.Status,
@@ -457,8 +465,19 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpPost("SubmitDispute")]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyPublicLookup)]
-        public async Task<IActionResult> SubmitDispute([FromBody] SubmitAttendanceDisputeRequestDto dto)
+        public async Task<IActionResult> SubmitDispute([FromBody] SubmitAttendanceDisputeRequestDto? dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new { success = false, message = "Dữ liệu yêu cầu không hợp lệ." });
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.WebsiteUrlHoneypot))
+            {
+                _logger.LogWarning("SECURITY: Honeypot triggered on Lookup SubmitDispute from IP {IP}", GetNormalizedClientIp());
+                return BadRequest(new { success = false, message = "Yêu cầu không hợp lệ." });
+            }
+
             if (!ModelState.IsValid)
             {
                 var firstErr = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage
@@ -466,15 +485,68 @@ namespace ManagerStudentCaltholic.Controllers
                 return BadRequest(new { success = false, message = firstErr });
             }
 
-            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            var ip = GetNormalizedClientIp();
+            var cleanCode = (dto.StudentCode ?? string.Empty).Trim().ToUpperInvariant();
+            var (isLockedOut, ipFailed, ipCodeFailed) = await CheckLockoutAsync(ip, cleanCode);
+            if (isLockedOut)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                {
+                    success = false,
+                    message = "Thiết bị này đã gửi sai thông tin quá 5 lần liên tiếp. Vui lòng thử lại sau 15 phút!"
+                });
+            }
+
             var (success, message) = await _disputeService.SubmitDisputeFromParentAsync(dto, ip);
 
             if (!success)
             {
+                await RecordFailedAttemptAsync(ip, cleanCode, ipFailed, ipCodeFailed);
                 return BadRequest(new { success = false, message });
             }
 
+            await ResetFailedAttemptsAsync(ip, cleanCode);
             return Ok(new { success = true, message });
+        }
+
+        private string GetNormalizedClientIp()
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress;
+            if (ip == null) return "unknown_ip";
+            return ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4().ToString() : ip.ToString();
+        }
+
+        private static string GetIpLockoutKey(string clientIp) => $"lookup:fail:ip:{clientIp}";
+
+        private static string GetIpCodeLockoutKey(string clientIp, string cleanCode) =>
+            $"lookup:fail:ip_code:{clientIp}:{cleanCode}";
+
+        private async Task<(bool IsLockedOut, int IpFailed, int IpCodeFailed)> CheckLockoutAsync(string clientIp, string cleanCode)
+        {
+            int ipFailed = await _cache.GetAsync<int>(GetIpLockoutKey(clientIp));
+            int ipCodeFailed = string.IsNullOrEmpty(cleanCode)
+                ? 0
+                : await _cache.GetAsync<int>(GetIpCodeLockoutKey(clientIp, cleanCode));
+
+            return (ipFailed >= MaxFailedAttempts || ipCodeFailed >= MaxFailedAttempts, ipFailed, ipCodeFailed);
+        }
+
+        private async Task RecordFailedAttemptAsync(string clientIp, string cleanCode, int currentIpFailed, int currentIpCodeFailed)
+        {
+            await _cache.SetAsync(GetIpLockoutKey(clientIp), currentIpFailed + 1, TimeSpan.FromMinutes(15));
+            if (!string.IsNullOrEmpty(cleanCode))
+            {
+                await _cache.SetAsync(GetIpCodeLockoutKey(clientIp, cleanCode), currentIpCodeFailed + 1, TimeSpan.FromMinutes(30));
+            }
+        }
+
+        private async Task ResetFailedAttemptsAsync(string clientIp, string cleanCode)
+        {
+            await _cache.RemoveAsync(GetIpLockoutKey(clientIp));
+            if (!string.IsNullOrEmpty(cleanCode))
+            {
+                await _cache.RemoveAsync(GetIpCodeLockoutKey(clientIp, cleanCode));
+            }
         }
 
         [HttpGet("QuickView")]

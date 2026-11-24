@@ -3,6 +3,7 @@ using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.Options;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -47,9 +48,9 @@ namespace ManagerStudentCaltholic.Controllers
             var currentYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsCurrent);
             var currentYearId = currentYear?.Id ?? 0;
 
-            // Ngày xem số lượng học sinh có mặt (mặc định là ngày hôm nay)
-            var inputDate = viewDate ?? DateTime.Today;
-            var targetDate = DateTime.SpecifyKind(inputDate.Date, DateTimeKind.Utc);
+            // Ngày xem số lượng học sinh có mặt (mặc định là ngày hôm nay theo giờ Việt Nam)
+            var inputDate = viewDate ?? VietnamTimeHelper.Today;
+            var targetDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(inputDate);
             ViewBag.ViewDate = targetDate.ToString("yyyy-MM-dd");
 
             var zones = await _context.BuildingZones
@@ -168,7 +169,7 @@ namespace ManagerStudentCaltholic.Controllers
                     .FirstOrDefaultAsync(y => y.IsCurrent);
                 var currentYearName = !string.IsNullOrWhiteSpace(currentYear?.Name)
                     ? currentYear.Name
-                    : DateTime.UtcNow.Year.ToString();
+                    : VietnamTimeHelper.Today.Year.ToString();
 
                 if (incidentImage != null)
                 {
@@ -202,7 +203,7 @@ namespace ManagerStudentCaltholic.Controllers
                     await using var optimizedStream = optimized.OptimizedStream;
                     var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(incidentImage.FileName));
                     var webpFileName = string.IsNullOrWhiteSpace(baseName)
-                        ? $"incident_{DateTime.UtcNow:yyyyMMddHHmmss}.webp"
+                        ? $"incident_{VietnamTimeHelper.Now:yyyyMMddHHmmss}.webp"
                         : $"{baseName}.webp";
 
                     await SaveIncidentReportAsync(
