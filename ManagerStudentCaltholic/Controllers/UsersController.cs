@@ -219,6 +219,24 @@ namespace ManagerStudentCaltholic.Controllers
                         var oldCode = linkedStudent.StudentCode;
                         SyncStudentFieldsToUser(linkedStudent, newUser);
 
+                        if (newUser.Role == UserRole.Teacher)
+                        {
+                            if (!AgeValidationHelper.IsAtLeastAge(linkedStudent.DateOfBirth, VietnamTimeHelper.Today, 18))
+                            {
+                                int currentAge = AgeValidationHelper.CalculateAgeAtDate(linkedStudent.DateOfBirth, VietnamTimeHelper.Today);
+                                conflictMessage = $"Học viên '{linkedStudent.StudentCode}' mới {currentAge} tuổi, chưa đủ 18 tuổi để tạo tài khoản Giáo lý viên chính thức.";
+                                return;
+                            }
+
+                            if (linkedStudent.CatechistPromiseDate.HasValue &&
+                                !AgeValidationHelper.IsAtLeastAge(linkedStudent.DateOfBirth, linkedStudent.CatechistPromiseDate.Value, 18))
+                            {
+                                int ageAtPromise = AgeValidationHelper.CalculateAgeAtDate(linkedStudent.DateOfBirth, linkedStudent.CatechistPromiseDate.Value);
+                                conflictMessage = $"Học viên '{linkedStudent.StudentCode}' mới {ageAtPromise} tuổi tại ngày Tuyên hứa GLV ({linkedStudent.CatechistPromiseDate.Value:dd/MM/yyyy}), chưa đủ 18 tuổi theo quy định.";
+                                return;
+                            }
+                        }
+
                         if (newUser.Role == UserRole.ProbationaryTeacher)
                         {
                             linkedStudent.StudentCode = newUser.Username;
@@ -275,7 +293,7 @@ namespace ManagerStudentCaltholic.Controllers
                             Gender = InferGenderFromName(newUser.ChristianName, normalizedFirstName),
                             DateOfBirth = newUser.DateOfBirth.HasValue
                                 ? DateTime.SpecifyKind(newUser.DateOfBirth.Value.Date, DateTimeKind.Utc)
-                                : new DateTime(DateTime.UtcNow.Year - 16, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                                : new DateTime(VietnamTimeHelper.Today.Year - 16, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                             ParentPhone = string.IsNullOrWhiteSpace(model.PhoneNumber) ? null : model.PhoneNumber.Trim(),
                             IsActive = true
                         };
@@ -622,48 +640,68 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
-                using var stream = new MemoryStream();
-                await file.CopyToAsync(stream);
-                using var workbook = new XLWorkbook(stream);
-                var worksheet = workbook.Worksheets.FirstOrDefault();
-                if (worksheet == null)
+                await using var stream = file.OpenReadStream();
+                XLWorkbook workbook;
+                if (stream.CanSeek)
                 {
-                    return Json(new { success = false, message = "File Excel không chứa bất kỳ trang tính nào." });
-                }
-
-                var rows = worksheet.RangeUsed()?.RowsUsed()?.Skip(1);
-                if (rows == null || !rows.Any())
-                {
-                    return Json(new { success = false, message = "File Excel không có dữ liệu để nạp." });
-                }
-
-                // Giới hạn số dòng mỗi lần import (tối đa 500 GLV/lần) để chống treo request
-                foreach (var row in rows.Take(500))
-                {
-                    var christian = row.Cell(1).GetString().Trim();
-                    var first = row.Cell(2).GetString().Trim();
-                    var last = row.Cell(3).GetString().Trim();
-                    var phone = row.Cell(4).GetString().Trim();
-                    var email = row.Cell(5).GetString().Trim();
-                    var grade = row.Cell(6).GetString().Trim();
-                    var oldStudentCode = row.Cell(7).GetString().Trim();
-
-                    if (string.IsNullOrWhiteSpace(christian) &&
-                        string.IsNullOrWhiteSpace(first) &&
-                        string.IsNullOrWhiteSpace(last) &&
-                        string.IsNullOrWhiteSpace(oldStudentCode))
-                        continue;
-
-                    teachers.Add(new BatchTeacherItemDto
+                    if (!await FileUploadSecurityHelper.ValidateStreamMagicBytesAsync(stream, ".xlsx", HttpContext.RequestAborted))
                     {
-                        ChristianName = christian,
-                        FirstName = first,
-                        LastName = last,
-                        PhoneNumber = string.IsNullOrWhiteSpace(phone) ? null : phone,
-                        Email = string.IsNullOrWhiteSpace(email) ? null : email,
-                        ManagedGradeLevel = string.IsNullOrWhiteSpace(grade) ? null : grade,
-                        OldStudentCode = string.IsNullOrWhiteSpace(oldStudentCode) ? null : oldStudentCode
-                    });
+                        return Json(new { success = false, message = "Nội dung file Excel (.xlsx) không hợp lệ hoặc sai chữ ký định dạng." });
+                    }
+                    workbook = new XLWorkbook(stream);
+                }
+                else
+                {
+                    if (!await FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync(file, ".xlsx", HttpContext.RequestAborted))
+                    {
+                        return Json(new { success = false, message = "Nội dung file Excel (.xlsx) không hợp lệ hoặc sai chữ ký định dạng." });
+                    }
+                    await using var readStream = file.OpenReadStream();
+                    workbook = new XLWorkbook(readStream);
+                }
+
+                using (workbook)
+                {
+                    var worksheet = workbook.Worksheets.FirstOrDefault();
+                    if (worksheet == null)
+                    {
+                        return Json(new { success = false, message = "File Excel không chứa bất kỳ trang tính nào." });
+                    }
+
+                    var rows = worksheet.RangeUsed()?.RowsUsed()?.Skip(1);
+                    if (rows == null || !rows.Any())
+                    {
+                        return Json(new { success = false, message = "File Excel không có dữ liệu để nạp." });
+                    }
+
+                    // Giới hạn số dòng mỗi lần import (tối đa 500 GLV/lần) để chống treo request
+                    foreach (var row in rows.Take(500))
+                    {
+                        var christian = row.Cell(1).GetString().Trim();
+                        var first = row.Cell(2).GetString().Trim();
+                        var last = row.Cell(3).GetString().Trim();
+                        var phone = row.Cell(4).GetString().Trim();
+                        var email = row.Cell(5).GetString().Trim();
+                        var grade = row.Cell(6).GetString().Trim();
+                        var oldStudentCode = row.Cell(7).GetString().Trim();
+
+                        if (string.IsNullOrWhiteSpace(christian) &&
+                            string.IsNullOrWhiteSpace(first) &&
+                            string.IsNullOrWhiteSpace(last) &&
+                            string.IsNullOrWhiteSpace(oldStudentCode))
+                            continue;
+
+                        teachers.Add(new BatchTeacherItemDto
+                        {
+                            ChristianName = christian,
+                            FirstName = first,
+                            LastName = last,
+                            PhoneNumber = string.IsNullOrWhiteSpace(phone) ? null : phone,
+                            Email = string.IsNullOrWhiteSpace(email) ? null : email,
+                            ManagedGradeLevel = string.IsNullOrWhiteSpace(grade) ? null : grade,
+                            OldStudentCode = string.IsNullOrWhiteSpace(oldStudentCode) ? null : oldStudentCode
+                        });
+                    }
                 }
             }
             catch (Exception ex)
@@ -754,6 +792,20 @@ namespace ManagerStudentCaltholic.Controllers
                     {
                         result.Errors.Add($"Bỏ qua: Học sinh '{linkedStudent.ChristianName} {linkedStudent.FirstName} {linkedStudent.LastName}' ({linkedStudent.StudentCode}) đã có tài khoản liên kết hoặc bị trùng trong danh sách.");
                         continue;
+                    }
+
+                    if (itemRole == UserRole.Teacher)
+                    {
+                        bool isUnder18Today = !AgeValidationHelper.IsAtLeastAge(linkedStudent.DateOfBirth, VietnamTimeHelper.Today, 18);
+                        bool isUnder18AtPromise = linkedStudent.CatechistPromiseDate.HasValue &&
+                            !AgeValidationHelper.IsAtLeastAge(linkedStudent.DateOfBirth, linkedStudent.CatechistPromiseDate.Value, 18);
+
+                        if (isUnder18Today || isUnder18AtPromise)
+                        {
+                            result.Errors.Add($"Bỏ qua: Học viên '{linkedStudent.ChristianName} {linkedStudent.FirstName} {linkedStudent.LastName}' ({linkedStudent.StudentCode}) chưa đủ 18 tuổi để tạo tài khoản Giáo lý viên chính thức.");
+                            linkedStudentIdSet.Remove(linkedStudent.Id);
+                            continue;
+                        }
                     }
                 }
 

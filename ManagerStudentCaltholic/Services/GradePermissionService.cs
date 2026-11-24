@@ -19,15 +19,17 @@ namespace ManagerStudentCaltholic.Services
         public async Task<bool> CanManageClassAsync(string userId, int classId, string academicYear, bool isAdmin)
         {
             if (isAdmin) return true;
-            if (!long.TryParse(userId, out var uid)) return false;
+            if (!long.TryParse(userId, out var uid) || uid <= 0) return false;
 
-            var userRole = await _db.Users
+            var userInfo = await _db.Users
                 .AsNoTracking()
                 .Where(u => u.Id == uid && u.IsActive)
-                .Select(u => u.Role)
+                .Select(u => new { u.Role, u.ManagedGradeLevel })
                 .FirstOrDefaultAsync();
 
-            if (string.IsNullOrEmpty(userRole)) return false;
+            if (userInfo == null || string.IsNullOrEmpty(userInfo.Role)) return false;
+
+            var userRole = userInfo.Role;
 
             if (userRole == UserRole.Admin ||
                 userRole == UserRole.SpiritualDirector ||
@@ -36,25 +38,50 @@ namespace ManagerStudentCaltholic.Services
                 return true;
             }
 
-            var query = _db.ClassTeachers
-                .AsNoTracking()
-                .Include(ct => ct.AcademicYear)
-                .Include(ct => ct.ClassRoom)
-                .Where(ct => ct.UserId == uid &&
-                             ct.ClassRoomId == classId &&
-                             (ct.AcademicYear.Name == academicYear || ct.AcademicYear.IsCurrent));
-
-            // TASK-02.3: GLV Dự Bị chỉ được phép thao tác các lớp được phân công thuộc Ca Sáng
-            if (userRole == UserRole.ProbationaryTeacher)
+            if (userRole == UserRole.Parent)
             {
-                query = query.Where(ct =>
-                    ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                return false;
             }
 
-            return await query.AnyAsync();
+            if (userRole == UserRole.BranchHead)
+            {
+                if (string.IsNullOrWhiteSpace(userInfo.ManagedGradeLevel))
+                {
+                    return false;
+                }
+
+                var managedGradeLower = userInfo.ManagedGradeLevel.Trim().ToLowerInvariant();
+                return await _db.Classes
+                    .AsNoTracking()
+                    .AnyAsync(c => c.Id == classId
+                        && (string.IsNullOrWhiteSpace(academicYear)
+                            ? c.AcademicYear.IsCurrent
+                            : (c.AcademicYear.Name == academicYear || c.AcademicYear.IsCurrent))
+                        && c.GradeLevel.ToLower() == managedGradeLower);
+            }
+
+            var assignedClasses = await _db.ClassTeachers
+                .AsNoTracking()
+                .Where(ct => ct.UserId == uid &&
+                             ct.ClassRoomId == classId &&
+                             ct.ClassRoom.AcademicYearId == ct.AcademicYearId &&
+                             (string.IsNullOrWhiteSpace(academicYear)
+                                 ? ct.AcademicYear.IsCurrent
+                                 : (ct.AcademicYear.Name == academicYear || ct.AcademicYear.IsCurrent)))
+                .Select(ct => new { ct.ClassRoom.Session, ct.ClassRoom.GradeLevel })
+                .ToListAsync();
+
+            if (assignedClasses.Count == 0)
+            {
+                return false;
+            }
+
+            if (userRole == UserRole.ProbationaryTeacher)
+            {
+                return assignedClasses.Any(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel));
+            }
+
+            return true;
         }
 
         public async Task<List<int>> GetAssignedClassIdsAsync(string userId, string academicYear, bool isAdmin)
@@ -76,34 +103,76 @@ namespace ManagerStudentCaltholic.Services
                 return allClasses.Select(c => c.Id).ToList();
             }
 
-            if (!long.TryParse(userId, out var uid)) return new List<int>();
+            if (!long.TryParse(userId, out var uid) || uid <= 0) return new List<int>();
 
-            var userRole = await _db.Users
+            var userInfo = await _db.Users
                 .AsNoTracking()
                 .Where(u => u.Id == uid && u.IsActive)
-                .Select(u => u.Role)
+                .Select(u => new { u.Role, u.ManagedGradeLevel })
                 .FirstOrDefaultAsync();
 
-            if (string.IsNullOrEmpty(userRole)) return new List<int>();
+            if (userInfo == null || string.IsNullOrEmpty(userInfo.Role)) return new List<int>();
 
-            var query = _db.ClassTeachers
-                .AsNoTracking()
-                .Where(ct => ct.UserId == uid && (yearId == 0 || ct.AcademicYearId == yearId));
+            var userRole = userInfo.Role;
 
-            // TASK-02.3: GLV Dự Bị chỉ được phép thao tác các lớp được phân công thuộc Ca Sáng
-            if (userRole == UserRole.ProbationaryTeacher)
+            if (userRole == UserRole.Admin ||
+                userRole == UserRole.SpiritualDirector ||
+                userRole == UserRole.ExecutiveBoard)
             {
-                query = query.Where(ct =>
-                    ct.ClassRoom.Session != GradeLevel.SessionAfternoon &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.BaoDong &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.DuBi &&
-                    ct.ClassRoom.GradeLevel != GradeLevel.DuBiCode);
+                var allClasses = await _cache.GetOrSetAsync(
+                    CacheKeys.ClassesByYear(yearId),
+                    async () => await _db.Classes.Where(c => yearId == 0 || c.AcademicYearId == yearId).AsNoTracking().ToListAsync(),
+                    TimeSpan.FromHours(4));
+
+                return allClasses.Select(c => c.Id).ToList();
             }
 
-            return await query
-                .Select(ct => ct.ClassRoomId)
-                .Distinct()
+            if (yearId == 0 || userRole == UserRole.Parent)
+            {
+                return new List<int>();
+            }
+
+            if (userRole == UserRole.BranchHead)
+            {
+                if (string.IsNullOrWhiteSpace(userInfo.ManagedGradeLevel))
+                {
+                    return new List<int>();
+                }
+
+                var managedGradeLower = userInfo.ManagedGradeLevel.Trim().ToLowerInvariant();
+                return await _db.Classes
+                    .AsNoTracking()
+                    .Where(c => c.AcademicYearId == yearId && c.GradeLevel.ToLower() == managedGradeLower)
+                    .Select(c => c.Id)
+                    .ToListAsync();
+            }
+
+            var assignedClasses = await _db.ClassTeachers
+                .AsNoTracking()
+                .Where(ct => ct.UserId == uid &&
+                             ct.AcademicYearId == yearId &&
+                             ct.ClassRoom.AcademicYearId == yearId)
+                .Select(ct => new
+                {
+                    ct.ClassRoomId,
+                    ct.ClassRoom.Session,
+                    ct.ClassRoom.GradeLevel
+                })
                 .ToListAsync();
+
+            if (userRole == UserRole.ProbationaryTeacher)
+            {
+                return assignedClasses
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .Select(c => c.ClassRoomId)
+                    .Distinct()
+                    .ToList();
+            }
+
+            return assignedClasses
+                .Select(c => c.ClassRoomId)
+                .Distinct()
+                .ToList();
         }
 
         // TASK-P3-09.3: Lấy danh sách cột điểm qua Redis Cache & khử trùng lặp cấu hình mặc định (ClassId IS NULL)

@@ -305,9 +305,9 @@ namespace ManagerStudentCaltholic.Services
 
                 DateTime? effectiveDob = user?.DateOfBirth ?? student?.DateOfBirth;
                 bool hasValidDob = effectiveDob.HasValue;
-                int currentAge = hasValidDob ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, DateTime.Today) : 0;
-                int? ageM5 = (hasValidDob && moc5.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc5.Value) : null;
-                bool isUnder18AtPromise = hasValidDob && moc5.HasValue && moc5.Value.Date < effectiveDob!.Value.Date.AddYears(18);
+                int currentAge = hasValidDob ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, VietnamTimeHelper.Today) : 0;
+                int? ageM5 = (hasValidDob && moc5.HasValue) ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, moc5.Value) : null;
+                bool isUnder18AtPromise = hasValidDob && moc5.HasValue && !AgeValidationHelper.IsAtLeastAge(effectiveDob!.Value, moc5.Value, 18);
                 bool isCurrentlyProbationaryAndUnder18 = hasValidDob && !moc5.HasValue && currentAge < 18 &&
                     (user?.Role == UserRole.ProbationaryTeacher || learningItems.Any(l => GradeLevel.IsProbationaryGrade(l.GradeLevel)));
 
@@ -329,7 +329,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Bí tích Rửa Tội",
                         FieldName = nameof(Student.BaptismDate),
                         EventDate = moc1,
-                        AgeAtMilestone = (hasValidDob && moc1.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc1.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc1.HasValue) ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, moc1.Value) : null,
                         IsCompleted = moc1.HasValue,
                         Description = "Khởi đầu đời sống Kitô hữu, định danh hồ sơ Thiếu nhi."
                     },
@@ -339,7 +339,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Xưng Tội & Rước Lễ Lần Đầu",
                         FieldName = nameof(Student.FirstCommunionDate),
                         EventDate = moc2,
-                        AgeAtMilestone = (hasValidDob && moc2.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc2.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc2.HasValue) ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, moc2.Value) : null,
                         IsCompleted = moc2.HasValue,
                         Description = "Hoàn tất Khối Rước Lễ (Rước Lễ 2), đủ điều kiện lên Khối Thêm Sức."
                     },
@@ -349,7 +349,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Bí tích Thêm Sức",
                         FieldName = nameof(Student.ConfirmationDate),
                         EventDate = moc3,
-                        AgeAtMilestone = (hasValidDob && moc3.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc3.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc3.HasValue) ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, moc3.Value) : null,
                         IsCompleted = moc3.HasValue,
                         Description = "Hoàn tất Khối Thêm Sức, điều kiện tiên quyết chuyển lên Khối Bao Đồng (Ca Chiều)."
                     },
@@ -359,7 +359,7 @@ namespace ManagerStudentCaltholic.Services
                         MilestoneName = "Tuyên Hứa Dự Bị (Bao Đồng)",
                         FieldName = nameof(Student.BaoDongPromiseDate),
                         EventDate = moc4,
-                        AgeAtMilestone = (hasValidDob && moc4.HasValue) ? StudentViewModel.CalculateAgeAtDate(effectiveDob!.Value, moc4.Value) : null,
+                        AgeAtMilestone = (hasValidDob && moc4.HasValue) ? AgeValidationHelper.CalculateAgeAtDate(effectiveDob!.Value, moc4.Value) : null,
                         IsCompleted = moc4.HasValue,
                         Description = "Hoàn tất Khối Bao Đồng / Tuyên hứa bước vào giai đoạn Dự Bị GLV."
                     },

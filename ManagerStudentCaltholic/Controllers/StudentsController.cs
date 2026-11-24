@@ -7,6 +7,7 @@ using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -331,9 +332,9 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             if (model.CatechistPromiseDate.HasValue &&
-                model.CatechistPromiseDate.Value.Date < model.DateOfBirth.Date.AddYears(18))
+                !AgeValidationHelper.IsAtLeastAge(model.DateOfBirth, model.CatechistPromiseDate.Value, 18))
             {
-                int age = StudentViewModel.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
+                int age = AgeValidationHelper.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
                 TempData["ErrorMessage"] = $"Không thể lưu: Học viên mới {age} tuổi tại ngày Tuyên hứa GLV ({model.CatechistPromiseDate.Value:dd/MM/yyyy}), bắt buộc phải đủ 18 tuổi trở lên.";
                 return RedirectToAction(nameof(Index));
             }
@@ -482,9 +483,9 @@ namespace ManagerStudentCaltholic.Controllers
             if (ModelState.IsValid)
             {
                 if (model.CatechistPromiseDate.HasValue &&
-                    model.CatechistPromiseDate.Value.Date < model.DateOfBirth.Date.AddYears(18))
+                    !AgeValidationHelper.IsAtLeastAge(model.DateOfBirth, model.CatechistPromiseDate.Value, 18))
                 {
-                    int age = StudentViewModel.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
+                    int age = AgeValidationHelper.CalculateAgeAtDate(model.DateOfBirth, model.CatechistPromiseDate.Value);
                     TempData["ErrorMessage"] = $"Không thể lưu: Học viên mới {age} tuổi tại ngày Tuyên hứa GLV ({model.CatechistPromiseDate.Value:dd/MM/yyyy}), bắt buộc phải đủ 18 tuổi trở lên.";
                     return RedirectToAction(nameof(Index));
                 }
@@ -501,16 +502,29 @@ namespace ManagerStudentCaltholic.Controllers
                 target.FirstName = model.FirstName.Trim();
                 target.LastName = model.LastName.Trim();
                 target.Gender = model.Gender;
-                target.DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth, DateTimeKind.Utc);
-                target.BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value, DateTimeKind.Utc) : null;
-                target.FirstCommunionDate = model.FirstCommunionDate.HasValue ? DateTime.SpecifyKind(model.FirstCommunionDate.Value, DateTimeKind.Utc) : null;
-                target.ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value, DateTimeKind.Utc) : null;
-                target.BaoDongPromiseDate = model.BaoDongPromiseDate.HasValue ? DateTime.SpecifyKind(model.BaoDongPromiseDate.Value, DateTimeKind.Utc) : null;
-                target.CatechistPromiseDate = model.CatechistPromiseDate.HasValue ? DateTime.SpecifyKind(model.CatechistPromiseDate.Value, DateTimeKind.Utc) : null;
+                target.DateOfBirth = DateTime.SpecifyKind(model.DateOfBirth.Date, DateTimeKind.Utc);
+                target.BaptismDate = model.BaptismDate.HasValue ? DateTime.SpecifyKind(model.BaptismDate.Value.Date, DateTimeKind.Utc) : null;
+                target.FirstCommunionDate = model.FirstCommunionDate.HasValue ? DateTime.SpecifyKind(model.FirstCommunionDate.Value.Date, DateTimeKind.Utc) : null;
+                target.ConfirmationDate = model.ConfirmationDate.HasValue ? DateTime.SpecifyKind(model.ConfirmationDate.Value.Date, DateTimeKind.Utc) : null;
+                target.BaoDongPromiseDate = model.BaoDongPromiseDate.HasValue ? DateTime.SpecifyKind(model.BaoDongPromiseDate.Value.Date, DateTimeKind.Utc) : null;
+                target.CatechistPromiseDate = model.CatechistPromiseDate.HasValue ? DateTime.SpecifyKind(model.CatechistPromiseDate.Value.Date, DateTimeKind.Utc) : null;
                 target.ParentPhone = model.ParentPhone?.Trim();
                 target.IsActive = model.IsActive;
 
+                var linkedUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.LinkedStudentId == target.Id || u.StudentId == target.Id);
+                if (linkedUser != null)
+                {
+                    linkedUser.DateOfBirth = target.DateOfBirth;
+                    linkedUser.BaptismDate = target.BaptismDate;
+                    linkedUser.FirstCommunionDate = target.FirstCommunionDate;
+                    linkedUser.ConfirmationDate = target.ConfirmationDate;
+                    linkedUser.BaoDongPromiseDate = target.BaoDongPromiseDate;
+                    linkedUser.CatechistPromiseDate = target.CatechistPromiseDate;
+                }
+
                 await _context.SaveChangesAsync();
+                await _cacheService.RemoveAsync($"staff_lookup:student_360:{target.Id}");
                 TempData["SuccessMessage"] = $"Cập nhật hồ sơ thiếu nhi {target.FirstName} {target.LastName} thành công!";
             }
             return RedirectToAction(nameof(Index));
@@ -565,8 +579,27 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
-                using var stream = excelFile.OpenReadStream();
-                var result = await _excelService.ImportStudentsFromExcelAsync(stream);
+                await using var stream = excelFile.OpenReadStream();
+                StudentImportResultDto result;
+                if (stream.CanSeek)
+                {
+                    if (!await FileUploadSecurityHelper.ValidateStreamMagicBytesAsync(stream, ".xlsx", HttpContext.RequestAborted))
+                    {
+                        TempData["ErrorMessage"] = "Nội dung file Excel (.xlsx) không hợp lệ hoặc sai chữ ký định dạng.";
+                        return RedirectToAction(nameof(Index));
+                    }
+                    result = await _excelService.ImportStudentsFromExcelAsync(stream);
+                }
+                else
+                {
+                    if (!await FileUploadSecurityHelper.ValidateFormFileMagicBytesAsync(excelFile, ".xlsx", HttpContext.RequestAborted))
+                    {
+                        TempData["ErrorMessage"] = "Nội dung file Excel (.xlsx) không hợp lệ hoặc sai chữ ký định dạng.";
+                        return RedirectToAction(nameof(Index));
+                    }
+                    await using var readStream = excelFile.OpenReadStream();
+                    result = await _excelService.ImportStudentsFromExcelAsync(readStream);
+                }
 
                 if (result.SuccessCount > 0)
                 {
@@ -1055,10 +1088,10 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var promiseUtc = DateTime.SpecifyKind(request.CatechistPromiseDate.Date, DateTimeKind.Utc);
-            int ageAtPromise = StudentViewModel.CalculateAgeAtDate(student.DateOfBirth, promiseUtc);
+            int ageAtPromise = AgeValidationHelper.CalculateAgeAtDate(student.DateOfBirth, promiseUtc);
 
             // Ràng buộc cứng tối thiểu 18 tuổi tại ngày Tuyên hứa GLV
-            if (promiseUtc.Date < student.DateOfBirth.Date.AddYears(18))
+            if (!AgeValidationHelper.IsAtLeastAge(student.DateOfBirth, promiseUtc, 18))
             {
                 return Json(new
                 {
@@ -1073,6 +1106,7 @@ namespace ManagerStudentCaltholic.Controllers
             bool roleUpgraded = false;
             string? finalRole = null;
             string? linkedUsername = null;
+            long? linkedUserId = null;
 
             var strategy = _context.Database.CreateExecutionStrategy();
             await strategy.ExecuteAsync(async () =>
@@ -1090,8 +1124,13 @@ namespace ManagerStudentCaltholic.Controllers
 
                 if (linkedUser != null)
                 {
+                    linkedUserId = linkedUser.Id;
                     linkedUsername = linkedUser.Username;
                     finalRole = linkedUser.Role;
+
+                    linkedUser.CatechistPromiseDate = student.CatechistPromiseDate;
+                    linkedUser.BaoDongPromiseDate = student.BaoDongPromiseDate;
+                    linkedUser.DateOfBirth = DateTime.SpecifyKind(student.DateOfBirth.Date, DateTimeKind.Utc);
 
                     if (request.UpgradeRoleToTeacher && linkedUser.Role == UserRole.ProbationaryTeacher)
                     {
@@ -1115,6 +1154,12 @@ namespace ManagerStudentCaltholic.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
             });
+
+            if (linkedUserId.HasValue)
+            {
+                await _cacheService.RemoveAsync(CacheKeys.UserPrincipalState(linkedUserId.Value));
+            }
+            await _cacheService.RemoveAsync($"staff_lookup:student_360:{student.Id}");
 
             string msg = roleUpgraded
                 ? $"Đã lưu Ngày Tuyên hứa GLV ({promiseUtc:dd/MM/yyyy}, {ageAtPromise} tuổi) và nâng cấp tài khoản '{linkedUsername}' lên Giáo lý viên chính thức (Teacher)!"
