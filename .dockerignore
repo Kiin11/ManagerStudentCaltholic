@@ -29,6 +29,10 @@ diagram
 docs
 script
 scripts
+**/scripts
+ManagerStudentCaltholic/scripts
+tests
+**/tests
 *.md
 *.jsonl
 LICENSE
@@ -57,10 +61,13 @@ Dockerfile*
 **/secrets.dev.yaml
 **/values.dev.yaml
 google-service-account*.json
+*service-account*.json
+credentials*.json
 *.pem
 *.key
 *.pfx
 *.p12
+*.jks
 
 # .NET Build Outputs & Test Artifacts
 **/bin

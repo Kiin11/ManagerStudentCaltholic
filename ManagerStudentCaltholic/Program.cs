@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Hangfire;
 using Hangfire.PostgreSql;
 using ManagerStudentCaltholic.Extensions;
@@ -5,6 +6,7 @@ using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Middlewares;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Security;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Serilog;
@@ -37,7 +39,7 @@ builder.Host.AddSerilogLogging();
 // 3. Registry Database, Reverse Proxy, Security & Rate Limiter
 builder.Services
     .AddDatabaseConfiguration(builder.Configuration)
-    .AddReverseProxyConfiguration()
+    .AddReverseProxyConfiguration(builder.Configuration)
     .AddApplicationServices(builder.Configuration)
     .AddHybridAuthentication(builder.Configuration)
     .AddStrictSecurityConfigurations() // task -707: Add Security Headers Middleware
@@ -103,6 +105,31 @@ builder.Services.AddHangfireServer(options =>
 
 var app = builder.Build();
 
+if (!app.Environment.IsDevelopment())
+{
+    if (!string.IsNullOrWhiteSpace(defaultDbConn))
+    {
+        if (Regex.IsMatch(defaultDbConn, @"Trust\s*Server\s*Certificate\s*=\s*(true|1|yes)", RegexOptions.IgnoreCase))
+        {
+            app.Logger.LogWarning(
+                "SECURITY WARNING: PostgreSQL connection string enables 'Trust Server Certificate=true'. Use 'SSL Mode=VerifyCA' or 'SSL Mode=VerifyFull' with a trusted CA certificate in non-Development environments.");
+        }
+
+        if (!Regex.IsMatch(defaultDbConn, @"SSL\s*Mode\s*=", RegexOptions.IgnoreCase))
+        {
+            app.Logger.LogWarning(
+                "SECURITY WARNING: PostgreSQL connection string lacks explicit 'SSL Mode'. Configure 'SSL Mode=VerifyCA' or 'SSL Mode=VerifyFull' in non-Development environments.");
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(redisConnStr) &&
+        !Regex.IsMatch(redisConnStr, @"(^|[,;\s])password\s*=", RegexOptions.IgnoreCase))
+    {
+        app.Logger.LogWarning(
+            "SECURITY WARNING: Redis connection string lacks 'password='. Configure Redis '--requirepass' and include 'password=...' in ConnectionStrings:RedisConnection.");
+    }
+}
+
 app.ApplyDatabaseMigrations();
 
 // 1. IP & HTTPS from Nginx Reverse Proxy
@@ -148,8 +175,7 @@ app.UseHangfireDashboard("/Admin/Hangfire", new DashboardOptions
     Authorization = new[] { new HangfireAdminAuthorizationFilter() },
     DashboardTitle = "Background Task Queue Management - Phu Trung Parish"
 });
-var vnTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
-    OperatingSystem.IsWindows() ? "SE Asia Standard Time" : "Asia/Ho_Chi_Minh");
+var vnTimeZone = VietnamTimeHelper.VietnamTimeZone;
 
 // 5. TASK-P3-10.3: Register Recurring Job to automatically clean up Logs > 90 days at 02:00 AM every Sunday
 // TASK-P3-12.2 (Job 1): Auto Pre-warm redis Attendence & Task class data every Sunday at 05:30 AM
@@ -186,6 +212,8 @@ RecurringJob.AddOrUpdate<IRedisAttendanceService>(
     service => service.AutoMarkAbsentUncheckedStudentsAsync(null),
     "30 18 * * 0", // 18:30 Sunday
     new RecurringJobOptions { TimeZone = vnTimeZone });
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
 
 app.MapControllerRoute(
     name: "default",

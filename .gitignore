@@ -14,11 +14,14 @@ appsettings.*.local.json
 **/appsettings-copy.json
 
 google-service-account*.json
+*service-account*.json
+credentials*.json
 **/secrets/
 *.pem
 *.key
 *.pfx
 *.p12
+*.jks
 
 # ==============================================================================
 # Infrastructure / Deployment Config (Moved to private parish-infra-config repo)

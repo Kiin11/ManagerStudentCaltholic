@@ -13,7 +13,9 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
@@ -49,29 +51,105 @@ namespace ManagerStudentCaltholic.Extensions
         }
 
         /// <summary>
-        /// SEC-NEW-07 FIX: Chống giả mạo X-Forwarded-For bằng cách giới hạn ForwardLimit = 1
-        /// và chỉ tin cậy các dải IP Reverse Proxy nội bộ (Loopback & Private Docker Networks)
+        /// SEC-APP-05 / SEC-NEW-07 FIX: Chống giả mạo X-Forwarded-For bằng cách đọc cấu hình ReverseProxy
+        /// (mặc định ForwardLimit = 1, chỉ tin cậy Loopback và dải Docker bridge hẹp 172.16.0.0/12).
         /// </summary>
         public static IServiceCollection AddReverseProxyConfiguration(this IServiceCollection services)
+            => services.AddReverseProxyConfiguration(configuration: null);
+
+        /// <summary>
+        /// Cấu hình Reverse Proxy đọc từ IConfiguration (ReverseProxy:ForwardLimit, KnownProxies, KnownNetworks).
+        /// </summary>
+        public static IServiceCollection AddReverseProxyConfiguration(this IServiceCollection services, IConfiguration? configuration)
         {
+            var configuredLimit = configuration?.GetValue<int?>("ReverseProxy:ForwardLimit");
+            int forwardLimit = configuredLimit is > 0 ? configuredLimit.Value : 1;
+
+            var configuredProxies = configuration?.GetSection("ReverseProxy:KnownProxies").Get<string[]>();
+            var configuredNetworks = configuration?.GetSection("ReverseProxy:KnownNetworks").Get<string[]>();
+
             services.Configure<ForwardedHeadersOptions>(options =>
             {
                 options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                options.ForwardLimit = 1; // Chỉ đọc đúng 1 hop gần nhất do Nginx gắn vào
+                options.ForwardLimit = forwardLimit;
                 options.RequireHeaderSymmetry = false;
 
                 options.KnownProxies.Clear();
                 options.KnownNetworks.Clear();
 
-                // Chỉ tin tưởng Proxy nằm trong mạng Loopback hoặc mạng Private (Docker bridge / nội bộ)
-                options.KnownProxies.Add(IPAddress.Loopback);
-                options.KnownProxies.Add(IPAddress.IPv6Loopback);
-                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
-                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
-                options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+                bool addedProxy = false;
+                if (configuredProxies is { Length: > 0 })
+                {
+                    foreach (var rawProxy in configuredProxies)
+                    {
+                        if (!string.IsNullOrWhiteSpace(rawProxy) && IPAddress.TryParse(rawProxy.Trim(), out var proxyIp))
+                        {
+                            options.KnownProxies.Add(proxyIp);
+                            addedProxy = true;
+                        }
+                    }
+                }
+
+                if (!addedProxy)
+                {
+                    options.KnownProxies.Add(IPAddress.Loopback);
+                    options.KnownProxies.Add(IPAddress.IPv6Loopback);
+                }
+
+                bool addedNetwork = false;
+                if (configuredNetworks is { Length: > 0 })
+                {
+                    foreach (var rawNetwork in configuredNetworks)
+                    {
+                        if (TryParseIpNetwork(rawNetwork, out var network) && network != null)
+                        {
+                            options.KnownNetworks.Add(network);
+                            addedNetwork = true;
+                        }
+                    }
+                }
+
+                if (!addedNetwork)
+                {
+                    options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+                }
             });
 
             return services;
+        }
+
+        private static bool TryParseIpNetwork(string? cidr, out IPNetwork? network)
+        {
+            network = null;
+            if (string.IsNullOrWhiteSpace(cidr))
+            {
+                return false;
+            }
+
+            var parts = cidr.Trim().Split('/');
+            if (parts.Length != 2)
+            {
+                return false;
+            }
+
+            if (!IPAddress.TryParse(parts[0].Trim(), out var prefix))
+            {
+                return false;
+            }
+
+            if (!int.TryParse(parts[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int prefixLength))
+            {
+                return false;
+            }
+
+            int maxPrefixLength = prefix.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32;
+            if (prefixLength < 0 || prefixLength > maxPrefixLength)
+            {
+                return false;
+            }
+
+            network = new IPNetwork(prefix, prefixLength);
+            return true;
         }
 
         /// <summary>
@@ -102,7 +180,7 @@ namespace ManagerStudentCaltholic.Extensions
             services.AddScoped<IQrCodeService, QrCodeService>();
             services.AddScoped<IPasswordHasherService, PasswordHasherService>();
             services.AddScoped<ITokenService, TokenService>();
-            services.AddHostedService<LogRetentionBackgroundService>();
+            services.AddSingleton<LogRetentionBackgroundService>();
             services.AddSingleton<IAuthorizationHandler, GradeScopeHandler>();
             services.AddScoped<ILessonPlanImportService, LessonPlanImportService>();
             services.AddScoped<IClassCurriculumService, ClassCurriculumService>();
@@ -119,7 +197,8 @@ namespace ManagerStudentCaltholic.Extensions
 
             // FEAT-P3-10: Hangfire Background Job Service
             services.AddScoped<IBackgroundExportJobService, BackgroundExportJobService>();
-            services.AddSingleton<ILogMaintenanceJobService, LogRetentionBackgroundService>();
+            services.AddSingleton<ILogMaintenanceJobService>(sp => sp.GetRequiredService<LogRetentionBackgroundService>());
+            services.AddHostedService(sp => sp.GetRequiredService<LogRetentionBackgroundService>());
 
             // Bổ sung vào Program.cs (cùng cụm đăng ký dịch vụ trước dòng var app = builder.Build();):
             services.AddSingleton<SystemMetricsCollector>();

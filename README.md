@@ -62,12 +62,19 @@ powershell -File scripts/build-push.ps1 -Phase inf -Number 1 -Push
 
 ### Triển khai lên máy chủ Azure VM
 
-Chạy tại thư mục `parish-infra-config` trên máy chủ Azure:
+Chạy tại thư mục `parish-infra-config` trên máy chủ Azure (tên service Docker Compose chuẩn hóa là `dotnet_app`):
 
 ```bash
 ./scripts/deploy.sh parish-app-v1.26.inf.1
 # Hoặc thủ công sau khi cập nhật APP_IMAGE_TAG trong .env:
 # docker compose pull dotnet_app && docker compose up -d --no-deps dotnet_app
 ```
+
+### Yêu cầu Bảo mật & Lưu trữ Bền vững Production (`parish-infra-config`)
+
+- **Tên service Compose chuẩn:** Luôn sử dụng `dotnet_app` trong mọi lệnh `docker compose` (không dùng `app`).
+- **Volume lưu trữ bền vững bắt buộc:** Mount `/app/PrivateUploads` (cùng `/app/dataprotection-keys`, `/app/logs`, `/app/secrets`, `/app/wwwroot/uploads/lesson_plans`) để không mất file export, file fallback và tài liệu giáo án khi recreate container.
+- **Bảo mật PostgreSQL TLS:** Chuỗi kết nối Production bắt buộc dùng `SSL Mode=VerifyCA` hoặc `SSL Mode=VerifyFull` kèm chứng chỉ CA hợp lệ (tuyệt đối **không** dùng `Trust Server Certificate=true` trên Production).
+- **Bảo mật Redis:** Khởi chạy Redis với `--requirepass ${REDIS_PASSWORD}`, truyền `password=${REDIS_PASSWORD}` trong `ConnectionStrings__RedisConnection`, và **không** publish/expose cổng `6379` ra ngoài public host (chỉ giao tiếp qua mạng nội bộ Docker).
 
 Xem chi tiết quy trình đăng nhập GHCR, quy chuẩn tag và triển khai tại [docs/DOCKER-BUILD-DEPLOY.md](docs/DOCKER-BUILD-DEPLOY.md).
