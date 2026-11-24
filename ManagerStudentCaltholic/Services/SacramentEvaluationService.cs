@@ -147,12 +147,12 @@ namespace ManagerStudentCaltholic.Services
                     {
                         var classEnrollmentIds = g.Select(x => x.Id).ToHashSet();
                         var classAtts = attendances.Where(a => classEnrollmentIds.Contains(a.EnrollmentId)).ToList();
-                        int sunMassDays = Math.Max(1, classAtts
+                        int sunMassDays = classAtts
                             .Where(a => a.DayOfWeek == DayOfWeek.Sunday && (a.AttendedMass || a.MassStatus != AttendanceStatus.AbsentUnpermitted))
-                            .Select(a => a.AttendanceDate.Date).Distinct().Count());
-                        int classDays = Math.Max(1, classAtts
-                            .Where(a => a.ClassAttended || a.ClassStatus != AttendanceStatus.AbsentUnpermitted)
-                            .Select(a => a.AttendanceDate.Date).Distinct().Count());
+                            .Select(a => a.AttendanceDate.Date).Distinct().Count();
+                        int classDays = classAtts
+                            .Where(a => a.ClassAttended || (a.DayOfWeek == DayOfWeek.Sunday && a.ClassStatus != AttendanceStatus.AbsentUnpermitted))
+                            .Select(a => a.AttendanceDate.Date).Distinct().Count();
                         return (SunMassDays: sunMassDays, ClassDays: classDays);
                     });
 
@@ -193,27 +193,32 @@ namespace ManagerStudentCaltholic.Services
 
                     if (validSacScores.Any())
                     {
-                        sacExamScore = Math.Round(validSacScores.Average(), 2);
+                        sacExamScore = Math.Round(validSacScores.Average(), 2, MidpointRounding.AwayFromZero);
                     }
                 }
 
                 // Tính % Chuyên cần Lễ Chúa Nhật & Học Giáo Lý
                 var stuAtts = attendances.Where(a => a.EnrollmentId == e.Id).ToList();
-                var sessionTotals = attendancesByClass.TryGetValue(e.ClassRoomId, out var totals) ? totals : (1, 1);
+                var sessionTotals = attendancesByClass.TryGetValue(e.ClassRoomId, out var totals) ? totals : (SunMassDays: 0, ClassDays: 0);
 
                 var sunPresent = stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday && a.AttendedMass &&
                                                    (a.MassStatus == AttendanceStatus.Present || a.MassStatus == AttendanceStatus.LinedUp));
                 var sunLate = stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday && a.AttendedMass && a.MassStatus == AttendanceStatus.Late);
 
-                var clsPresent = stuAtts.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Present);
+                var clsPresent = stuAtts.Count(a => a.ClassAttended &&
+                                                   (a.ClassStatus == AttendanceStatus.Present || a.ClassStatus == AttendanceStatus.LinedUp));
                 var clsLate = stuAtts.Count(a => a.ClassAttended && a.ClassStatus == AttendanceStatus.Late);
 
-                double massRate = stuAtts.Any()
-                    ? Math.Min(100.0, Math.Round(((sunPresent + sunLate * 0.8) / stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday)) * 100.0, 1))
+                int stuSundayCount = stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday);
+                int massDenominator = sessionTotals.SunMassDays > 0 ? sessionTotals.SunMassDays : stuSundayCount;
+                int classDenominator = sessionTotals.ClassDays > 0 ? sessionTotals.ClassDays : stuSundayCount;
+
+                double massRate = massDenominator > 0
+                    ? Math.Min(100.0, Math.Round(((sunPresent + sunLate * 0.8) / massDenominator) * 100.0, 1))
                     : 100.0;
 
-                double classRate = stuAtts.Any()
-                    ? Math.Min(100.0, Math.Round(((clsPresent + clsLate * 0.8) / stuAtts.Count(a => a.DayOfWeek == DayOfWeek.Sunday)) * 100.0, 1))
+                double classRate = classDenominator > 0
+                    ? Math.Min(100.0, Math.Round(((clsPresent + clsLate * 0.8) / classDenominator) * 100.0, 1))
                     : 100.0;
 
                 double combinedRate = Math.Round((massRate + classRate) / 2.0, 1);
@@ -253,7 +258,7 @@ namespace ManagerStudentCaltholic.Services
                 bool isSpecialExemption = false;
                 bool isApproved = isSystemEligible && !alreadyReceived;
                 string? godparent = null;
-                string defaultBookNo = $"SB-{targetYear?.Name?.Split('-').FirstOrDefault() ?? DateTime.Now.Year.ToString()}-{seqIndex++:D3}";
+                string defaultBookNo = $"SB-{targetYear?.Name?.Split('-').FirstOrDefault() ?? VietnamTimeHelper.Now.Year.ToString()}-{seqIndex++:D3}";
                 string? assignedBookNo = defaultBookNo;
                 string reasonText = alreadyReceived
                     ? "Đã lãnh nhận Bí tích trong Sổ bộ"
@@ -324,10 +329,10 @@ namespace ManagerStudentCaltholic.Services
                 ExistingBatchId = loadedBatch?.Id,
                 BatchStatus = loadedBatch?.Status ?? "NEW",
                 BatchTitle = loadedBatch?.Title ?? defaultTitle,
-                PlannedCeremonyDate = loadedBatch?.PlannedCeremonyDate ?? DateTime.Today,
+                PlannedCeremonyDate = loadedBatch?.PlannedCeremonyDate ?? VietnamTimeHelper.Today,
                 CeremonyParish = loadedBatch?.CeremonyParish ?? "Giáo xứ Phú Trung",
                 CelebrantPriest = loadedBatch?.CelebrantPriest ?? "",
-                RegistryBookPrefix = loadedBatch?.RegistryBookPrefix ?? $"Q.{DateTime.Now.Year}",
+                RegistryBookPrefix = loadedBatch?.RegistryBookPrefix ?? $"Q.{VietnamTimeHelper.Now.Year}",
                 ApprovedBy = loadedBatch?.ApprovedBy,
                 ApprovedAt = loadedBatch?.ApprovedAt,
                 AcademicYears = allYears,
@@ -357,6 +362,8 @@ namespace ManagerStudentCaltholic.Services
 
             await strategy.ExecuteAsync(async () =>
             {
+                _context.ChangeTracker.Clear();
+                batch = null;
                 await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 if (dto.BatchId.HasValue && dto.BatchId.Value > 0)
@@ -364,6 +371,21 @@ namespace ManagerStudentCaltholic.Services
                     batch = await _context.SacramentApprovalBatches
                         .Include(b => b.Items)
                         .FirstOrDefaultAsync(b => b.Id == dto.BatchId.Value);
+
+                    if (batch == null)
+                    {
+                        throw new InvalidOperationException("Không tìm thấy tờ trình xét duyệt cần cập nhật.");
+                    }
+
+                    if (!string.Equals(batch.GradeLevel.Trim(), dto.GradeLevel.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new UnauthorizedAccessException("Tờ trình xét duyệt không thuộc khối lớp đang thao tác.");
+                    }
+
+                    if (batch.AcademicYearId != dto.AcademicYearId)
+                    {
+                        throw new InvalidOperationException("Tờ trình xét duyệt không thuộc niên khóa đang chọn.");
+                    }
                 }
 
                 if (batch == null)
@@ -390,7 +412,7 @@ namespace ManagerStudentCaltholic.Services
                 batch.MinAttendanceRate = dto.MinAttendanceRate;
                 batch.RequireSacramentExam = dto.RequireSacramentExam;
                 batch.MinSacramentExamScore = dto.MinSacramentExamScore;
-                batch.PlannedCeremonyDate = DateTime.SpecifyKind(dto.PlannedCeremonyDate.Date, DateTimeKind.Utc);
+                batch.PlannedCeremonyDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(dto.PlannedCeremonyDate);
                 batch.CeremonyParish = dto.CeremonyParish.Trim();
                 batch.CelebrantPriest = dto.CelebrantPriest?.Trim();
                 batch.RegistryBookPrefix = dto.RegistryBookPrefix?.Trim();
@@ -488,7 +510,7 @@ namespace ManagerStudentCaltholic.Services
                         .Where(r => approvedStudentIds.Contains(r.StudentId) && r.SacramentType == batch.SacramentType)
                         .ToDictionaryAsync(r => r.StudentId, r => r);
 
-                    var receivedDateUtc = DateTime.SpecifyKind(batch.PlannedCeremonyDate.Date, DateTimeKind.Utc);
+                    var receivedDateUtc = VietnamTimeHelper.NormalizeBusinessDateUtcKind(batch.PlannedCeremonyDate);
                     int seq = 1;
 
                     foreach (var item in approvedItems)

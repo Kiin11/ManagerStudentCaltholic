@@ -4,6 +4,7 @@ using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
 using ManagerStudentCaltholic.Models.Options;
 using ManagerStudentCaltholic.Models.ViewModels;
+using ManagerStudentCaltholic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,16 @@ namespace ManagerStudentCaltholic.Controllers
         private static readonly HashSet<string> AllowedCertificateExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".pdf", ".jpg", ".jpeg", ".png", ".webp"
+        };
+
+        private static readonly Dictionary<string, string> CanonicalEvaluationGrades = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [GradeLevel.KhaiTam] = GradeLevel.KhaiTam,
+            [GradeLevel.RuocLe] = GradeLevel.RuocLe,
+            [GradeLevel.ThemSuc] = GradeLevel.ThemSuc,
+            [GradeLevel.BaoDong] = GradeLevel.BaoDong,
+            [GradeLevel.DuBi] = GradeLevel.DuBi,
+            [GradeLevel.DuBiCode] = GradeLevel.DuBi
         };
 
         private readonly ParishDbContext _context;
@@ -61,32 +72,54 @@ namespace ManagerStudentCaltholic.Controllers
             if (IsLeadership) return true;
 
             var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
-            var yearId = currentYear?.Id ?? 0;
+            if (currentYear == null) return false;
+
+            var yearId = currentYear.Id;
 
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
                 if (string.IsNullOrWhiteSpace(managedGrade)) return false;
 
+                var normalizedManaged = managedGrade.Trim();
                 return await _context.Enrollments
-                    .Include(e => e.ClassRoom)
+                    .AsNoTracking()
                     .AnyAsync(e => e.StudentId == studentId &&
-                                   (yearId == 0 || e.ClassRoom.AcademicYearId == yearId) &&
-                                   e.ClassRoom.GradeLevel == managedGrade);
+                                   e.ClassRoom.AcademicYearId == yearId &&
+                                   e.ClassRoom.GradeLevel == normalizedManaged);
             }
 
-            var assignedClassIds = await _context.ClassTeachers
-                .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId))
-                .Select(ct => ct.ClassRoomId)
+            var uid = CurrentUserId;
+            if (uid <= 0) return false;
+
+            var assignedClasses = await _context.ClassTeachers
+                .AsNoTracking()
+                .Where(ct => ct.UserId == uid &&
+                             ct.AcademicYearId == yearId &&
+                             ct.ClassRoom.AcademicYearId == yearId)
+                .Select(ct => new { ct.ClassRoomId, ct.ClassRoom.Session, ct.ClassRoom.GradeLevel })
                 .ToListAsync();
 
+            if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                assignedClasses = assignedClasses
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
+
+            var assignedClassIds = assignedClasses.Select(c => c.ClassRoomId).Distinct().ToList();
+            if (!assignedClassIds.Any()) return false;
+
             return await _context.Enrollments
-                .AnyAsync(e => e.StudentId == studentId && assignedClassIds.Contains(e.ClassRoomId));
+                .AsNoTracking()
+                .AnyAsync(e => e.StudentId == studentId &&
+                               e.ClassRoom.AcademicYearId == yearId &&
+                               assignedClassIds.Contains(e.ClassRoomId));
         }
 
         private static int CalculateAge(DateTime dob)
         {
-            var today = DateTime.UtcNow.Date;
+            var today = VietnamTimeHelper.Today;
             int age = today.Year - dob.Year;
             if (dob.Date > today.AddYears(-age)) age--;
             return Math.Max(0, age);
@@ -102,23 +135,47 @@ namespace ManagerStudentCaltholic.Controllers
             var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent);
             var yearId = currentYear?.Id ?? 0;
 
+            if (!string.IsNullOrWhiteSpace(grade) && !string.Equals(grade.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
+            {
+                grade = CanonicalEvaluationGrades.TryGetValue(grade.Trim(), out var canonicalGrade)
+                    ? canonicalGrade
+                    : "ALL";
+            }
+
             // Lọc danh sách lớp theo phạm vi quyền hạn
             var classesQuery = _context.Classes.Where(c => yearId == 0 || c.AcademicYearId == yearId);
             if (!IsLeadership)
             {
-                if (User.IsInRole(UserRole.BranchHead))
+                if (yearId == 0)
+                {
+                    classesQuery = classesQuery.Where(_ => false);
+                }
+                else if (User.IsInRole(UserRole.BranchHead))
                 {
                     var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
                     classesQuery = !string.IsNullOrWhiteSpace(managedGrade)
-                        ? classesQuery.Where(c => c.GradeLevel == managedGrade)
+                        ? classesQuery.Where(c => c.GradeLevel == managedGrade.Trim())
                         : classesQuery.Where(_ => false);
                 }
                 else
                 {
-                    var assignedIds = await _context.ClassTeachers
-                        .Where(ct => ct.UserId == CurrentUserId && (yearId == 0 || ct.AcademicYearId == yearId))
-                        .Select(ct => ct.ClassRoomId)
+                    var uid = CurrentUserId;
+                    var assignedClasses = await _context.ClassTeachers
+                        .AsNoTracking()
+                        .Where(ct => ct.UserId == uid &&
+                                     ct.AcademicYearId == yearId &&
+                                     ct.ClassRoom.AcademicYearId == yearId)
+                        .Select(ct => new { ct.ClassRoomId, ct.ClassRoom.Session, ct.ClassRoom.GradeLevel })
                         .ToListAsync();
+
+                    if (User.IsInRole(UserRole.ProbationaryTeacher))
+                    {
+                        assignedClasses = assignedClasses
+                            .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                            .ToList();
+                    }
+
+                    var assignedIds = assignedClasses.Select(c => c.ClassRoomId).Distinct().ToList();
                     classesQuery = classesQuery.Where(c => assignedIds.Contains(c.Id));
                 }
             }
@@ -128,7 +185,19 @@ namespace ManagerStudentCaltholic.Controllers
                 .AsNoTracking()
                 .ToListAsync();
 
+            if (!IsLeadership && User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                availableClasses = availableClasses
+                    .Where(c => !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
+                    .ToList();
+            }
+
             var allowedClassIds = availableClasses.Select(c => c.Id).ToList();
+
+            if (classId.HasValue && classId.Value > 0 && !IsLeadership && !allowedClassIds.Contains(classId.Value))
+            {
+                return Forbid();
+            }
 
             // Lấy danh sách học sinh trong phạm vi
             IQueryable<Student> studentQuery = _context.Students.Where(s => s.IsActive).AsNoTracking();
@@ -688,6 +757,59 @@ namespace ManagerStudentCaltholic.Controllers
             });
         }
 
+        private async Task<(bool Allowed, string? ManagedGrade, string? ErrorMessage)> ValidateBranchHeadScopeAsync(
+            long? batchId,
+            string? requestedGrade,
+            int? classId)
+        {
+            if (!(User.IsInRole(UserRole.BranchHead) && !IsLeadership))
+            {
+                return (true, null, null);
+            }
+
+            var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(managedGrade))
+            {
+                return (false, null, "Tài khoản Trưởng khối chưa được gán khối phụ trách.");
+            }
+
+            if (batchId.HasValue && batchId.Value > 0)
+            {
+                var batch = await _context.SacramentApprovalBatches
+                    .AsNoTracking()
+                    .Where(b => b.Id == batchId.Value)
+                    .Select(b => new { b.Id, b.GradeLevel })
+                    .FirstOrDefaultAsync();
+
+                if (batch == null || !string.Equals(batch.GradeLevel.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, managedGrade, "Bạn không có quyền truy cập tờ trình xét duyệt của khối khác.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(requestedGrade) &&
+                !string.Equals(requestedGrade.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, managedGrade, "Bạn không có quyền truy cập dữ liệu xét duyệt của khối khác.");
+            }
+
+            if (classId.HasValue && classId.Value > 0)
+            {
+                var cls = await _context.Classes
+                    .AsNoTracking()
+                    .Where(c => c.Id == classId.Value)
+                    .Select(c => new { c.Id, c.GradeLevel })
+                    .FirstOrDefaultAsync();
+
+                if (cls == null || !string.Equals(cls.GradeLevel.Trim(), managedGrade, StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, managedGrade, "Bạn không có quyền truy cập lớp học của khối khác.");
+                }
+            }
+
+            return (true, managedGrade, null);
+        }
+
         /// <summary>
         /// 4. GET: /Sacraments/Evaluation (Dashboard tự động xét duyệt điều kiện Bí tích - TASK-P3-04.3)
         /// </summary>
@@ -704,23 +826,31 @@ namespace ManagerStudentCaltholic.Controllers
             decimal minExam = 5.0m,
             long? batchId = null)
         {
+            string selectedGrade = GradeLevel.RuocLe;
+            if (!string.IsNullOrWhiteSpace(grade))
+            {
+                if (!CanonicalEvaluationGrades.TryGetValue(grade.Trim(), out var canonicalGrade))
+                {
+                    return BadRequest("Khối xét duyệt không hợp lệ.");
+                }
+                selectedGrade = canonicalGrade;
+            }
+
+            var scopeCheck = await ValidateBranchHeadScopeAsync(batchId, requestedGrade: null, classId);
+            if (!scopeCheck.Allowed)
+            {
+                return Forbid();
+            }
+
+            if (!string.IsNullOrWhiteSpace(scopeCheck.ManagedGrade))
+            {
+                selectedGrade = scopeCheck.ManagedGrade;
+            }
+
             var currentYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.IsCurrent)
                               ?? await _context.AcademicYears.OrderByDescending(y => y.StartDate).AsNoTracking().FirstOrDefaultAsync();
 
             int targetYearId = academicYearId ?? currentYear?.Id ?? 0;
-            string selectedGrade = string.IsNullOrWhiteSpace(grade) ? "Rước Lễ" : grade.Trim();
-
-            // Nếu là Trưởng khối (BranchHead): Khóa phạm vi vào đúng khối mình phụ trách
-            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    return Forbid();
-                }
-                selectedGrade = managedGrade;
-            }
-
             int targetSacType = sacramentType ?? _evaluationService.InferDefaultSacramentTypeByGrade(selectedGrade);
 
             var vm = await _evaluationService.EvaluateCandidatesAsync(
@@ -753,14 +883,22 @@ namespace ManagerStudentCaltholic.Controllers
                 return BadRequest(new { success = false, message = err });
             }
 
-            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            if (string.IsNullOrWhiteSpace(dto.GradeLevel) ||
+                !CanonicalEvaluationGrades.TryGetValue(dto.GradeLevel.Trim(), out var canonicalGrade))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade) ||
-                    !string.Equals(dto.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { success = false, message = "Khối xét duyệt không hợp lệ." });
+            }
+
+            dto.GradeLevel = canonicalGrade;
+
+            var scopeCheck = await ValidateBranchHeadScopeAsync(dto.BatchId, dto.GradeLevel, dto.ClassRoomId);
+            if (!scopeCheck.Allowed)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
                 {
-                    return Forbid();
-                }
+                    success = false,
+                    message = scopeCheck.ErrorMessage ?? "Bạn không có quyền thao tác tờ trình của khối khác."
+                });
             }
 
             var operatorName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Ban Điều Hành";
@@ -774,6 +912,10 @@ namespace ManagerStudentCaltholic.Controllers
                     batchId = savedBatch.Id,
                     message = $"Đã lưu tờ trình xét duyệt #{savedBatch.Id} ({savedBatch.Title}) thành công!"
                 });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {
@@ -831,20 +973,30 @@ namespace ManagerStudentCaltholic.Controllers
             decimal minExam = 5.0m,
             long? batchId = null)
         {
-            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            if (string.IsNullOrWhiteSpace(grade) ||
+                !CanonicalEvaluationGrades.TryGetValue(grade.Trim(), out var canonicalGrade))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade) ||
-                    !string.Equals(grade, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid();
-                }
+                return BadRequest("Khối xét duyệt không hợp lệ.");
             }
 
-            var excelBytes = await _evaluationService.ExportApprovalSheetToExcelAsync(
-                academicYearId, grade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
+            string? requestedGradeCheck = (batchId.HasValue && batchId.Value > 0 && !Request.Query.ContainsKey("grade"))
+                ? null
+                : canonicalGrade;
 
-            var fileName = $"ToTrinh_XetDuyet_BiTich_{grade.Replace(" ", "_")}_{DateTime.Now:yyyyMMdd}.xlsx";
+            var scopeCheck = await ValidateBranchHeadScopeAsync(batchId, requestedGradeCheck, classId);
+            if (!scopeCheck.Allowed)
+            {
+                return Forbid();
+            }
+
+            var effectiveGrade = !string.IsNullOrWhiteSpace(scopeCheck.ManagedGrade)
+                ? scopeCheck.ManagedGrade
+                : canonicalGrade;
+
+            var excelBytes = await _evaluationService.ExportApprovalSheetToExcelAsync(
+                academicYearId, effectiveGrade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
+
+            var fileName = $"ToTrinh_XetDuyet_BiTich_{effectiveGrade.Replace(" ", "_")}_{VietnamTimeHelper.Now:yyyyMMdd}.xlsx";
             return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
@@ -865,18 +1017,28 @@ namespace ManagerStudentCaltholic.Controllers
             long? batchId = null,
             bool onlyApproved = true)
         {
-            if (User.IsInRole(UserRole.BranchHead) && !IsLeadership)
+            if (string.IsNullOrWhiteSpace(grade) ||
+                !CanonicalEvaluationGrades.TryGetValue(grade.Trim(), out var canonicalGrade))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade) ||
-                    !string.Equals(grade, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid();
-                }
+                return BadRequest("Khối xét duyệt không hợp lệ.");
             }
 
+            string? requestedGradeCheck = (batchId.HasValue && batchId.Value > 0 && !Request.Query.ContainsKey("grade"))
+                ? null
+                : canonicalGrade;
+
+            var scopeCheck = await ValidateBranchHeadScopeAsync(batchId, requestedGradeCheck, classId);
+            if (!scopeCheck.Allowed)
+            {
+                return Forbid();
+            }
+
+            var effectiveGrade = !string.IsNullOrWhiteSpace(scopeCheck.ManagedGrade)
+                ? scopeCheck.ManagedGrade
+                : canonicalGrade;
+
             var vm = await _evaluationService.EvaluateCandidatesAsync(
-                academicYearId, grade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
+                academicYearId, effectiveGrade, classId, sacramentType, minAvg, minAtt, reqExam, minExam, batchId);
 
             if (onlyApproved)
             {

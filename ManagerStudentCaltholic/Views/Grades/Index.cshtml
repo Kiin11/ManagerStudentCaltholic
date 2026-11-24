@@ -608,9 +608,19 @@ else
             return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
+        function escapeHtml(value) {
+            if (value === null || value === undefined) return '';
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function onFilterChange() {
             const cId = document.getElementById('selectClass').value;
-            window.location.href = `/Grades/Index?classId=${cId}&semester=@Model.CurrentSemester`;
+            window.location.href = `/Grades/Index?classId=${encodeURIComponent(cId)}&semester=@Model.CurrentSemester`;
         }
 
         function openAddColumnModal() {
@@ -815,9 +825,9 @@ else
                 if (sheet.descriptor.requireCampaignCheck) {
                     banner.classList.remove('d-none');
                     if (sheet.hasActiveMassCampaign) {
-                        banner.innerHTML = `<i class="bi bi-calendar2-heart-fill me-2"></i><strong>Chiến dịch đi lễ 1 tháng đang liên kết:</strong> ${sheet.massCampaignTitle} (Chỉ tiêu tối thiểu: <strong>${sheet.massCampaignTargetDays} ngày</strong>).`;
+                        banner.innerHTML = `<i class="bi bi-calendar2-heart-fill me-2"></i><strong>Chiến dịch đi lễ 1 tháng đang liên kết:</strong> ${escapeHtml(sheet.massCampaignTitle)} (Chỉ tiêu tối thiểu: <strong>${Number(sheet.massCampaignTargetDays) || 0} ngày</strong>).`;
                     } else {
-                        banner.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>Lớp chưa khởi tạo Chiến dịch đi lễ 1 tháng. <a href="/MassCampaigns/Index?classId=${sheet.classId}" class="fw-bold">Thiết lập tại đây</a>.`;
+                        banner.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-2"></i>Lớp chưa khởi tạo Chiến dịch đi lễ 1 tháng. <a href="/MassCampaigns/Index?classId=${parseInt(sheet.classId, 10) || 0}" class="fw-bold">Thiết lập tại đây</a>.`;
                     }
                 } else {
                     banner.classList.add('d-none');
@@ -832,33 +842,34 @@ else
                     tr.setAttribute('data-enrollment-id', st.enrollmentId);
                     tr.setAttribute('data-eligible', st.isAutoEligible ? 'true' : 'false');
 
+                    const safeReason = escapeHtml(st.autoIneligibleReason);
                     const autoBadge = st.isAutoEligible
                         ? `<span class="badge bg-success-subtle text-success border border-success-subtle">Đủ ĐK chuẩn</span>`
-                        : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="${st.autoIneligibleReason}">${st.autoIneligibleReason}</span>`;
+                        : `<span class="badge bg-danger-subtle text-danger border border-danger-subtle" title="${safeReason}">${safeReason}</span>`;
 
                     const campaignCellHtml = showCampaign
-                        ? `<td class="text-center ${st.isCampaignTargetMet ? 'text-success fw-bold' : 'text-danger fw-bold'}">${st.campaignAttendedDays}/${st.campaignTargetDays}</td>`
+                        ? `<td class="text-center ${st.isCampaignTargetMet ? 'text-success fw-bold' : 'text-danger fw-bold'}">${Number(st.campaignAttendedDays) || 0}/${Number(st.campaignTargetDays) || 0}</td>`
                         : `<td class="d-none"></td>`;
 
                     const sacramentExamHtml = isSacramentOrPromise
-                        ? `<td class="text-center fw-semibold">${st.sacramentExamScore !== null ? st.sacramentExamScore.toFixed(1) : '-'}</td>`
+                        ? `<td class="text-center fw-semibold">${st.sacramentExamScore !== null ? Number(st.sacramentExamScore).toFixed(1) : '-'}</td>`
                         : `<td class="d-none"></td>`;
 
                     const godparentInputHtml = isSacramentOrPromise
-                        ? `<td><input type="text" class="form-control form-control-sm inp-godparent" value="${st.godparentName || ''}" placeholder="Tên Thánh & Họ tên..." /></td>`
+                        ? `<td><input type="text" class="form-control form-control-sm inp-godparent" value="${escapeHtml(st.godparentName || '')}" placeholder="Tên Thánh & Họ tên..." /></td>`
                         : `<td class="d-none"><input type="hidden" class="inp-godparent" value="" /></td>`;
 
                     tr.innerHTML = `
-                        <td class="text-center fw-bold text-primary">${st.studentCode}</td>
-                        <td><div class="fw-semibold">${st.christianName} ${st.fullName}</div></td>
-                        <td class="text-center">${st.semester1Avg !== null ? st.semester1Avg.toFixed(1) : '-'}</td>
-                        <td class="text-center">${st.semester2Avg !== null ? st.semester2Avg.toFixed(1) : '-'}</td>
+                        <td class="text-center fw-bold text-primary">${escapeHtml(st.studentCode)}</td>
+                        <td><div class="fw-semibold">${escapeHtml(st.christianName)} ${escapeHtml(st.fullName)}</div></td>
+                        <td class="text-center">${st.semester1Avg !== null ? Number(st.semester1Avg).toFixed(1) : '-'}</td>
+                        <td class="text-center">${st.semester2Avg !== null ? Number(st.semester2Avg).toFixed(1) : '-'}</td>
                         <td class="text-center fw-bold ${st.yearAvg !== null && st.yearAvg >= sheet.minYearAverage ? 'text-primary' : 'text-danger'}">
-                            ${st.yearAvg !== null ? st.yearAvg.toFixed(2) : '-'}
+                            ${st.yearAvg !== null ? Number(st.yearAvg).toFixed(2) : '-'}
                         </td>
                         ${sacramentExamHtml}
                         <td class="text-center ${st.combinedAttendanceRate >= sheet.minAttendanceRate ? 'text-success' : 'text-danger'} fw-semibold">
-                            ${st.combinedAttendanceRate}%
+                            ${Number(st.combinedAttendanceRate) || 0}%
                         </td>
                         ${campaignCellHtml}
                         <td class="text-center">${autoBadge}</td>
@@ -872,7 +883,7 @@ else
                         ${godparentInputHtml}
                         <td>
                             <input type="text" class="form-control form-control-sm inp-proposal-note"
-                                   value="${st.proposalNote || ''}"
+                                   value="${escapeHtml(st.proposalNote || '')}"
                                    placeholder="${st.isAutoEligible ? 'Nhận xét thêm...' : 'Nhập lý do xin đặc cách...'}" />
                         </td>
                     `;
