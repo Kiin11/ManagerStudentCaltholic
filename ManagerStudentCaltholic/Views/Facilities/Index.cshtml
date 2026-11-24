@@ -1,10 +1,13 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.BuildingZone>
+@using ManagerStudentCaltholic.Models.Entities
+@using System.Text.Encodings.Web
 @{
     ViewData["Title"] = "Sơ Đồ Phòng Học & Sĩ Số Điểm Danh Thực Tế";
-    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, (ManagerStudentCaltholic.Models.Entities.ClassRoom? Morning, int MorningPresent, ManagerStudentCaltholic.Models.Entities.ClassRoom? Afternoon, int AfternoonPresent)> ?? new();
-    var pendingIncidents = ViewBag.PendingIncidents as List<ManagerStudentCaltholic.Models.Entities.RoomIncidentReport> ?? new();
-    var allClasses = ViewBag.AllClasses as List<ManagerStudentCaltholic.Models.Entities.ClassRoom> ?? new();
+    var roomOccupancy = ViewBag.RoomOccupancy as Dictionary<int, (ClassRoom? Morning, int MorningPresent, ClassRoom? Afternoon, int AfternoonPresent)> ?? new();
+    var pendingIncidents = ViewBag.PendingIncidents as List<RoomIncidentReport> ?? new();
+    var allClasses = ViewBag.AllClasses as List<ClassRoom> ?? new();
     var viewDate = (string)ViewBag.ViewDate;
+    bool canResolveIncidents = User.IsInRole(UserRole.Admin) || User.IsInRole(UserRole.ExecutiveBoard);
 }
 
 <style>
@@ -341,6 +344,135 @@
             </div>
         </div>
     </div>
+
+    <!-- 3. DANH SÁCH SỰ CỐ CHỜ XỬ LÝ (TASK-P5-08.2) -->
+    <div class="card border-0 shadow-sm rounded-3 mt-4 overflow-hidden" id="pendingIncidentsSection">
+        <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="fw-bold text-danger mb-0">
+                    <i class="bi bi-tools me-2"></i>Danh sách Sự cố chờ xử lý
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">@pendingIncidents.Count</span>
+                </h5>
+                <small class="text-muted">Các hư hỏng thiết bị phòng học đang chờ kiểm tra và khắc phục</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#reportIncidentModal">
+                <i class="bi bi-plus-circle me-1"></i> Báo Sự Cố Mới
+            </button>
+        </div>
+
+        @if (pendingIncidents.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th class="ps-3" style="min-width: 140px;">Phòng Học</th>
+                            <th style="min-width: 150px;">Thiết Bị & Mức Độ</th>
+                            <th style="min-width: 220px;">Mô Tả Chi Tiết</th>
+                            <th class="text-center" style="width: 120px;">Ảnh Sự Cố</th>
+                            <th style="min-width: 160px;">Người Báo / Lúc</th>
+                            @if (canResolveIncidents)
+                            {
+                                <th class="text-end pe-3" style="width: 150px;">Thao Tác</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var inc in pendingIncidents)
+                        {
+                            var roomTitle = inc.ClassRoomLocation?.RoomName ?? $"Phòng #{inc.ClassRoomLocationId}";
+                            var severityBadge = inc.Severity?.ToUpperInvariant() switch
+                            {
+                                "HIGH" or "CRITICAL" => ("bg-danger text-white", "Khẩn cấp"),
+                                "LOW" => ("bg-secondary-subtle text-secondary border", "Nhẹ"),
+                                _ => ("bg-warning-subtle text-warning-emphasis border border-warning-subtle", "Bình thường")
+                            };
+                            var reporterName = inc.ReporterUser != null && !string.IsNullOrWhiteSpace(inc.ReporterUser.FirstName)
+                                ? $"{inc.ReporterUser.LastName} {inc.ReporterUser.FirstName}".Trim()
+                                : (inc.ReporterUser?.Username ?? "GLV");
+
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="fw-bold text-dark">@roomTitle</div>
+                                    @if (inc.ClassRoomLocation != null)
+                                    {
+                                        <small class="text-muted">Tầng @inc.ClassRoomLocation.FloorNumber</small>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">@inc.DeviceType</div>
+                                    <span class="badge @severityBadge.Item1 mt-1">@severityBadge.Item2</span>
+                                </td>
+                                <td>
+                                    <div class="text-dark small" style="white-space: pre-line;">@inc.Description</div>
+                                </td>
+                                <td class="text-center">
+                                    @if (inc.CloudImageFileId.HasValue)
+                                    {
+                                        var proxyImgUrl = $"/CloudMedia/File/{inc.CloudImageFileId}";
+                                        <div class="d-inline-flex flex-column align-items-center gap-1">
+                                            <a href="javascript:void(0)"
+                                               class="d-inline-block"
+                                               title="Bấm để xem ảnh lớn"
+                                               onclick="openIncidentImageModal('@proxyImgUrl', '@JavaScriptEncoder.Default.Encode(roomTitle)', '@JavaScriptEncoder.Default.Encode(inc.DeviceType)')">
+                                                <img src="/CloudMedia/File/@inc.CloudImageFileId"
+                                                     alt="Ảnh sự cố @roomTitle"
+                                                     class="rounded-3 border shadow-sm"
+                                                     style="width: 64px; height: 64px; object-fit: cover; cursor: zoom-in;"
+                                                     loading="lazy"
+                                                     onerror="handleIncidentThumbError(this)" />
+                                            </a>
+                                            @if (inc.CloudImageFile != null)
+                                            {
+                                                if (string.Equals(inc.CloudImageFile.StorageProvider, CloudStorageProvider.GoogleDrive, StringComparison.OrdinalIgnoreCase)
+                                                    && string.Equals(inc.CloudImageFile.SyncStatus, CloudSyncStatus.Success, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.68rem;">
+                                                        <i class="bi bi-cloud-check me-1"></i>Drive
+                                                    </span>
+                                                }
+                                                else if (string.Equals(inc.CloudImageFile.StorageProvider, CloudStorageProvider.LocalFallback, StringComparison.OrdinalIgnoreCase))
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.68rem;">
+                                                        <i class="bi bi-cloud-arrow-up me-1"></i>Chờ sync
+                                                    </span>
+                                                }
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Không có</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark small"><i class="bi bi-person me-1 text-secondary"></i>@reporterName</div>
+                                    <small class="text-muted">@inc.ReportedAt.ToString("dd/MM/yyyy HH:mm")</small>
+                                </td>
+                                @if (canResolveIncidents)
+                                {
+                                    <td class="text-end pe-3">
+                                        <button type="button"
+                                                class="btn btn-sm btn-success rounded-pill px-3 shadow-xs"
+                                                onclick="openResolveIncidentModal(@inc.Id, '@JavaScriptEncoder.Default.Encode(roomTitle)', '@JavaScriptEncoder.Default.Encode(inc.DeviceType)')">
+                                            <i class="bi bi-check2-circle me-1"></i> Đã sửa
+                                        </button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="card-body py-4 text-center text-muted">
+                <i class="bi bi-check-circle fs-3 text-success d-block mb-1"></i>
+                Hiện không có sự cố phòng học nào đang chờ xử lý.
+            </div>
+        }
+    </div>
 </div><!-- MODAL PHÂN PHÒNG HỌC CHO LỚP -->
 <div class="modal fade" id="assignRoomModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -445,13 +577,79 @@
                     <label class="form-label small fw-bold">Mô tả chi tiết <span class="text-danger">*</span></label>
                     <textarea id="incDescription" class="form-control" rows="3" placeholder="Mô tả tình trạng hư hỏng..."></textarea>
                 </div>
-                <button type="button" class="btn btn-danger w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitIncidentReport()">
+                <div class="mb-3">
+                    <label for="incImage" class="form-label small fw-bold">
+                        Ảnh chụp sự cố <span class="text-muted fw-normal">(Tùy chọn, tối đa 15 MB)</span>
+                    </label>
+                    <input type="file" id="incImage" class="form-control form-control-sm" accept="image/*" onchange="previewIncidentImage(this)" />
+                    <div class="form-text text-muted small">Hỗ trợ JPG, PNG, WebP, GIF. Hệ thống tự động nén sang WebP khi tải lên.</div>
+                    <div id="incImagePreviewContainer" class="mt-2 d-none">
+                        <div class="position-relative d-inline-block">
+                            <img id="incImagePreview" src="" alt="Xem trước ảnh sự cố" class="img-thumbnail rounded-3" style="max-height: 160px; object-fit: cover;" />
+                            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 rounded-circle p-0" style="width: 24px; height: 24px; line-height: 1;" title="Bỏ ảnh đã chọn" onclick="clearIncidentImage()">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" id="btnSubmitIncidentReport" class="btn btn-danger w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitIncidentReport()">
                     Gửi Báo Cáo
                 </button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- MODAL XEM ẢNH SỰ CỐ PHÓNG TO -->
+<div class="modal fade" id="incidentImagePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-dark text-white py-2">
+                <h6 class="modal-title fw-bold mb-0" id="incidentPreviewModalTitle">
+                    <i class="bi bi-image me-2"></i>Ảnh sự cố phòng học
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3 bg-light text-center">
+                <img id="incidentPreviewModalImg" src="" alt="Ảnh sự cố phòng học" class="img-fluid rounded-3 shadow-sm" style="max-height: 75vh;" />
+            </div>
+            <div class="modal-footer bg-white py-2">
+                <a id="incidentPreviewDownloadLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Mở ảnh gốc
+                </a>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (canResolveIncidents)
+{
+    <!-- MODAL XÁC NHẬN ĐÃ KHẮC PHỤC SỰ CỐ -->
+    <div class="modal fade" id="resolveIncidentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-check2-circle me-2"></i>Xác Nhận Đã Khắc Phục Sự Cố
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" id="resolveReportId" value="0" />
+                    <div class="alert alert-light border small mb-3" id="resolveIncidentSummary"></div>
+                    <div class="mb-3">
+                        <label for="resolveNotes" class="form-label small fw-bold">Ghi chú xử lý (Tùy chọn)</label>
+                        <textarea id="resolveNotes" class="form-control" rows="2" placeholder="Ví dụ: Đã thay bóng đèn / sửa quạt xong..."></textarea>
+                    </div>
+                    <button type="button" id="btnConfirmResolveIncident" class="btn btn-success w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitResolveIncident()">
+                        <i class="bi bi-check-lg me-1"></i> Xác Nhận Hoàn Tất
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @section Scripts {
     <script>
@@ -567,14 +765,160 @@
                 alert('Lỗi kết nối: ' + err.message);
             }
         }
-                async function submitIncidentReport() {
+        const MAX_INCIDENT_IMAGE_BYTES = 15 * 1024 * 1024;
+        let incidentPreviewObjectUrl = null;
+
+        function previewIncidentImage(input) {
+            const container = document.getElementById('incImagePreviewContainer');
+            const previewImg = document.getElementById('incImagePreview');
+            const file = input?.files?.[0];
+
+            if (!file) {
+                clearIncidentImage();
+                return;
+            }
+
+            if (file.size > MAX_INCIDENT_IMAGE_BYTES) {
+                alert('Dung lượng ảnh sự cố vượt quá giới hạn tối đa 15 MB!');
+                clearIncidentImage();
+                return;
+            }
+
+            if (file.type && !file.type.startsWith('image/')) {
+                alert('Vui lòng chỉ chọn tệp hình ảnh hợp lệ (JPG, PNG, WebP, GIF)!');
+                clearIncidentImage();
+                return;
+            }
+
+            if (incidentPreviewObjectUrl) {
+                URL.revokeObjectURL(incidentPreviewObjectUrl);
+            }
+
+            incidentPreviewObjectUrl = URL.createObjectURL(file);
+            if (previewImg) previewImg.src = incidentPreviewObjectUrl;
+            if (container) container.classList.remove('d-none');
+        }
+
+        function clearIncidentImage() {
+            const input = document.getElementById('incImage');
+            const container = document.getElementById('incImagePreviewContainer');
+            const previewImg = document.getElementById('incImagePreview');
+
+            if (incidentPreviewObjectUrl) {
+                URL.revokeObjectURL(incidentPreviewObjectUrl);
+                incidentPreviewObjectUrl = null;
+            }
+
+            if (input) input.value = '';
+            if (previewImg) previewImg.src = '';
+            if (container) container.classList.add('d-none');
+        }
+
+        function handleIncidentThumbError(imgEl) {
+            const link = imgEl?.closest('a');
+            if (!link) return;
+            const fallbackBadge = document.createElement('span');
+            fallbackBadge.className = 'badge bg-light text-secondary border';
+            fallbackBadge.innerHTML = '<i class="bi bi-lock me-1"></i>Ảnh (BĐH)';
+            link.replaceWith(fallbackBadge);
+        }
+
+        function openIncidentImageModal(imgUrl, roomName, deviceType) {
+            const titleEl = document.getElementById('incidentPreviewModalTitle');
+            const imgEl = document.getElementById('incidentPreviewModalImg');
+            const linkEl = document.getElementById('incidentPreviewDownloadLink');
+
+            if (titleEl) {
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-image me-2';
+                titleEl.replaceChildren(icon, document.createTextNode(`Ảnh sự cố: ${roomName} - ${deviceType}`));
+            }
+            if (imgEl) imgEl.src = imgUrl;
+            if (linkEl) linkEl.href = imgUrl;
+
+            const modalEl = document.getElementById('incidentImagePreviewModal');
+            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        function openResolveIncidentModal(reportId, roomName, deviceType) {
+            const idInput = document.getElementById('resolveReportId');
+            const summaryEl = document.getElementById('resolveIncidentSummary');
+            const notesInput = document.getElementById('resolveNotes');
+
+            if (idInput) idInput.value = reportId;
+            if (notesInput) notesInput.value = '';
+            if (summaryEl) {
+                const strongDevice = document.createElement('strong');
+                strongDevice.textContent = deviceType;
+                const strongRoom = document.createElement('strong');
+                strongRoom.textContent = roomName;
+                summaryEl.replaceChildren(
+                    document.createTextNode('Xác nhận đã sửa chữa xong sự cố '),
+                    strongDevice,
+                    document.createTextNode(' tại phòng '),
+                    strongRoom,
+                    document.createTextNode('?')
+                );
+            }
+
+            const modalEl = document.getElementById('resolveIncidentModal');
+            if (modalEl) bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+
+        async function submitResolveIncident() {
+            const reportId = document.getElementById('resolveReportId')?.value;
+            const notes = document.getElementById('resolveNotes')?.value?.trim() || '';
+            const btn = document.getElementById('btnConfirmResolveIncident');
+
+            if (!reportId || Number(reportId) <= 0) return;
+
+            const formData = new FormData();
+            formData.append('reportId', reportId);
+            formData.append('notes', notes);
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang cập nhật...';
+            }
+
+            try {
+                const res = await fetch('/Facilities/ResolveIncident', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken(),
+                        'RequestVerificationToken': getCsrfToken()
+                    },
+                    body: formData
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) location.reload();
+            } catch (err) {
+                alert('Lỗi kết nối: ' + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Xác Nhận Hoàn Tất';
+                }
+            }
+        }
+
+        async function submitIncidentReport() {
             const locationId = document.getElementById('incLocationId').value;
             const deviceType = document.getElementById('incDeviceType').value;
             const severity = document.getElementById('incSeverity').value;
             const description = document.getElementById('incDescription').value.trim();
+            const imageInput = document.getElementById('incImage');
+            const selectedImage = imageInput?.files?.[0];
+            const submitBtn = document.getElementById('btnSubmitIncidentReport');
 
             if (!locationId || !description) {
                 alert('Vui lòng chọn phòng học và nhập mô tả sự cố!');
+                return;
+            }
+
+            if (selectedImage && selectedImage.size > MAX_INCIDENT_IMAGE_BYTES) {
+                alert('Dung lượng ảnh sự cố vượt quá giới hạn tối đa 15 MB!');
                 return;
             }
 
@@ -583,6 +927,14 @@
             formData.append('deviceType', deviceType);
             formData.append('severity', severity);
             formData.append('description', description);
+            if (selectedImage) {
+                formData.append('incidentImage', selectedImage);
+            }
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang gửi báo cáo...';
+            }
 
             try {
                 const res = await fetch('/Facilities/ReportIncident', {
@@ -598,6 +950,11 @@
                 if (data.success) location.reload();
             } catch (err) {
                 alert('Lỗi kết nối: ' + err.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Gửi Báo Cáo';
+                }
             }
         }
     </script>

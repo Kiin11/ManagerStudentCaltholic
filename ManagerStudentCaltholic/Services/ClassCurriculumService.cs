@@ -9,7 +9,9 @@ using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using UglyToad.PdfPig;
 
 namespace ManagerStudentCaltholic.Services
@@ -17,12 +19,20 @@ namespace ManagerStudentCaltholic.Services
     public class ClassCurriculumService : IClassCurriculumService
     {
         private readonly ParishDbContext _context;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly GoogleDriveOptions _driveOptions;
         private readonly ILogger<ClassCurriculumService> _logger;
         private readonly string _storageFolder;
 
-        public ClassCurriculumService(ParishDbContext context, ILogger<ClassCurriculumService> logger)
+        public ClassCurriculumService(
+            ParishDbContext context,
+            IGoogleDriveStorageService storageService,
+            IOptions<GoogleDriveOptions> driveOptions,
+            ILogger<ClassCurriculumService> logger)
         {
             _context = context;
+            _storageService = storageService;
+            _driveOptions = driveOptions.Value;
             _logger = logger;
             _storageFolder = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "PrivateUploads", "curriculums"));
             if (!Directory.Exists(_storageFolder))
@@ -43,6 +53,7 @@ namespace ManagerStudentCaltholic.Services
                 .FirstOrDefaultAsync(y => y.Id == academicYearId);
 
             var doc = await _context.ClassCurriculumDocuments
+                .Include(d => d.CloudFile)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(d => d.ClassRoomId == classRoomId && d.AcademicYearId == academicYearId);
 
@@ -106,6 +117,9 @@ namespace ManagerStudentCaltholic.Services
                 LastAttachmentFileName = doc?.LastAttachmentFileName,
                 LastAttachmentFilePath = doc?.LastAttachmentFilePath,
                 LastAttachmentFileSize = doc?.LastAttachmentFileSize ?? 0,
+                CloudFileId = doc?.CloudFileId,
+                StorageProvider = doc?.CloudFile?.StorageProvider,
+                SyncStatus = doc?.CloudFile?.SyncStatus,
                 UpdatedBy = doc?.UpdatedBy ?? "Hệ thống",
                 UpdatedAt = doc?.UpdatedAt ?? DateTime.UtcNow,
                 TotalWeeks = items.Count,
@@ -116,6 +130,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task<List<ClassCurriculumVersionDto>> GetVersionsAsync(long documentId)
         {
             var versions = await _context.ClassCurriculumVersions
+                .Include(v => v.CloudFile)
                 .Where(v => v.ClassCurriculumDocumentId == documentId)
                 .OrderByDescending(v => v.VersionNumber)
                 .AsNoTracking()
@@ -144,6 +159,9 @@ namespace ManagerStudentCaltholic.Services
                     FileName = v.FileName,
                     FilePath = $"/LessonPlans/DownloadCurriculumVersion/{v.Id}",
                     FileSize = v.FileSize,
+                    CloudFileId = v.CloudFileId,
+                    StorageProvider = v.CloudFile?.StorageProvider,
+                    SyncStatus = v.CloudFile?.SyncStatus,
                     CreatedBy = v.CreatedBy,
                     CreatedAt = v.CreatedAt,
                     TotalWeeks = totalWeeks
@@ -154,6 +172,7 @@ namespace ManagerStudentCaltholic.Services
         public async Task<ClassCurriculumVersionDto?> GetVersionDetailAsync(long versionId)
         {
             var v = await _context.ClassCurriculumVersions
+                .Include(x => x.CloudFile)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == versionId);
             if (v == null) return null;
@@ -178,6 +197,9 @@ namespace ManagerStudentCaltholic.Services
                 FileName = v.FileName,
                 FilePath = $"/LessonPlans/DownloadCurriculumVersion/{v.Id}",
                 FileSize = v.FileSize,
+                CloudFileId = v.CloudFileId,
+                StorageProvider = v.CloudFile?.StorageProvider,
+                SyncStatus = v.CloudFile?.SyncStatus,
                 CreatedBy = v.CreatedBy,
                 CreatedAt = v.CreatedAt,
                 TotalWeeks = items.Count,
@@ -193,6 +215,19 @@ namespace ManagerStudentCaltholic.Services
                 {
                     Success = false,
                     Message = "Không tìm thấy file để nạp chương trình."
+                };
+            }
+
+            var maxLessonPlanBytes = _driveOptions.MaxLessonPlanBytes > 0
+                ? _driveOptions.MaxLessonPlanBytes
+                : 25L * 1024 * 1024;
+            if (file.Length > maxLessonPlanBytes)
+            {
+                var maxMb = Math.Round(maxLessonPlanBytes / (1024d * 1024d), 1);
+                return new CurriculumParseResultDto
+                {
+                    Success = false,
+                    Message = $"Dung lượng file vượt quá giới hạn {maxMb:0.#} MB."
                 };
             }
 
@@ -317,11 +352,10 @@ namespace ManagerStudentCaltholic.Services
                     string dateStamp = DateTime.UtcNow.ToString("yyyyMMdd");
                     string generatedFileName = $"KeHoach_{cleanClassName}_{versionTag}_{dateStamp}.xlsx";
                     string storedFileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.xlsx";
-                    string physicalPath = Path.Combine(_storageFolder, storedFileName);
 
-                    // 1. Tự động sinh file Excel với mẫu chuẩn giao diện đẹp
-                    var excelBytes = GenerateExcelFileBytes(cls.Name, cls.GradeLevel, year.Name, versionTag, items);
-                    await File.WriteAllBytesAsync(physicalPath, excelBytes);
+                    // 1. Tự động sinh file Excel vào MemoryStream (tránh ghi trùng file cục bộ khi dùng Google Drive)
+                    await using var excelStream = GenerateExcelToMemoryStream(cls.Name, cls.GradeLevel, year.Name, versionTag, items);
+                    long excelSize = excelStream.Length;
 
                     string contentJson = JsonSerializer.Serialize(items);
 
@@ -338,13 +372,13 @@ namespace ManagerStudentCaltholic.Services
                             ContentJson = contentJson,
                             LastAttachmentFileName = generatedFileName,
                             LastAttachmentFilePath = string.Empty, // Sẽ gán sau khi có ID version
-                            LastAttachmentFileSize = excelBytes.Length,
+                            LastAttachmentFileSize = excelSize,
                             LastAttachmentContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             CreatedBy = userName,
-                            CreatedByUserId = userId,
+                            CreatedByUserId = userId > 0 ? userId : null,
                             CreatedAt = DateTime.UtcNow,
                             UpdatedBy = userName,
-                            UpdatedByUserId = userId,
+                            UpdatedByUserId = userId > 0 ? userId : null,
                             UpdatedAt = DateTime.UtcNow,
                             IsActive = true
                         };
@@ -357,17 +391,17 @@ namespace ManagerStudentCaltholic.Services
                         doc.CurrentVersion = versionTag;
                         doc.ContentJson = contentJson;
                         doc.LastAttachmentFileName = generatedFileName;
-                        doc.LastAttachmentFileSize = excelBytes.Length;
+                        doc.LastAttachmentFileSize = excelSize;
                         doc.LastAttachmentContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                         doc.UpdatedBy = userName;
-                        doc.UpdatedByUserId = userId;
+                        doc.UpdatedByUserId = userId > 0 ? userId : null;
                         doc.UpdatedAt = DateTime.UtcNow;
                         if (!string.IsNullOrWhiteSpace(request.Title)) doc.Title = request.Title.Trim();
                         if (request.Description != null) doc.Description = request.Description.Trim();
                         await _context.SaveChangesAsync();
                     }
 
-                    // 2. Tạo bản ghi ClassCurriculumVersion lưu vết lịch sử
+                    // 2. Tạo bản ghi ClassCurriculumVersion trước để lấy versionEntity.Id gắn làm EntityId trên CloudMediaFiles
                     var versionEntity = new ClassCurriculumVersion
                     {
                         ClassCurriculumDocumentId = doc.Id,
@@ -377,18 +411,37 @@ namespace ManagerStudentCaltholic.Services
                         ContentJson = contentJson,
                         FileName = generatedFileName,
                         StoredFileName = storedFileName,
-                        FilePath = $"/LessonPlans/DownloadCurriculumVersion/{0}", // Cập nhật ngay sau SaveChanges
-                        FileSize = excelBytes.Length,
+                        FilePath = "/LessonPlans/DownloadCurriculumVersion/0", // Cập nhật ngay sau SaveChanges
+                        FileSize = excelSize,
                         ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         CreatedBy = userName,
-                        CreatedByUserId = userId,
+                        CreatedByUserId = userId > 0 ? userId : null,
                         CreatedAt = DateTime.UtcNow
                     };
                     _context.ClassCurriculumVersions.Add(versionEntity);
                     await _context.SaveChangesAsync();
 
-                    // Cập nhật FilePath chính xác với ID
+                    // Tải workbook lên Google Drive (hoặc fallback nội bộ trong CloudFallback do GoogleDriveStorageService quản lý)
+                    excelStream.Position = 0;
+                    var media = await _storageService.UploadAsync(new CloudUploadRequest
+                    {
+                        Content = excelStream,
+                        OriginalFileName = generatedFileName,
+                        ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        Category = CloudMediaCategory.LessonPlan,
+                        EntityName = nameof(ClassCurriculumVersion),
+                        EntityId = versionEntity.Id,
+                        FolderSegments = new[] { year.Name, "LessonPlans" },
+                        UploadedBy = userName,
+                        UploadedByUserId = userId > 0 ? userId : null
+                    });
+
+                    // Cập nhật FilePath & CloudFileId chính xác với ID
+                    versionEntity.CloudFileId = media.Id;
+                    versionEntity.StoredFileName = media.StoredFileName;
                     versionEntity.FilePath = $"/LessonPlans/DownloadCurriculumVersion/{versionEntity.Id}";
+
+                    doc.CloudFileId = media.Id;
                     doc.LastAttachmentFilePath = versionEntity.FilePath;
                     await _context.SaveChangesAsync();
 
@@ -523,27 +576,57 @@ namespace ManagerStudentCaltholic.Services
 
         public async Task<(byte[] FileBytes, string ContentType, string DownloadFileName)?> GetVersionFileAsync(long versionId)
         {
-            var ver = await _context.ClassCurriculumVersions.FindAsync(versionId);
+            var ver = await _context.ClassCurriculumVersions
+                .Include(v => v.CurriculumDocument)
+                    .ThenInclude(d => d.ClassRoom)
+                .Include(v => v.CurriculumDocument)
+                    .ThenInclude(d => d.AcademicYear)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == versionId);
             if (ver == null) return null;
 
-            var safeStored = Path.GetFileName(ver.StoredFileName);
-            var path = Path.Combine(_storageFolder, safeStored);
+            const string defaultExcelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var contentType = string.IsNullOrWhiteSpace(ver.ContentType) ? defaultExcelContentType : ver.ContentType;
 
-            if (!File.Exists(path))
+            if (ver.CloudFileId.HasValue)
             {
-                // Nếu file vật lý bị thiếu, tái tạo tức thì từ snapshot ContentJson
-                List<CurriculumItemDto> items = new();
-                if (!string.IsNullOrWhiteSpace(ver.ContentJson))
+                var cloudResult = await _storageService.DownloadAsync(ver.CloudFileId.Value);
+                if (cloudResult != null)
                 {
-                    try { items = JsonSerializer.Deserialize<List<CurriculumItemDto>>(ver.ContentJson) ?? new(); } catch { }
+                    await using var contentStream = cloudResult.ContentStream;
+                    using var ms = new MemoryStream();
+                    await contentStream.CopyToAsync(ms);
+                    var downloadName = string.IsNullOrWhiteSpace(ver.FileName) ? cloudResult.FileName : ver.FileName;
+                    var resolvedType = !string.IsNullOrWhiteSpace(ver.ContentType)
+                        ? ver.ContentType
+                        : (!string.IsNullOrWhiteSpace(cloudResult.ContentType) ? cloudResult.ContentType : defaultExcelContentType);
+                    return (ms.ToArray(), resolvedType, downloadName);
                 }
-                var bytes = GenerateExcelFileBytes("Lớp", "", "", ver.VersionTag, items);
-                await File.WriteAllBytesAsync(path, bytes);
-                return (bytes, ver.ContentType ?? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ver.FileName);
             }
 
-            var fileData = await File.ReadAllBytesAsync(path);
-            return (fileData, ver.ContentType ?? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ver.FileName);
+            var safeStored = Path.GetFileName(ver.StoredFileName);
+            if (!string.IsNullOrWhiteSpace(safeStored))
+            {
+                var path = Path.Combine(_storageFolder, safeStored);
+                if (File.Exists(path))
+                {
+                    var fileData = await File.ReadAllBytesAsync(path);
+                    return (fileData, contentType, ver.FileName);
+                }
+            }
+
+            // Nếu file trên Cloud/cục bộ bị thiếu, tái tạo tức thì từ snapshot ContentJson
+            List<CurriculumItemDto> items = new();
+            if (!string.IsNullOrWhiteSpace(ver.ContentJson))
+            {
+                try { items = JsonSerializer.Deserialize<List<CurriculumItemDto>>(ver.ContentJson) ?? new(); } catch { }
+            }
+
+            var className = ver.CurriculumDocument?.ClassRoom?.Name ?? "Lớp";
+            var gradeLevel = ver.CurriculumDocument?.ClassRoom?.GradeLevel ?? string.Empty;
+            var yearName = ver.CurriculumDocument?.AcademicYear?.Name ?? string.Empty;
+            var bytes = GenerateExcelFileBytes(className, gradeLevel, yearName, ver.VersionTag, items);
+            return (bytes, contentType, ver.FileName);
         }
 
         // =========================================================================
@@ -930,6 +1013,12 @@ namespace ManagerStudentCaltholic.Services
 
         private static byte[] GenerateExcelFileBytes(string className, string gradeLevel, string academicYearName, string versionTag, List<CurriculumItemDto> items)
         {
+            using var memoryStream = GenerateExcelToMemoryStream(className, gradeLevel, academicYearName, versionTag, items);
+            return memoryStream.ToArray();
+        }
+
+        private static MemoryStream GenerateExcelToMemoryStream(string className, string gradeLevel, string academicYearName, string versionTag, List<CurriculumItemDto> items)
+        {
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("Kế Hoạch Bài Giảng");
 
@@ -1044,9 +1133,10 @@ namespace ManagerStudentCaltholic.Services
             ws.Column(8).Width = 18;
             ws.Column(9).Width = 25;
 
-            using var memoryStream = new MemoryStream();
+            var memoryStream = new MemoryStream();
             workbook.SaveAs(memoryStream);
-            return memoryStream.ToArray();
+            memoryStream.Position = 0;
+            return memoryStream;
         }
     }
 }

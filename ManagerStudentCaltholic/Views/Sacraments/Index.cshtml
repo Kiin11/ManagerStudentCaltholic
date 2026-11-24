@@ -544,10 +544,17 @@
             const modalEl = document.getElementById('sacramentRegistryModal');
             bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
-            await loadSacramentTimeline(studentId);
+            await loadSacramentTimeline(studentId, 1);
         }
 
-        async function loadSacramentTimeline(studentId) {
+        function formatCertFileSize(bytes) {
+            if (!bytes || bytes <= 0) return '0 KB';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        async function loadSacramentTimeline(studentId, selectStepType) {
             const loadingEl = document.getElementById('sacTimelineLoading');
             const containerEl = document.getElementById('sacTimelineContainer');
             const alertBox = document.getElementById('sacMissingAlertsBox');
@@ -654,6 +661,99 @@
                             detailDiv.appendChild(noteDiv);
                         }
 
+                        // Chứng nhận Bí tích (CloudMedia / Proxy)
+                        const certs = Array.isArray(item.certificates) ? item.certificates : [];
+                        const certSection = document.createElement('div');
+                        certSection.className = 'mt-2 pt-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2';
+
+                        const certListWrap = document.createElement('div');
+                        certListWrap.className = 'd-flex flex-wrap align-items-center gap-1';
+
+                        if (certs.length > 0) {
+                            certs.forEach(cert => {
+                                const chip = document.createElement('div');
+                                chip.className = 'd-inline-flex align-items-center gap-1 bg-white border rounded-pill px-2 py-1 shadow-sm';
+                                chip.style.fontSize = '0.76rem';
+
+                                const isPdf = (cert.contentType || '').toLowerCase().includes('pdf') ||
+                                    (cert.originalFileName || '').toLowerCase().endsWith('.pdf');
+
+                                const link = document.createElement('a');
+                                link.href = `/CloudMedia/File/${cert.id}`;
+                                link.target = '_blank';
+                                link.rel = 'noopener noreferrer';
+                                link.className = 'text-decoration-none text-dark fw-semibold d-inline-flex align-items-center gap-1';
+
+                                const icon = document.createElement('i');
+                                icon.className = isPdf ? 'bi bi-file-earmark-pdf-fill text-danger' : 'bi bi-file-earmark-image-fill text-primary';
+                                link.appendChild(icon);
+
+                                const nameSpan = document.createElement('span');
+                                nameSpan.textContent = cert.originalFileName || `ChungNhan_${cert.id}`;
+                                link.appendChild(nameSpan);
+
+                                const sizeSpan = document.createElement('span');
+                                sizeSpan.className = 'text-muted fw-normal';
+                                sizeSpan.textContent = `(${formatCertFileSize(cert.fileSize)})`;
+                                link.appendChild(sizeSpan);
+
+                                chip.appendChild(link);
+
+                                if (canEditCurrentSacrament) {
+                                    const delCertBtn = document.createElement('button');
+                                    delCertBtn.type = 'button';
+                                    delCertBtn.className = 'btn btn-link text-danger p-0 ms-1 lh-1';
+                                    delCertBtn.title = 'Xóa chứng nhận';
+                                    delCertBtn.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
+                                    delCertBtn.onclick = () => submitDeleteCertificate(cert.id, data.studentId, item.sacramentType);
+                                    chip.appendChild(delCertBtn);
+                                }
+
+                                certListWrap.appendChild(chip);
+                            });
+                        } else {
+                            const emptyCert = document.createElement('span');
+                            emptyCert.className = 'text-muted fst-italic';
+                            emptyCert.style.fontSize = '0.76rem';
+                            emptyCert.textContent = 'Chưa có chứng nhận đính kèm.';
+                            certListWrap.appendChild(emptyCert);
+                        }
+
+                        certSection.appendChild(certListWrap);
+
+                        if (canEditCurrentSacrament) {
+                            if (item.id > 0) {
+                                const uploadWrap = document.createElement('div');
+                                uploadWrap.className = 'd-inline-flex align-items-center';
+
+                                const fileInput = document.createElement('input');
+                                fileInput.type = 'file';
+                                fileInput.className = 'd-none';
+                                fileInput.accept = '.pdf,.jpg,.jpeg,.png,.webp';
+                                fileInput.onchange = () => submitUploadCertificate(item.id, data.studentId, item.sacramentType, fileInput);
+
+                                const uploadBtn = document.createElement('button');
+                                uploadBtn.type = 'button';
+                                uploadBtn.className = 'btn btn-outline-success btn-sm rounded-pill py-0 px-2';
+                                uploadBtn.style.fontSize = '0.75rem';
+                                uploadBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i>Tải chứng nhận';
+                                uploadBtn.onclick = () => fileInput.click();
+
+                                uploadWrap.appendChild(fileInput);
+                                uploadWrap.appendChild(uploadBtn);
+                                certSection.appendChild(uploadWrap);
+                            } else {
+                                const saveFirstHint = document.createElement('button');
+                                saveFirstHint.type = 'button';
+                                saveFirstHint.className = 'btn btn-outline-secondary btn-sm rounded-pill py-0 px-2';
+                                saveFirstHint.style.fontSize = '0.72rem';
+                                saveFirstHint.textContent = 'Lưu sổ bộ trước để đính kèm';
+                                saveFirstHint.onclick = () => selectSacramentStepForEdit(item.sacramentType);
+                                certSection.appendChild(saveFirstHint);
+                            }
+                        }
+
+                        detailDiv.appendChild(certSection);
                         stepDiv.appendChild(detailDiv);
                     } else {
                         const emptyDiv = document.createElement('div');
@@ -665,7 +765,8 @@
                     containerEl.appendChild(stepDiv);
                 });
 
-                selectSacramentStepForEdit(1);
+                const targetStep = (selectStepType && selectStepType >= 1 && selectStepType <= 4) ? selectStepType : 1;
+                selectSacramentStepForEdit(targetStep);
             } catch (err) {
                 loadingEl.classList.add('d-none');
                 containerEl.innerHTML = `<div class="alert alert-danger small">Lỗi tải Sổ bộ Bí tích: ${err.message}</div>`;
@@ -761,7 +862,7 @@
 
                 if (res.ok && result && result.success) {
                     showSacramentAlert(result.message, true);
-                    await loadSacramentTimeline(studentId);
+                    await loadSacramentTimeline(studentId, sacType);
                 } else {
                     const errMsg = result?.message || `Không thể lưu thông tin Bí tích (HTTP ${res.status}).`;
                     showSacramentAlert(errMsg, false);
@@ -789,9 +890,98 @@
             const result = await res.json();
             if (result.success) {
                 showSacramentAlert(result.message, true);
-                await loadSacramentTimeline(studentId);
+                await loadSacramentTimeline(studentId, 1);
             } else {
                 showSacramentAlert(result.message || 'Không thể xóa bản ghi.', false);
+            }
+        }
+
+        async function submitUploadCertificate(recordId, studentId, sacramentType, fileInput) {
+            const file = fileInput?.files?.[0];
+            if (!file) return;
+
+            const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+            const lowerName = (file.name || '').toLowerCase();
+            const hasValidExt = allowedExts.some(ext => lowerName.endsWith(ext));
+            if (!hasValidExt) {
+                showSacramentAlert('Định dạng chứng nhận không hợp lệ. Chỉ chấp nhận .pdf, .jpg, .jpeg, .png, .webp.', false);
+                fileInput.value = '';
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                showSacramentAlert('Dung lượng tệp chứng nhận vượt quá giới hạn tối đa 10 MB.', false);
+                fileInput.value = '';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('recordId', recordId.toString());
+            formData.append('certificateFile', file);
+
+            try {
+                const res = await fetch('/Sacraments/UploadCertificate', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: formData
+                });
+
+                const rawText = await res.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    result = null;
+                }
+
+                if (res.ok && result && result.success) {
+                    showSacramentAlert(result.message || 'Đã tải lên chứng nhận Bí tích thành công!', true);
+                    await loadSacramentTimeline(studentId, sacramentType);
+                } else {
+                    const errMsg = result?.message || `Không thể tải lên chứng nhận (HTTP ${res.status}).`;
+                    showSacramentAlert(errMsg, false);
+                }
+            } catch (err) {
+                showSacramentAlert('Lỗi kết nối khi tải chứng nhận: ' + err.message, false);
+            } finally {
+                fileInput.value = '';
+            }
+        }
+
+        async function submitDeleteCertificate(cloudMediaFileId, studentId, sacramentType) {
+            if (!confirm('Bạn có chắc chắn muốn xóa tệp chứng nhận Bí tích này?')) return;
+
+            const formData = new FormData();
+            formData.append('cloudMediaFileId', cloudMediaFileId.toString());
+
+            try {
+                const res = await fetch('/Sacraments/DeleteCertificate', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: formData
+                });
+
+                const rawText = await res.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    result = null;
+                }
+
+                if (res.ok && result && result.success) {
+                    showSacramentAlert(result.message || 'Đã xóa chứng nhận Bí tích!', true);
+                    await loadSacramentTimeline(studentId, sacramentType);
+                } else {
+                    const errMsg = result?.message || `Không thể xóa chứng nhận (HTTP ${res.status}).`;
+                    showSacramentAlert(errMsg, false);
+                }
+            } catch (err) {
+                showSacramentAlert('Lỗi kết nối khi xóa chứng nhận: ' + err.message, false);
             }
         }
     </script>

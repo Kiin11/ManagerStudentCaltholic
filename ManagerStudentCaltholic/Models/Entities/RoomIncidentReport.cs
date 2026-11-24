@@ -36,5 +36,8 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [MaxLength(255)]
         public string? ResolutionNotes { get; set; }
+
+        public long? CloudImageFileId { get; set; }
+        public CloudMediaFile? CloudImageFile { get; set; }
     }
 }

@@ -1,4 +1,6 @@
 @model ManagerStudentCaltholic.Models.ViewModels.LessonPlanWorkspaceViewModel
+@using ManagerStudentCaltholic.Models.Entities
+@using System.Text.Encodings.Web
 @{
     ViewData["Title"] = "Kế Hoạch Lớp & Phân Phối Chương Trình";
     var classes = Model.Classes;
@@ -10,6 +12,33 @@
     var versions = Model.Versions;
     var items = doc?.Items ?? new List<ManagerStudentCaltholic.Models.DTOs.CurriculumItemDto>();
     var canManage = Model.CanManage;
+}
+
+@functions {
+    public static Microsoft.AspNetCore.Html.IHtmlContent RenderStorageBadge(long? cloudFileId, string? storageProvider, string? syncStatus)
+    {
+        if (!cloudFileId.HasValue)
+        {
+            return new Microsoft.AspNetCore.Html.HtmlString(
+                "<span class=\"badge bg-light text-secondary border ms-1\" title=\"Lưu trữ nội bộ\"><i class=\"bi bi-hdd me-1\"></i>Nội bộ</span>");
+        }
+
+        if (string.Equals(storageProvider, CloudStorageProvider.GoogleDrive, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(syncStatus, CloudSyncStatus.Success, StringComparison.OrdinalIgnoreCase))
+        {
+            return new Microsoft.AspNetCore.Html.HtmlString(
+                "<span class=\"badge bg-primary-subtle text-primary border border-primary-subtle ms-1\" title=\"Đã đồng bộ Google Drive\"><i class=\"bi bi-cloud-check-fill me-1\"></i>Drive</span>");
+        }
+
+        if (string.Equals(storageProvider, CloudStorageProvider.LocalFallback, StringComparison.OrdinalIgnoreCase))
+        {
+            return new Microsoft.AspNetCore.Html.HtmlString(
+                "<span class=\"badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1\" title=\"Đang lưu tạm cục bộ, sẽ tự đồng bộ lên Drive\"><i class=\"bi bi-cloud-arrow-up me-1\"></i>Chờ đồng bộ</span>");
+        }
+
+        return new Microsoft.AspNetCore.Html.HtmlString(
+            "<span class=\"badge bg-danger-subtle text-danger border border-danger-subtle ms-1\" title=\"Đồng bộ Google Drive chưa hoàn tất\"><i class=\"bi bi-cloud-slash me-1\"></i>Lỗi sync</span>");
+    }
 }
 
 @Html.AntiForgeryToken()
@@ -29,6 +58,10 @@
                     <span class="badge bg-success-subtle text-success border border-success-subtle ms-2 px-2 py-1">
                         <i class="bi bi-bookmark-check-fill me-1"></i>Phiên bản hiện hành: <strong>@doc.CurrentVersion</strong>
                     </span>
+                    @if (doc.CloudFileId.HasValue)
+                    {
+                        @RenderStorageBadge(doc.CloudFileId, doc.StorageProvider, doc.SyncStatus)
+                    }
                     <span class="text-muted small ms-2">
                         <i class="bi bi-person me-1"></i>Sửa bởi <strong>@doc.UpdatedBy</strong> lúc @doc.UpdatedAt.ToString("dd/MM/yyyy HH:mm")
                     </span>
@@ -310,7 +343,10 @@
                                                     <a href="/LessonPlans/DownloadCurriculumVersion/@v.Id" class="fw-bold text-decoration-none text-dark" download>
                                                         @v.FileName
                                                     </a>
-                                                    <small class="d-block text-muted">@fileSizeKb</small>
+                                                    <small class="d-block text-muted">
+                                                        @fileSizeKb
+                                                        @RenderStorageBadge(v.CloudFileId, v.StorageProvider, v.SyncStatus)
+                                                    </small>
                                                 </div>
                                             </div>
                                         </td>
@@ -399,12 +435,15 @@
                                             <div class="fw-bold text-dark">@d.FileName</div>
                                             <small class="text-muted">@d.Description</small>
                                         </td>
-                                        <td><span class="badge bg-light text-secondary border">@sizeKb</span></td>
+                                        <td>
+                                            <span class="badge bg-light text-secondary border">@sizeKb</span>
+                                            <div class="mt-1">@RenderStorageBadge(d.CloudFileId, d.CloudFile?.StorageProvider, d.CloudFile?.SyncStatus)</div>
+                                        </td>
                                         <td>@d.UploadedBy</td>
                                         <td>@d.UploadedAt.ToString("dd/MM/yyyy HH:mm")</td>
                                         <td class="text-end pe-3">
                                             <div class="btn-group">
-                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewDocumentOnline('@d.FilePath', '@d.FileName', '@ext')">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewDocumentOnline('@d.FilePath', '@JavaScriptEncoder.Default.Encode(d.FileName)', '@ext')">
                                                     <i class="bi bi-eye-fill"></i>
                                                 </button>
                                                 <a href="@d.FilePath" download="@d.FileName" class="btn btn-sm btn-outline-success">
@@ -412,7 +451,7 @@
                                                 </a>
                                                 @if (canManage)
                                                 {
-                                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteLegacyDocument(@d.Id, '@d.FileName')">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteLegacyDocument(@d.Id, '@JavaScriptEncoder.Default.Encode(d.FileName)')">
                                                         <i class="bi bi-trash"></i>
                                                     </button>
                                                 }
@@ -589,14 +628,15 @@
             </div>
             <div class="modal-body p-4">
                 <div class="mb-3">
-                    <label class="form-label small fw-bold">Chọn file (.pdf, .docx, .xlsx)</label>
+                    <label class="form-label small fw-bold">Chọn file (.pdf, .docx, .doc, .xlsx, .xls — tối đa 25 MB)</label>
                     <input type="file" id="inputLegacyFile" class="form-control" accept=".pdf,.docx,.doc,.xlsx,.xls" required />
+                    <div class="form-text text-muted small">Hỗ trợ lưu trữ đám mây Google Drive, dung lượng tối đa 25 MB.</div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Mô tả tóm tắt (Tùy chọn)</label>
                     <input type="text" id="inputLegacyDesc" class="form-control" placeholder="Ví dụ: Giáo án tham khảo tuần 1-10..." />
                 </div>
-                <button type="button" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitUploadLegacyDocument()">
+                <button type="button" id="btnUploadLegacyDoc" class="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm" onclick="submitUploadLegacyDocument()">
                     <i class="bi bi-upload me-1"></i> Tải Lên & Lưu Trữ
                 </button>
             </div>
@@ -1042,16 +1082,29 @@
         async function submitUploadLegacyDocument() {
             const fileInput = document.getElementById('inputLegacyFile');
             const desc = document.getElementById('inputLegacyDesc').value.trim();
+            const submitBtn = document.getElementById('btnUploadLegacyDoc');
 
             if (!fileInput.files || fileInput.files.length === 0) {
                 alert('Vui lòng chọn 1 file để tải lên!');
                 return;
             }
 
+            const selectedFile = fileInput.files[0];
+            const maxLessonPlanBytes = 25 * 1024 * 1024;
+            if (selectedFile.size > maxLessonPlanBytes) {
+                alert('Dung lượng file vượt quá giới hạn tối đa 25 MB!');
+                return;
+            }
+
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', selectedFile);
             formData.append('classRoomId', selectedClassId);
             formData.append('description', desc);
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang tải lên...';
+            }
 
             try {
                 const res = await fetch('/LessonPlans/UploadDocument', {
@@ -1068,6 +1121,11 @@
                 }
             } catch (err) {
                 alert('Lỗi kết nối: ' + err.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-upload me-1"></i> Tải Lên & Lưu Trữ';
+                }
             }
         }
 

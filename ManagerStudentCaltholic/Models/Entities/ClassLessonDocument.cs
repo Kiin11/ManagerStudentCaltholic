@@ -33,5 +33,8 @@ namespace ManagerStudentCaltholic.Models.Entities
         public string UploadedBy { get; set; } = string.Empty;
 
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+
+        public long? CloudFileId { get; set; }
+        public CloudMediaFile? CloudFile { get; set; }
     }
 }

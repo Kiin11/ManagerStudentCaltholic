@@ -1,4 +1,5 @@
 ﻿@model IEnumerable<ManagerStudentCaltholic.Models.Entities.Announcement>
+@using ManagerStudentCaltholic.Models.DTOs
 @using ManagerStudentCaltholic.Models.Entities
 @{
     ViewData["Title"] = "Bảng Tin & Dặn Dò Lớp Học";
@@ -8,6 +9,8 @@
     bool canCreateAny = canPostAll || canPostGrade || canPostClass;
     var authorizedClassIds = ViewBag.AuthorizedClassIds as HashSet<int> ?? new HashSet<int>();
     var managedGrade = ViewBag.ManagedGradeLevel as string;
+    var attachmentsMap = ViewBag.AnnouncementAttachments as Dictionary<long, List<CloudMediaSummaryDto>>
+        ?? new Dictionary<long, List<CloudMediaSummaryDto>>();
 }
 
 <div class="container-fluid px-0">
@@ -39,6 +42,13 @@
     {
         <div class="alert alert-danger alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    @if (TempData["WarningMessage"] != null)
+    {
+        <div class="alert alert-warning alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4" role="alert">
+            <i class="bi bi-exclamation-circle-fill me-2"></i> @TempData["WarningMessage"]
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     }
@@ -166,6 +176,29 @@
                             <h5 class="fw-bold text-dark mb-2">@post.Title</h5>
                             <p class="text-secondary mb-3 text-break" style="white-space: pre-line;">@post.Content</p>
 
+                            @if (attachmentsMap.TryGetValue(post.Id, out var postAttachments) && postAttachments.Any())
+                            {
+                                <div class="mb-3 pt-2 border-top border-light-subtle">
+                                    <div class="small fw-semibold text-muted mb-2">
+                                        <i class="bi bi-paperclip me-1"></i>Tệp đính kèm (@postAttachments.Count):
+                                    </div>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var att in postAttachments)
+                                        {
+                                            <a href="/CloudMedia/File/@att.Id"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="btn btn-light btn-sm border rounded-pill px-3 py-1 d-inline-flex align-items-center gap-2 text-decoration-none"
+                                               title="@att.OriginalFileName (@FormatFileSize(att.FileSize))">
+                                                <i class="bi @GetAttachmentIconClass(att.OriginalFileName, att.ContentType)"></i>
+                                                <span class="text-dark fw-medium text-truncate" style="max-width: 220px;">@att.OriginalFileName</span>
+                                                <span class="text-muted small">(@FormatFileSize(att.FileSize))</span>
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
                             <div class="d-flex justify-content-between align-items-center pt-2 border-top small text-muted">
                                 <span><i class="bi bi-person-check me-1"></i>Đăng bởi: <strong>@post.CreatedBy</strong></span>
                                 <span><i class="bi bi-clock me-1"></i>@post.CreatedAt.ToLocalTime().ToString("HH:mm - dd/MM/yyyy")</span>
@@ -189,7 +222,7 @@
 {
     <div class="modal fade" id="createAnnouncementModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
-            <form asp-action="Create" method="post" class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <form asp-action="Create" method="post" enctype="multipart/form-data" class="modal-content border-0 shadow rounded-4 overflow-hidden">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fw-bold"><i class="bi bi-megaphone me-2"></i>Đăng Thông Báo / Dặn Dò Lớp Học</h5>
@@ -257,6 +290,21 @@
                         <textarea name="Content" class="form-control" rows="5" placeholder="Nhập nội dung chi tiết..." required></textarea>
                     </div>
 
+                    <div class="mb-3">
+                        <label for="annAttachmentsInput" class="form-label small fw-bold">
+                            <i class="bi bi-paperclip me-1"></i>Tệp Đính Kèm (Tùy chọn, tối đa 5 tệp, mỗi tệp &le; 10 MB)
+                        </label>
+                        <input type="file"
+                               id="annAttachmentsInput"
+                               name="attachments"
+                               class="form-control form-control-sm"
+                               multiple
+                               accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" />
+                        <div id="annAttachmentsHint" class="form-text small">
+                            Hỗ trợ PDF, Word (.doc/.docx), Excel (.xls/.xlsx), Ảnh (.jpg, .jpeg, .png, .webp). Ảnh tải lên sẽ được tự động tối ưu.
+                        </div>
+                    </div>
+
                     <div class="row g-2 align-items-center">
                         <div class="col-md-6">
                             <div class="form-check form-switch">
@@ -281,6 +329,29 @@
     </div>
 }
 
+@functions {
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:0.#} KB";
+        return $"{bytes / (1024.0 * 1024.0):0.##} MB";
+    }
+
+    private static string GetAttachmentIconClass(string fileName, string contentType)
+    {
+        var ext = System.IO.Path.GetExtension(fileName ?? string.Empty).ToLowerInvariant();
+        if (ext == ".pdf" || string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+            return "bi-file-earmark-pdf-fill text-danger";
+        if (ext == ".doc" || ext == ".docx")
+            return "bi-file-earmark-word-fill text-primary";
+        if (ext == ".xls" || ext == ".xlsx")
+            return "bi-file-earmark-excel-fill text-success";
+        if (ext is ".jpg" or ".jpeg" or ".png" or ".webp" || (contentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false))
+            return "bi-file-earmark-image-fill text-info";
+        return "bi-paperclip text-secondary";
+    }
+}
+
 @section Scripts {
     <script>
         function toggleScopeInputs() {
@@ -296,6 +367,29 @@
 
         document.addEventListener('DOMContentLoaded', function () {
             toggleScopeInputs();
+
+            const fileInput = document.getElementById('annAttachmentsInput');
+            const fileHint = document.getElementById('annAttachmentsHint');
+            if (fileInput && fileHint) {
+                fileInput.addEventListener('change', function () {
+                    const files = Array.from(this.files || []);
+                    const maxSize = 10 * 1024 * 1024;
+                    const oversized = files.filter(f => f.size > maxSize);
+                    if (files.length > 5) {
+                        fileHint.className = 'form-text small text-danger fw-semibold';
+                        fileHint.textContent = `Bạn đã chọn ${files.length} tệp. Chỉ tối đa 5 tệp đầu tiên được lưu.`;
+                    } else if (oversized.length > 0) {
+                        fileHint.className = 'form-text small text-danger fw-semibold';
+                        fileHint.textContent = `Có ${oversized.length} tệp vượt quá 10 MB (${oversized.map(f => f.name).join(', ')}).`;
+                    } else if (files.length > 0) {
+                        fileHint.className = 'form-text small text-success fw-semibold';
+                        fileHint.textContent = `Đã chọn ${files.length} tệp hợp lệ để đính kèm.`;
+                    } else {
+                        fileHint.className = 'form-text small';
+                        fileHint.textContent = 'Hỗ trợ PDF, Word (.doc/.docx), Excel (.xls/.xlsx), Ảnh (.jpg, .jpeg, .png, .webp). Ảnh tải lên sẽ được tự động tối ưu.';
+                    }
+                });
+            }
         });
 
         function copyAnnouncementToZalo(btn) {

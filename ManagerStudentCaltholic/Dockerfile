@@ -77,6 +77,9 @@ RUN mkdir -p \
         /app/PrivateUploads/lesson_plans \
         /app/PrivateUploads/baptism_certs \
         /app/PrivateUploads/curriculums \
+        /app/PrivateUploads/cloud_fallback \
+        /app/PrivateUploads/cloud_tmp \
+        /app/PrivateUploads/tmp_logs \
     && chown -R $APP_UID:$APP_UID /app
 
 COPY --from=build --chown=$APP_UID:$APP_UID /app/publish .

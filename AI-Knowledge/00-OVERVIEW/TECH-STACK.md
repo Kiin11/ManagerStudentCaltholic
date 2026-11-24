@@ -18,6 +18,8 @@
 - **Tạo mã QR:** QRCoder (`1.6.0`). (Xác minh: `LookupController.cs`, `QrCodeService`).
 - **Phân tích toán học/Công thức:** NCalc (`7.0.0`). (Xác minh: `csproj`).
 - **Xử lý PDF:** PdfPig (`0.1.9`). (Xác minh: `csproj`, `ClassCurriculumService.cs`).
+- **Google Drive API & Xác thực Cloud:** `Google.Apis.Drive.v3` (`1.69.0.3769`) và `Google.Apis.Auth` (`1.78.0`) dùng Service Account JSON (`ServiceAccountCredential` / `DriveService.Scope.Drive`), hỗ trợ Resumable Upload (chunk bội số `256 KB` tối đa `2 MB`) và Shared Drive (`SupportsAllDrives = true`). (Xác minh: `ManagerStudentCaltholic.csproj`, `GoogleDriveStorageService.cs`).
+- **Xử lý & Tối ưu Hình ảnh:** `SixLabors.ImageSharp` (`3.1.12`) chuyển đổi sang WebP lossy, `AutoOrient()`, xóa metadata EXIF/IPTC/XMP, kiểm tra magic bytes + giới hạn kích thước ảnh (`Image.IdentifyAsync` tối đa `10000x10000` / `50,000,000` pixels). **Ghi chú tương thích Alpine & Audit:** `SixLabors.ImageSharp` là thư viện thuần managed .NET (không dùng `libgdiplus`, chạy ổn định trên `mcr.microsoft.com/dotnet/aspnet:8.0-alpine`); phiên bản được ghim tại `3.1.12` (do 3.2+/4.x yêu cầu `sixlabors.lic` thương mại) và được giảm thiểu rủi ro qua danh sách trắng magic bytes + kiểm tra `Image.IdentifyAsync` kèm `NuGetAuditSuppress` trong `ManagerStudentCaltholic.csproj`. (Xác minh: `ManagerStudentCaltholic.csproj`, `Dockerfile`, `ImageOptimizationService.cs`).
 
 ## 4. Frontend Stack
 - **UI Framework:** Bootstrap 5 (Xác minh qua class CSS: `rounded-4`, `shadow-sm`, `bg-primary-subtle`).

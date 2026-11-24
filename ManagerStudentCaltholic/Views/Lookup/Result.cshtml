@@ -969,14 +969,21 @@
                     <label class="form-label small fw-bold">Số điện thoại Phụ huynh xác nhận (*)</label>
                     <input type="tel" id="absPhone" class="form-control" placeholder="Nhập đầy đủ SĐT (@Model.MaskedParentPhone) để xác nhận..." required />
                 </div>
-                <div class="mb-2">
+                <div class="mb-3">
                     <label class="form-label small fw-bold">Lý do xin phép nghỉ (*)</label>
-                    <textarea id="absReason" class="form-control" rows="3" placeholder="Nhập lý do xin nghỉ..." required></textarea>
+                    <textarea id="absReason" class="form-control" rows="3" placeholder="Nhập lý do xin nghỉ..." required maxlength="500"></textarea>
+                </div>
+                <div class="mb-2">
+                    <label for="absAttachment" class="form-label small fw-bold">
+                        <i class="bi bi-paperclip me-1"></i>Giấy khám bệnh / Đơn xin phép đính kèm (Tùy chọn)
+                    </label>
+                    <input type="file" id="absAttachment" class="form-control form-control-sm" accept="image/*,.pdf" />
+                    <div class="form-text small">Hỗ trợ ảnh (.jpg, .png, .webp) hoặc .pdf, tối đa 10 MB.</div>
                 </div>
             </div>
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
-                <button type="button" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold touch-target-44" onclick="submitOnlineAbsence()">Gửi Đơn Xin Phép</button>
+                <button type="button" id="btnSubmitAbsence" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold touch-target-44" onclick="submitOnlineAbsence()">Gửi Đơn Xin Phép</button>
             </div>
         </div>
     </div>
@@ -1088,32 +1095,78 @@
             const sessionType = document.getElementById('absSessionType').value;
             const parentPhone = document.getElementById('absPhone').value.trim();
             const reason = document.getElementById('absReason').value.trim();
+            const attachmentInput = document.getElementById('absAttachment');
+            const submitBtn = document.getElementById('btnSubmitAbsence');
 
             if (!absDate || !parentPhone || !reason) {
                 alert('Vui lòng điền đầy đủ SĐT Phụ huynh và lý do xin nghỉ!');
                 return;
             }
 
-            const res = await fetch('/Absence/SubmitRequest', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': getCsrfToken()
-                },
-                body: JSON.stringify({
-                    studentCode: '@Model.StudentCode',
-                    dateOfBirth: '@Model.DateOfBirth.ToString("yyyy-MM-dd")',
-                    absenceDate: absDate,
-                    sessionType: sessionType,
-                    parentPhone: parentPhone,
-                    reason: reason
-                })
-            });
+            const attachmentFile = attachmentInput && attachmentInput.files && attachmentInput.files.length > 0
+                ? attachmentInput.files[0]
+                : null;
 
-            const data = await res.json();
-            alert(data.message);
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('absenceRequestModal')).hide();
+            const maxAttachmentBytes = 10 * 1024 * 1024;
+            if (attachmentFile && attachmentFile.size > maxAttachmentBytes) {
+                alert('Tệp đính kèm vượt quá dung lượng tối đa 10 MB. Vui lòng chọn tệp nhỏ hơn.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('studentCode', '@Model.StudentCode');
+            formData.append('dateOfBirth', '@Model.DateOfBirth.ToString("yyyy-MM-dd")');
+            formData.append('absenceDate', absDate);
+            formData.append('sessionType', sessionType);
+            formData.append('parentPhone', parentPhone);
+            formData.append('reason', reason);
+            if (attachmentFile) {
+                formData.append('attachmentFile', attachmentFile);
+            }
+
+            const origText = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang gửi...';
+            }
+
+            try {
+                const res = await fetch('/Absence/SubmitRequestWithFile', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': getCsrfToken()
+                    },
+                    body: formData
+                });
+
+                let data = null;
+                try {
+                    data = await res.json();
+                } catch {
+                    data = null;
+                }
+
+                if (data && data.message) {
+                    alert(data.message);
+                } else if (!res.ok) {
+                    alert(`Không thể gửi đơn xin phép (mã lỗi ${res.status}). Vui lòng thử lại.`);
+                }
+
+                if (res.ok && data && data.success) {
+                    document.getElementById('absReason').value = '';
+                    if (attachmentInput) attachmentInput.value = '';
+                    const modalEl = document.getElementById('absenceRequestModal');
+                    if (modalEl) {
+                        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    }
+                }
+            } catch (err) {
+                alert('Lỗi kết nối máy chủ: ' + err.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = origText;
+                }
             }
         }
     </script>

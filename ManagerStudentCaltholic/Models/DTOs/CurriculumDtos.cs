@@ -32,6 +32,9 @@ namespace ManagerStudentCaltholic.Models.DTOs
         public string? LastAttachmentFileName { get; set; }
         public string? LastAttachmentFilePath { get; set; }
         public long LastAttachmentFileSize { get; set; }
+        public long? CloudFileId { get; set; }
+        public string? StorageProvider { get; set; }
+        public string? SyncStatus { get; set; }
         public string? UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; }
         public int TotalWeeks { get; set; }
@@ -48,6 +51,9 @@ namespace ManagerStudentCaltholic.Models.DTOs
         public string FileName { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
         public long FileSize { get; set; }
+        public long? CloudFileId { get; set; }
+        public string? StorageProvider { get; set; }
+        public string? SyncStatus { get; set; }
         public string CreatedBy { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public int TotalWeeks { get; set; }

@@ -2,7 +2,10 @@
 @using ManagerStudentCaltholic.Models.Entities
 @{
     ViewData["Title"] = $"Hồ Sơ Chi Tiết: {Model.ChristianName} {Model.FirstName} {Model.LastName}".Trim();
+    long? resolvedAvatarId = Model.StudentAvatarCloudFileId ?? Model.AvatarCloudFileId;
+    string? studentAvatarUrl = resolvedAvatarId.HasValue ? $"/CloudMedia/File/{resolvedAvatarId.Value}" : null;
 }
+@Html.AntiForgeryToken()
 
 <div class="container-fluid py-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 pb-2 border-bottom">
@@ -33,9 +36,22 @@
             <div class="row g-3 align-items-center">
                 <div class="col-md-6">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0"
-                             style="width: 68px; height: 68px;">
-                            <i class="bi bi-person-fill fs-1"></i>
+                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0 overflow-hidden border border-primary-subtle shadow-sm"
+                             style="width: 72px; height: 72px;">
+                            @if (!string.IsNullOrWhiteSpace(studentAvatarUrl))
+                            {
+                                <img id="studentAvatarImg" src="@studentAvatarUrl" alt="Ảnh đại diện thiếu nhi"
+                                     class="w-100 h-100 object-fit-cover rounded-circle"
+                                     onerror="this.classList.add('d-none'); document.getElementById('studentAvatarFallbackIcon')?.classList.remove('d-none');" />
+                                <i id="studentAvatarFallbackIcon" class="bi bi-person-fill fs-1 d-none"></i>
+                            }
+                            else
+                            {
+                                <img id="studentAvatarImg" src="" alt="Ảnh đại diện thiếu nhi"
+                                     class="w-100 h-100 object-fit-cover rounded-circle d-none"
+                                     onerror="this.classList.add('d-none'); document.getElementById('studentAvatarFallbackIcon')?.classList.remove('d-none');" />
+                                <i id="studentAvatarFallbackIcon" class="bi bi-person-fill fs-1"></i>
+                            }
                         </div>
                         <div>
                             <h4 class="fw-bold text-dark mb-1">
@@ -58,6 +74,18 @@
                                     </span>
                                 }
                             </div>
+                            @if (Model.LinkedStudentId.HasValue)
+                            {
+                                <div class="mt-2 d-flex flex-wrap align-items-center gap-2">
+                                    <input type="file" id="studentAvatarFileInput" class="d-none" accept=".jpg,.jpeg,.png,.webp,.gif,image/*" onchange="uploadStudentAvatar(this)" />
+                                    <button type="button" id="btnUploadStudentAvatar"
+                                            class="btn btn-outline-primary btn-sm rounded-pill px-3 fw-semibold touch-target-44 d-inline-flex align-items-center gap-1"
+                                            onclick="document.getElementById('studentAvatarFileInput').click()">
+                                        <i class="bi bi-camera-fill"></i> Đổi ảnh đại diện
+                                    </button>
+                                    <small id="studentAvatarStatus" class="text-muted">JPG, PNG, WebP (tối đa 5 MB)</small>
+                                </div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -90,3 +118,84 @@
 
     @await Html.PartialAsync("_ProfileDualTimelineAndMilestones", Model)
 </div>
+
+@section Scripts {
+    <script>
+        async function uploadStudentAvatar(inputEl) {
+            const file = inputEl?.files?.[0];
+            if (!file) return;
+
+            const studentId = @(Model.LinkedStudentId ?? 0);
+            if (!studentId || studentId <= 0) return;
+
+            const statusEl = document.getElementById('studentAvatarStatus');
+            const btnEl = document.getElementById('btnUploadStudentAvatar');
+            const imgEl = document.getElementById('studentAvatarImg');
+            const fallbackEl = document.getElementById('studentAvatarFallbackIcon');
+
+            const setStatus = (msg, cls) => {
+                if (!statusEl) return;
+                statusEl.className = cls;
+                statusEl.textContent = msg;
+            };
+
+            if (file.size > 5 * 1024 * 1024) {
+                setStatus('Ảnh vượt quá giới hạn tối đa 5 MB.', 'text-danger small');
+                inputEl.value = '';
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new FormData();
+            formData.append('studentId', studentId.toString());
+            formData.append('avatarFile', file);
+
+            const prevBtnHtml = btnEl ? btnEl.innerHTML : '';
+            if (btnEl) {
+                btnEl.disabled = true;
+                btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang tải...';
+            }
+            setStatus('Đang tối ưu và tải ảnh lên...', 'text-primary small');
+
+            try {
+                const res = await fetch('/Students/UploadAvatar', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': token
+                    },
+                    body: formData
+                });
+
+                const rawText = await res.text();
+                let result = null;
+                try {
+                    result = rawText ? JSON.parse(rawText) : null;
+                } catch {
+                    result = null;
+                }
+
+                if (res.ok && result && result.success && result.data?.proxyUrl) {
+                    if (imgEl) {
+                        imgEl.src = result.data.proxyUrl;
+                        imgEl.classList.remove('d-none');
+                    }
+                    if (fallbackEl) {
+                        fallbackEl.classList.add('d-none');
+                    }
+                    setStatus(result.message || 'Đã cập nhật ảnh đại diện!', 'text-success fw-semibold small');
+                } else {
+                    const errMsg = result?.message || `Không thể tải lên ảnh đại diện (HTTP ${res.status}).`;
+                    setStatus(errMsg, 'text-danger small');
+                }
+            } catch (err) {
+                setStatus('Lỗi kết nối khi tải ảnh: ' + err.message, 'text-danger small');
+            } finally {
+                if (btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.innerHTML = prevBtnHtml;
+                }
+                inputEl.value = '';
+            }
+        }
+    </script>
+}

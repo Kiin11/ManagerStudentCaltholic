@@ -1,9 +1,12 @@
 ﻿using ManagerStudentCaltholic.Data;
 using ManagerStudentCaltholic.Interface.Services;
+using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.Entities;
+using ManagerStudentCaltholic.Models.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace ManagerStudentCaltholic.Controllers
@@ -14,13 +17,24 @@ namespace ManagerStudentCaltholic.Controllers
         private readonly ParishDbContext _context;
         private readonly ILogger<FacilitiesController> _logger;
         private readonly ILessonPlanImportService _importService;
+        private readonly IGoogleDriveStorageService _storageService;
+        private readonly IImageOptimizationService _imageOptimizationService;
+        private readonly GoogleDriveOptions _driveOptions;
 
-        public FacilitiesController(ParishDbContext context, ILogger<FacilitiesController> logger
-            , ILessonPlanImportService importService)
+        public FacilitiesController(
+            ParishDbContext context,
+            ILogger<FacilitiesController> logger,
+            ILessonPlanImportService importService,
+            IGoogleDriveStorageService storageService,
+            IImageOptimizationService imageOptimizationService,
+            IOptions<GoogleDriveOptions> driveOptions)
         {
             _context = context;
             _logger = logger;
             _importService = importService;
+            _storageService = storageService;
+            _imageOptimizationService = imageOptimizationService;
+            _driveOptions = driveOptions.Value;
         }
         /// <summary>
         /// 1. GET: /Facilities (Sơ đồ phòng học, Cảnh báo quá tải, Báo hỏng)
@@ -93,10 +107,11 @@ namespace ManagerStudentCaltholic.Controllers
 
             ViewBag.RoomOccupancy = roomOccupancy;
 
-            // Danh sách sự cố chờ bảo trì
+            // Danh sách sự cố chờ bảo trì (kèm CloudImageFile để hiển thị ảnh & trạng thái lưu trữ)
             var pendingIncidents = await _context.RoomIncidentReports
                 .Include(r => r.ClassRoomLocation)
                 .Include(r => r.ReporterUser)
+                .Include(r => r.CloudImageFile)
                 .Where(r => r.Status != "RESOLVED" && r.Status != "CANCELLED")
                 .OrderByDescending(r => r.ReportedAt)
                 .Take(15)
@@ -109,16 +124,16 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// 2. POST: /Facilities/ReportIncident (GLV Báo hỏng phòng học - TASK-905)
+        /// 2. POST: /Facilities/ReportIncident (GLV Báo hỏng phòng học - TASK-905 / FEAT-P5-08.2)
         /// </summary>
-        /// <param name="locationId"></param>
-        /// <param name="deviceType"></param>
-        /// <param name="severity"></param>
-        /// <param name="description"></param>
-        /// <returns></returns>
         [HttpPost]
-        [ValidateAntiForgeryToken] 
-        public async Task<IActionResult> ReportIncident([FromForm] int locationId, [FromForm] string deviceType, [FromForm] string? severity, [FromForm] string description)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReportIncident(
+            [FromForm] int locationId,
+            [FromForm] string deviceType,
+            [FromForm] string? severity,
+            [FromForm] string description,
+            IFormFile? incidentImage)
         {
             try
             {
@@ -127,28 +142,100 @@ namespace ManagerStudentCaltholic.Controllers
                     return Json(new { success = false, message = "Vui lòng chọn phòng và nhập mô tả sự cố hư hỏng!" });
                 }
 
+                var locationExists = await _context.ClassRoomLocations
+                    .AsNoTracking()
+                    .AnyAsync(l => l.Id == locationId);
+                if (!locationExists)
+                {
+                    return Json(new { success = false, message = "Không tìm thấy phòng học được chọn!" });
+                }
+
                 var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (!long.TryParse(userIdStr, out var reporterUserId))
                 {
-                    var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == User.Identity!.Name);
+                    var user = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Username == User.Identity!.Name);
                     reporterUserId = user?.Id ?? 1;
                 }
 
-                var report = new RoomIncidentReport
-                {
-                    ClassRoomLocationId = locationId,
-                    ReporterUserId = reporterUserId,
-                    DeviceType = string.IsNullOrWhiteSpace(deviceType) ? "Khác" : deviceType,
-                    Severity = severity ?? "NORMAL",
-                    Description = description.Trim(),
-                    Status = "PENDING",
-                    ReportedAt = DateTime.UtcNow
-                };
+                var normalizedDeviceType = TruncateValue(string.IsNullOrWhiteSpace(deviceType) ? "Khác" : deviceType.Trim(), 50);
+                var normalizedSeverity = TruncateValue(string.IsNullOrWhiteSpace(severity) ? "NORMAL" : severity.Trim(), 20);
+                var normalizedDescription = TruncateValue(description.Trim(), 500);
 
-                _context.RoomIncidentReports.Add(report);
-                await _context.SaveChangesAsync();
+                var currentYear = await _context.AcademicYears
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(y => y.IsCurrent);
+                var currentYearName = !string.IsNullOrWhiteSpace(currentYear?.Name)
+                    ? currentYear.Name
+                    : DateTime.UtcNow.Year.ToString();
+
+                if (incidentImage != null)
+                {
+                    if (incidentImage.Length <= 0)
+                    {
+                        return Json(new { success = false, message = "Tệp hình ảnh đính kèm trống." });
+                    }
+
+                    var maxIncidentImageBytes = _driveOptions.MaxIncidentImageBytes > 0
+                        ? _driveOptions.MaxIncidentImageBytes
+                        : 15L * 1024 * 1024;
+                    if (incidentImage.Length > maxIncidentImageBytes)
+                    {
+                        var maxMb = Math.Round(maxIncidentImageBytes / (1024d * 1024d), 1);
+                        return Json(new { success = false, message = $"Dung lượng ảnh sự cố vượt quá giới hạn {maxMb:0.#} MB." });
+                    }
+
+                    var ext = Path.GetExtension(incidentImage.FileName).ToLowerInvariant();
+                    if (!_imageOptimizationService.IsSupportedImageExtension(ext))
+                    {
+                        return Json(new { success = false, message = "Định dạng ảnh không hợp lệ. Chỉ chấp nhận .jpg, .jpeg, .png, .webp, .gif." });
+                    }
+
+                    await using var inputStream = incidentImage.OpenReadStream();
+                    var optimized = await _imageOptimizationService.OptimizeToWebpAsync(
+                        inputStream,
+                        maxWidth: 1600,
+                        maxHeight: 1600,
+                        quality: 78);
+
+                    await using var optimizedStream = optimized.OptimizedStream;
+                    var baseName = Path.GetFileNameWithoutExtension(Path.GetFileName(incidentImage.FileName));
+                    var webpFileName = string.IsNullOrWhiteSpace(baseName)
+                        ? $"incident_{DateTime.UtcNow:yyyyMMddHHmmss}.webp"
+                        : $"{baseName}.webp";
+
+                    await SaveIncidentReportAsync(
+                        locationId,
+                        reporterUserId,
+                        normalizedDeviceType,
+                        normalizedSeverity,
+                        normalizedDescription,
+                        currentYearName,
+                        optimizedStream,
+                        webpFileName,
+                        optimized.ContentType);
+                }
+                else
+                {
+                    await SaveIncidentReportAsync(
+                        locationId,
+                        reporterUserId,
+                        normalizedDeviceType,
+                        normalizedSeverity,
+                        normalizedDescription,
+                        currentYearName,
+                        null,
+                        null,
+                        null);
+                }
 
                 return Json(new { success = true, message = "Đã gửi báo cáo sự cố thành công đến Ban Quản trị!" });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "Ảnh sự cố phòng học không hợp lệ tại FacilitiesController.");
+                return Json(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -156,6 +243,74 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Đã xảy ra lỗi hệ thống trong quá trình xử lý phòng học." });
             }
         }
+
+        private async Task SaveIncidentReportAsync(
+            int locationId,
+            long reporterUserId,
+            string deviceType,
+            string severity,
+            string description,
+            string currentYearName,
+            Stream? optimizedStream,
+            string? webpFileName,
+            string? optimizedContentType)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var report = new RoomIncidentReport
+                    {
+                        ClassRoomLocationId = locationId,
+                        ReporterUserId = reporterUserId,
+                        DeviceType = deviceType,
+                        Severity = severity,
+                        Description = description,
+                        Status = "PENDING",
+                        ReportedAt = DateTime.UtcNow
+                    };
+
+                    _context.RoomIncidentReports.Add(report);
+                    await _context.SaveChangesAsync();
+
+                    if (optimizedStream != null)
+                    {
+                        if (optimizedStream.CanSeek)
+                        {
+                            optimizedStream.Position = 0;
+                        }
+
+                        var media = await _storageService.UploadAsync(new CloudUploadRequest
+                        {
+                            Content = optimizedStream,
+                            OriginalFileName = string.IsNullOrWhiteSpace(webpFileName) ? $"incident_{report.Id}.webp" : webpFileName,
+                            ContentType = string.IsNullOrWhiteSpace(optimizedContentType) ? "image/webp" : optimizedContentType,
+                            Category = CloudMediaCategory.IncidentImage,
+                            EntityName = nameof(RoomIncidentReport),
+                            EntityId = report.Id,
+                            FolderSegments = new[] { currentYearName, "Incidents" },
+                            UploadedBy = User.Identity?.Name,
+                            UploadedByUserId = reporterUserId > 0 ? reporterUserId : null
+                        });
+
+                        report.CloudImageFileId = media.Id;
+                        await _context.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        private static string TruncateValue(string value, int maxLength)
+            => value.Length <= maxLength ? value : value[..maxLength];
 
         /// <summary>
         /// 3. POST: /Facilities/ResolveIncident (BĐH duyệt sửa chữa xong)

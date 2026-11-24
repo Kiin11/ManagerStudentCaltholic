@@ -51,5 +51,8 @@ namespace ManagerStudentCaltholic.Models.Entities
         public User? CreatedByUser { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public long? CloudFileId { get; set; }
+        public CloudMediaFile? CloudFile { get; set; }
     }
 }

@@ -55,6 +55,9 @@ namespace ManagerStudentCaltholic.Models.Entities
 
         [MaxLength(255)]
         public string? AvatarUrl { get; set; } // Đường dẫn ảnh đại diện
+
+        public long? AvatarCloudFileId { get; set; }
+        public CloudMediaFile? AvatarCloudFile { get; set; }
         /// <summary>
         /// TASK-807: Khối phụ trách nếu là BranchHead (Khai Tâm, Rước Lễ, Thêm Sức, Bao Đồng)
         /// </summary>
