@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ManagerStudentCaltholic.Models.DTOs;
 using ManagerStudentCaltholic.Models.ViewModels;
 
@@ -36,9 +37,32 @@ namespace ManagerStudentCaltholic.Interface.Services
         Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request);
 
         /// <summary>
+        /// TASK-P3-12.3 / SEC-APP-01 &amp; SEC-APP-02: Xử lý quét mã QR kèm kiểm tra phạm vi lớp và tự điểm danh theo người thao tác
+        /// </summary>
+        Task<QrScanResponseDto> ProcessQrCheckInViaRedisAsync(QrScanRequestDto request, ClaimsPrincipal? caller);
+
+        /// <summary>
         /// TASK-P5-04.3: Hoàn tác lượt quét QR trong vòng 5 giây
         /// </summary>
         Task<(bool Success, string Message)> UndoScanCheckInAsync(UndoScanRequestDto dto);
+
+        /// <summary>
+        /// TASK-P5-04.3 / LOG-CON-02: Hoàn tác lượt quét QR kèm xác thực người quét, cửa sổ thời gian và quyền truy cập lớp
+        /// </summary>
+        Task<(bool Success, string Message, bool IsForbidden)> UndoScanCheckInAsync(UndoScanRequestDto dto, ClaimsPrincipal? caller);
+
+        /// <summary>
+        /// LOG-CON-01: Thực thi đồng bộ hàng đợi Offline dưới khóa tuần tự theo phân vùng lớp/ngày để tránh race condition với Write-Behind Flush
+        /// </summary>
+        Task ExecuteWithPartitionsFlushLockAsync(
+            IEnumerable<(int ClassId, DateTime DateUtc)> partitions,
+            Func<Task> action,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// LOG-CON-01: Cập nhật/hủy cache ClassSheet an toàn sau khi SyncOfflineQueue ghi thẳng PostgreSQL
+        /// </summary>
+        Task FinalizePartitionsAfterExternalSyncAsync(IEnumerable<(int ClassId, DateTime DateUtc)> partitions);
 
         /// <summary>
         /// TASK-P3-12.4 / TASK-INF-08: Đồng bộ hàng loạt (Batch Upsert) dữ liệu điểm danh còn cờ IsDirty từ Redis về PostgreSQL

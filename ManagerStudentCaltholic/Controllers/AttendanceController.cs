@@ -76,8 +76,8 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(int? classId, DateTime? date)
         {
-            var inputDate = date ?? DateTime.UtcNow.AddHours(7).Date;
-            var targetDate = DateTime.SpecifyKind(inputDate.Date, DateTimeKind.Utc);
+            var inputDate = date ?? VietnamTimeHelper.Today;
+            var targetDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(inputDate);
 
             // Lấy niên khóa đang chạy (ưu tiên Redis Cache)
             var currentYear = await GetCurrentAcademicYearAsync();
@@ -169,11 +169,31 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!await CanAccessClassAsync(request.ClassId))
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền điểm danh cho lớp này." });
+            }
+
+            // SEC-APP-02: Chặn tài khoản có LinkedStudentId tự điểm danh chính mình trong lô điểm danh
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
+            if (linkedStudentId.HasValue && linkedStudentId.Value > 0)
+            {
+                var submittedEnrollmentIds = request.Items.Select(i => i.EnrollmentId).Distinct().ToList();
+                bool containsSelf = await _context.Enrollments
+                    .AsNoTracking()
+                    .AnyAsync(e => submittedEnrollmentIds.Contains(e.Id) && e.StudentId == linkedStudentId.Value);
+
+                if (containsSelf)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "Bạn không thể tự điểm danh cho chính hồ sơ thiếu nhi của mình."
+                    });
+                }
             }
 
             try
             {
+                request.AttendanceDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(request.AttendanceDate);
                 request.ModifiedBy = CurrentOperatorName;
                 request.IpAddress = CurrentClientIp;
 
@@ -209,11 +229,34 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (!await CanAccessClassAsync(request.ClassId))
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền điểm danh cho lớp này." });
+            }
+
+            var targetEnrollment = await _context.Enrollments
+                .AsNoTracking()
+                .Where(e => e.Id == request.EnrollmentId)
+                .Select(e => new { e.Id, e.StudentId, e.ClassRoomId })
+                .FirstOrDefaultAsync();
+
+            if (targetEnrollment == null || targetEnrollment.ClassRoomId != request.ClassId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Học sinh không thuộc lớp được chỉ định." });
+            }
+
+            // SEC-APP-02: Chặn tự điểm danh chính mình
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, targetEnrollment.StudentId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Bạn không thể tự điểm danh cho chính hồ sơ thiếu nhi của mình."
+                });
             }
 
             try
             {
+                request.AttendanceDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(request.AttendanceDate);
                 request.ModifiedBy = CurrentOperatorName;
                 request.IpAddress = CurrentClientIp;
 
@@ -283,7 +326,12 @@ namespace ManagerStudentCaltholic.Controllers
                 request.ModifiedBy = CurrentOperatorName;
                 request.IpAddress = CurrentClientIp;
 
-                var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request);
+                var response = await _redisAttendance.ProcessQrCheckInViaRedisAsync(request, User);
+                if (response.IsForbidden)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, response);
+                }
+
                 return Json(response);
             }
             catch (Exception ex)
@@ -311,12 +359,47 @@ namespace ManagerStudentCaltholic.Controllers
                 return Json(new { success = false, message = "Dữ liệu yêu cầu hoàn tác không hợp lệ." });
             }
 
+            var targetEnrollment = await _context.Enrollments
+                .AsNoTracking()
+                .Where(e => e.Id == request.EnrollmentId)
+                .Select(e => new { e.Id, e.StudentId, e.ClassRoomId })
+                .FirstOrDefaultAsync();
+
+            if (targetEnrollment == null)
+            {
+                return BadRequest(new { success = false, message = "Không tìm thấy hồ sơ thiếu nhi để hoàn tác." });
+            }
+
+            if (request.ClassId > 0 && request.ClassId != targetEnrollment.ClassRoomId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Học sinh không thuộc lớp được chỉ định." });
+            }
+
+            request.ClassId = targetEnrollment.ClassRoomId;
+
+            if (!await CanAccessClassAsync(request.ClassId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền hoàn tác điểm danh cho lớp này." });
+            }
+
+            // SEC-APP-02: Chặn tài khoản có LinkedStudentId tự hoàn tác điểm danh của chính mình
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
+            if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, targetEnrollment.StudentId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không thể tự hoàn tác điểm danh cho chính mình." });
+            }
+
             try
             {
                 request.ModifiedBy = CurrentOperatorName;
                 request.IpAddress = CurrentClientIp;
 
-                var (success, message) = await _redisAttendance.UndoScanCheckInAsync(request);
+                var (success, message, isForbidden) = await _redisAttendance.UndoScanCheckInAsync(request, User);
+                if (isForbidden)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message });
+                }
+
                 return Json(new { success, message });
             }
             catch (Exception ex)
@@ -358,24 +441,15 @@ namespace ManagerStudentCaltholic.Controllers
             var classes = await classesQuery.OrderBy(c => c.GradeLevel).ThenBy(c => c.Name).ToListAsync();
             ViewBag.Classes = classes;
 
+            // Chặn xem chéo / fail-closed khi BranchHead chưa gán khối
+            if (classId.HasValue && !await CanAccessClassAsync(classId.Value))
+            {
+                return Forbid();
+            }
+
             if (!classes.Any())
             {
                 return View(new AttendanceStatisticsViewModel());
-            }
-
-            // Chặn xem chéo
-            if (classId.HasValue && User.IsInRole(UserRole.BranchHead))
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                var requestedClassGrade = await _context.Classes
-                    .AsNoTracking()
-                    .Where(c => c.Id == classId.Value)
-                    .Select(c => c.GradeLevel)
-                    .FirstOrDefaultAsync();
-                if (requestedClassGrade != null && requestedClassGrade != managedGrade)
-                {
-                    return Forbid();
-                }
             }
 
             var targetClassId = classId ?? classes.First().Id;
@@ -527,19 +601,10 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
 
-            // 1. Trong ExportStatisticsExcel(int classId) và ExportMonthlySummaryExcel(int classId, int? month, int? year):
-            if (User.IsInRole(UserRole.BranchHead))
+            // SEC-APP-01: Áp dụng kiểm tra quyền đồng nhất cho Leadership, BranchHead (fail-closed), Teacher (AcademicYearId), ProbationaryTeacher (loại Ca Chiều)
+            if (!await CanAccessClassAsync(classId))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade) &&
-                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
-                }
-            }
-            else if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
-            {
-                return Forbid(); // TASK-02.3: Chặn GLV Dự Bị xuất báo cáo lớp Ca Chiều hoặc lớp không phụ trách
+                return Forbid();
             }
 
             var enrollments = await _context.Enrollments
@@ -735,7 +800,44 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAuditHistory(long studentId, DateTime date)
         {
-            var targetDate = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Mã thiếu nhi không hợp lệ." });
+            }
+
+            var targetDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(date);
+
+            // SEC-APP-01: Kiểm tra phạm vi lớp/khối/Ca Sáng của caller đối với thiếu nhi trước khi trả dữ liệu kiểm toán
+            List<int>? authorizedStudentClassIds = null;
+            if (!IsLeadership)
+            {
+                var currentYear = await GetCurrentAcademicYearAsync();
+                var studentClassIds = await _context.Enrollments
+                    .AsNoTracking()
+                    .Where(e => e.StudentId == studentId &&
+                                (currentYear == null || e.ClassRoom.AcademicYearId == currentYear.Id || e.AcademicYearId == currentYear.Id))
+                    .Select(e => e.ClassRoomId)
+                    .Distinct()
+                    .ToListAsync();
+
+                authorizedStudentClassIds = new List<int>();
+                foreach (var cid in studentClassIds)
+                {
+                    if (await CanAccessClassAsync(cid))
+                    {
+                        authorizedStudentClassIds.Add(cid);
+                    }
+                }
+
+                if (authorizedStudentClassIds.Count == 0)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "Bạn không có quyền xem lịch sử điểm danh của thiếu nhi này."
+                    });
+                }
+            }
 
             // 1. Tìm thông tin học sinh (Projection gọn + AsNoTracking)
             var student = await _context.Students
@@ -751,10 +853,17 @@ namespace ManagerStudentCaltholic.Controllers
 
             var studentFullName = $"{student.ChristianName} {student.FirstName} {student.LastName}".Trim();
 
-            // 2. Tìm bản ghi điểm danh trong ngày
-            var attendance = await _context.Attendances
+            // 2. Tìm bản ghi điểm danh trong ngày (thuộc lớp trong phạm vi phân quyền)
+            var attendanceQuery = _context.Attendances
                 .AsNoTracking()
-                .Where(a => a.Enrollment.StudentId == studentId && a.AttendanceDate == targetDate)
+                .Where(a => a.Enrollment.StudentId == studentId && a.AttendanceDate == targetDate);
+
+            if (authorizedStudentClassIds != null)
+            {
+                attendanceQuery = attendanceQuery.Where(a => authorizedStudentClassIds.Contains(a.Enrollment.ClassRoomId));
+            }
+
+            var attendance = await attendanceQuery
                 .Select(a => new
                 {
                     a.Id,
@@ -860,42 +969,10 @@ namespace ManagerStudentCaltholic.Controllers
         public async Task<IActionResult> MonthlySummary(int? classId, int? month, int? year)
         {
             var currentYear = await GetCurrentAcademicYearAsync();
-            var classesQuery = _context.Classes.AsNoTracking().AsQueryable();
+            var yearId = currentYear?.Id ?? 0;
 
-            if (currentYear != null)
-            {
-                classesQuery = classesQuery.Where(c => c.AcademicYearId == currentYear.Id);
-            }
-
-            // FIX SEC-08: Phải lọc theo khối phụ trách của BranchHead TRƯỚC khi gọi ToListAsync()
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    classesQuery = classesQuery.Where(_ => false);
-                }
-                else
-                {
-                    classesQuery = classesQuery.Where(c => c.GradeLevel == managedGrade);
-                }
-            }
-            else if (User.IsInRole(UserRole.ProbationaryTeacher))
-            {
-                // TASK-02.3: GLV Dự Bị chỉ được xem báo cáo điểm danh tháng các lớp Ca Sáng được phân công
-                var uid = CurrentUserId;
-                classesQuery = classesQuery.Where(c =>
-                    c.ClassTeachers.Any(ct => ct.UserId == uid) &&
-                    c.Session != GradeLevel.SessionAfternoon &&
-                    c.GradeLevel != GradeLevel.BaoDong &&
-                    c.GradeLevel != GradeLevel.DuBi &&
-                    c.GradeLevel != GradeLevel.DuBiCode);
-            }
-
-            var classes = await classesQuery
-                .OrderBy(c => c.GradeLevel)
-                .ThenBy(c => c.Name)
-                .ToListAsync();
+            // SEC-APP-01: Dùng bộ lọc thống nhất cho Leadership, BranchHead (fail-closed), Teacher (AcademicYearId), ProbationaryTeacher (loại Ca Chiều)
+            var classes = await GetAuthorizedClassesAsync(yearId);
 
             ViewBag.Classes = classes;
 
@@ -913,8 +990,9 @@ namespace ManagerStudentCaltholic.Controllers
                 return View(new MonthlyAttendanceReportViewModel());
             }
 
-            var targetMonth = month ?? DateTime.Today.Month;
-            var targetYear = year ?? DateTime.Today.Year;
+            var vnToday = VietnamTimeHelper.Today;
+            var targetMonth = month.HasValue && month.Value >= 1 && month.Value <= 12 ? month.Value : vnToday.Month;
+            var targetYear = year.HasValue && year.Value >= 2000 && year.Value <= 2100 ? year.Value : vnToday.Year;
 
             // 1. Lọc tất cả các ngày Thứ 5 và Chúa Nhật trong tháng được chọn
             var sessionDates = new List<MonthlyAttendanceSessionHeader>();
@@ -952,8 +1030,8 @@ namespace ManagerStudentCaltholic.Controllers
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
 
             // 3. Lấy dữ liệu điểm danh trong tháng của lớp (AsNoTracking + Projection gọn)
-            var startDate = new DateTime(targetYear, targetMonth, 1);
-            var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
+            var startDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(new DateTime(targetYear, targetMonth, 1));
+            var endDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(new DateTime(targetYear, targetMonth, daysInMonth));
 
             var attendances = await _context.Attendances
                 .AsNoTracking()
@@ -1078,26 +1156,25 @@ namespace ManagerStudentCaltholic.Controllers
             var targetClass = await _context.Classes
                 .AsNoTracking()
                 .Where(c => c.Id == classId)
-                .Select(c => new { c.Id, c.Name })
+                .Select(c => new { c.Id, c.Name, c.AcademicYearId })
                 .FirstOrDefaultAsync();
             if (targetClass == null) return NotFound(new { success = false, message = "Không tìm thấy lớp" });
 
-            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            if (!await CanAccessClassAsync(classId))
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền xem quy ước của lớp này." });
             }
 
             // Kiểm tra quyền: Admin, Cha, BĐH hoặc GLV Chủ nhiệm của lớp
-            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            long.TryParse(userIdStr, out var currentUserId);
-
-            bool isLeadership = User.IsInRole(UserRole.Admin) ||
-                                User.IsInRole(UserRole.SpiritualDirector) ||
-                                User.IsInRole(UserRole.ExecutiveBoard);
+            var currentUserId = CurrentUserId;
+            bool isLeadership = IsLeadership;
 
             bool isHeadTeacher = !isLeadership && await _context.ClassTeachers
                 .AsNoTracking()
-                .AnyAsync(ct => ct.ClassRoomId == classId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
+                .AnyAsync(ct => ct.ClassRoomId == classId &&
+                                ct.UserId == currentUserId &&
+                                ct.AcademicYearId == targetClass.AcademicYearId &&
+                                ct.RoleInClass == "HEAD");
 
             var rule = await _context.AttendanceRuleConfigs
                 .AsNoTracking()
@@ -1133,32 +1210,39 @@ namespace ManagerStudentCaltholic.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveClassRule([FromBody] ClassAttendanceRuleDto dto)
         {
-            if (dto == null) return Json(new { success = false, message = "Dữ liệu không hợp lệ" });
+            if (dto == null || dto.ClassId <= 0) return Json(new { success = false, message = "Dữ liệu không hợp lệ" });
 
-            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(dto.ClassId))
+            var targetClass = await _context.Classes
+                .AsNoTracking()
+                .Where(c => c.Id == dto.ClassId)
+                .Select(c => new { c.Id, c.AcademicYearId })
+                .FirstOrDefaultAsync();
+            if (targetClass == null) return NotFound(new { success = false, message = "Không tìm thấy lớp" });
+
+            if (!await CanAccessClassAsync(dto.ClassId))
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền cấu hình quy ước của lớp này." });
             }
 
-            if (dto.ThursdayMassWeightPercent + dto.SundayMassWeightPercent + dto.ClassWeightPercent != 100)
+            if (dto.ThursdayMassWeightPercent < 0 || dto.SundayMassWeightPercent < 0 || dto.ClassWeightPercent < 0 ||
+                dto.ThursdayMassWeightPercent + dto.SundayMassWeightPercent + dto.ClassWeightPercent != 100)
             {
-                return Json(new { success = false, message = "Tổng tỷ trọng Thánh Lễ và Giờ Học phải bằng 100%!" });
+                return Json(new { success = false, message = "Tổng tỷ trọng Thánh Lễ và Giờ Học phải bằng 100% và không được âm!" });
             }
 
-            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            long.TryParse(userIdStr, out var currentUserId);
-
-            bool isLeadership = User.IsInRole(UserRole.Admin) ||
-                                User.IsInRole(UserRole.SpiritualDirector) ||
-                                User.IsInRole(UserRole.ExecutiveBoard);
+            var currentUserId = CurrentUserId;
+            bool isLeadership = IsLeadership;
 
             bool isHeadTeacher = !isLeadership && await _context.ClassTeachers
                 .AsNoTracking()
-                .AnyAsync(ct => ct.ClassRoomId == dto.ClassId && ct.UserId == currentUserId && ct.RoleInClass == "HEAD");
+                .AnyAsync(ct => ct.ClassRoomId == dto.ClassId &&
+                                ct.UserId == currentUserId &&
+                                ct.AcademicYearId == targetClass.AcademicYearId &&
+                                ct.RoleInClass == "HEAD");
 
             if (!isLeadership && !isHeadTeacher)
             {
-                return Json(new { success = false, message = "Chỉ có Giáo lý viên Chủ nhiệm hoặc Ban Điều Hành mới được quyền cấu hình quy ước tính điểm của lớp này!" });
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Chỉ có Giáo lý viên Chủ nhiệm hoặc Ban Điều Hành mới được quyền cấu hình quy ước tính điểm của lớp này!" });
             }
 
             var rule = await _context.AttendanceRuleConfigs.FirstOrDefaultAsync(r => r.ClassRoomId == dto.ClassId);
@@ -1207,22 +1291,15 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (targetClass == null) return NotFound("Không tìm thấy thông tin lớp học");
 
-            if (User.IsInRole(UserRole.BranchHead))
+            // SEC-APP-01: Áp dụng kiểm tra quyền đồng nhất cho Leadership, BranchHead (fail-closed), Teacher (AcademicYearId), ProbationaryTeacher (loại Ca Chiều)
+            if (!await CanAccessClassAsync(classId))
             {
-                var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrEmpty(managedGrade) &&
-                    !string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                {
-                    return Forbid(); // SEC-04 FIX: Chặn Trưởng khối xuất file Excel của khối khác
-                }
-            }
-            else if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
-            {
-                return Forbid(); // TASK-02.3: Chặn GLV Dự Bị xuất báo cáo tháng của lớp Ca Chiều hoặc lớp không phụ trách
+                return Forbid();
             }
 
-            var targetMonth = month ?? DateTime.Today.Month;
-            var targetYear = year ?? DateTime.Today.Year;
+            var vnToday = VietnamTimeHelper.Today;
+            var targetMonth = month.HasValue && month.Value >= 1 && month.Value <= 12 ? month.Value : vnToday.Month;
+            var targetYear = year.HasValue && year.Value >= 2000 && year.Value <= 2100 ? year.Value : vnToday.Year;
             var daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
 
             // 1. Xác định danh sách ngày T5 và CN trong tháng
@@ -1252,8 +1329,8 @@ namespace ManagerStudentCaltholic.Controllers
                 .ToListAsync();
 
             var enrollmentIds = enrollments.Select(e => e.Id).ToList();
-            var startDate = new DateTime(targetYear, targetMonth, 1);
-            var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
+            var startDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(new DateTime(targetYear, targetMonth, 1));
+            var endDate = VietnamTimeHelper.NormalizeBusinessDateUtcKind(new DateTime(targetYear, targetMonth, daysInMonth));
 
             var attendances = await _context.Attendances
                 .AsNoTracking()
@@ -1578,6 +1655,9 @@ namespace ManagerStudentCaltholic.Controllers
         /// 2. POST: /Attendance/SyncOfflineQueue (TASK-P3-06.4 & TASK-P3-06.5 / TASK-INF-08)
         /// Đồng bộ hàng đợi điểm danh Offline từ IndexedDB lên Server kèm xử lý xung đột (Conflict Resolution)
         /// </summary>
+        private static readonly TimeSpan OfflineIdempotencyTtl = TimeSpan.FromHours(24);
+        private static string GetOfflineIdempotencyKey(string clientRecordId) => $"ATT:OFFLINE:IDEMP:{clientRecordId.Trim()}";
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         [EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]
@@ -1589,10 +1669,24 @@ namespace ManagerStudentCaltholic.Controllers
             }
 
             var currentYear = await GetCurrentAcademicYearAsync();
-
             if (currentYear == null)
             {
                 return BadRequest(new { success = false, message = "Chưa kích hoạt niên khóa hiện hành." });
+            }
+
+            // SEC-APP-01: Kiểm tra phạm vi quyền hạn theo khối (fail-closed nếu BranchHead chưa có ManagedGradeLevel)
+            string? managedGrade = null;
+            if (!IsLeadership && User.IsInRole(UserRole.BranchHead))
+            {
+                managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
+                if (string.IsNullOrWhiteSpace(managedGrade))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "Tài khoản Trưởng khối chưa được phân công Khối phụ trách."
+                    });
+                }
             }
 
             // P2-SEC-02 FIX: Lấy tập hợp các lớp mà người dùng hiện tại có thẩm quyền đồng bộ điểm danh
@@ -1600,19 +1694,14 @@ namespace ManagerStudentCaltholic.Controllers
             var authorizedClassIds = authorizedClasses.Select(c => c.Id).ToHashSet();
             if (!authorizedClassIds.Any())
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Bạn không có quyền đồng bộ điểm danh cho lớp nào trong niên khóa hiện hành."
+                });
             }
 
-            // Kiểm tra phạm vi quyền hạn theo khối nếu là BranchHead
-            string? managedGrade = null;
-            if (User.IsInRole(UserRole.BranchHead))
-            {
-                managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (string.IsNullOrWhiteSpace(managedGrade))
-                {
-                    return Forbid();
-                }
-            }
+            var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
 
             var enrollmentIds = request.Records
                 .Where(r => r.EnrollmentId > 0)
@@ -1637,7 +1726,8 @@ namespace ManagerStudentCaltholic.Controllers
                     StudentId = e.StudentId,
                     ClassRoomId = e.ClassRoomId,
                     StudentCode = e.Student.StudentCode,
-                    GradeLevel = e.ClassRoom.GradeLevel
+                    GradeLevel = e.ClassRoom.GradeLevel,
+                    Session = e.ClassRoom.Session
                 })
                 .ToListAsync();
 
@@ -1646,33 +1736,96 @@ namespace ManagerStudentCaltholic.Controllers
                 .GroupBy(e => e.StudentCode.ToUpperInvariant())
                 .ToDictionary(g => g.Key, g => g.First());
 
-            // TASK-INF-08: Tiền đồng bộ mọi phân vùng Redis đang có IsDirty = true liên quan đến lô Offline trước khi hợp nhất xung đột và xóa cache ClassSheet
-            var preFlushPartitions = new HashSet<(int ClassId, DateTime DateUtc)>();
-            foreach (var rec in request.Records)
+            var alreadyIdempotentClientIds = new List<string>();
+            var skippedRecords = new List<object>();
+            var seenBatchClientIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var itemsToProcess = new List<(OfflineSyncItemDto Item, OfflineSyncEnrollmentProjection Enrollment, DateTime ClientTsUtc, DateTime ClientVnTime, DateTime AttDateUtc)>();
+            var candidatePartitions = new HashSet<(int ClassId, DateTime DateUtc)>();
+
+            foreach (var item in request.Records.OrderBy(r => NormalizeClientTimestampUtc(r.ClientTimestampUtc)))
             {
-                OfflineSyncEnrollmentProjection? matched = null;
-                if (rec.EnrollmentId > 0 && enrollmentById.TryGetValue(rec.EnrollmentId, out var byId))
+                var clientRecordId = (item.ClientRecordId ?? string.Empty).Trim();
+
+                OfflineSyncEnrollmentProjection? targetEnrollment = null;
+                if (item.EnrollmentId > 0 && enrollmentById.TryGetValue(item.EnrollmentId, out var enrById))
                 {
-                    matched = byId;
+                    targetEnrollment = enrById;
                 }
-                else if (!string.IsNullOrWhiteSpace(rec.StudentCode) &&
-                         enrollmentByCode.TryGetValue(rec.StudentCode.Trim().ToUpperInvariant(), out var byCode))
+                else if (!string.IsNullOrWhiteSpace(item.StudentCode) &&
+                         enrollmentByCode.TryGetValue(item.StudentCode.Trim().ToUpperInvariant(), out var enrByCode))
                 {
-                    matched = byCode;
+                    targetEnrollment = enrByCode;
                 }
 
-                if (matched != null && authorizedClassIds.Contains(matched.ClassRoomId))
+                if (targetEnrollment == null)
                 {
-                    preFlushPartitions.Add((matched.ClassRoomId, DateTime.SpecifyKind(rec.AttendanceDate.Date, DateTimeKind.Utc)));
+                    skippedRecords.Add(new { clientRecordId, reason = "Không tìm thấy hồ sơ xếp lớp hợp lệ." });
+                    continue;
                 }
+
+                // SEC-APP-01: Chặn ghi đè điểm danh chéo lớp / khối / Ca Chiều (ProbationaryTeacher)
+                if (!authorizedClassIds.Contains(targetEnrollment.ClassRoomId) ||
+                    (!string.IsNullOrWhiteSpace(managedGrade) &&
+                     !string.Equals(targetEnrollment.GradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+                    (User.IsInRole(UserRole.ProbationaryTeacher) &&
+                     GradeLevel.IsAfternoonSession(targetEnrollment.Session, targetEnrollment.GradeLevel)))
+                {
+                    skippedRecords.Add(new { clientRecordId, reason = "Bạn không có quyền đồng bộ điểm danh cho lớp/khối này." });
+                    continue;
+                }
+
+                // SEC-APP-02: Chặn tự điểm danh cho chính mình trong hàng đợi Offline
+                if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, targetEnrollment.StudentId))
+                {
+                    _logger.LogWarning(
+                        "SECURITY SELF_SYNC_BLOCKED: UserId={UserId} attempted offline sync for self StudentId={StudentId}, ClientRecordId={ClientRecordId}",
+                        CurrentUserId, targetEnrollment.StudentId, clientRecordId);
+                    skippedRecords.Add(new { clientRecordId, reason = "Không thể tự điểm danh cho chính hồ sơ thiếu nhi của mình." });
+                    continue;
+                }
+
+                // LOG-CON-01: Deduplicate repeated ClientRecordId qua cache (TTL 24h) + trong cùng lô
+                if (!string.IsNullOrEmpty(clientRecordId))
+                {
+                    if (!seenBatchClientIds.Add(clientRecordId))
+                    {
+                        alreadyIdempotentClientIds.Add(clientRecordId);
+                        continue;
+                    }
+
+                    var idempVal = await _cache.GetAsync<string>(GetOfflineIdempotencyKey(clientRecordId));
+                    if (!string.IsNullOrEmpty(idempVal))
+                    {
+                        alreadyIdempotentClientIds.Add(clientRecordId);
+                        continue;
+                    }
+                }
+
+                var clientTsUtc = NormalizeClientTimestampUtc(item.ClientTimestampUtc);
+                var clientVnTime = VietnamTimeHelper.ToVietnamTime(clientTsUtc);
+                var attDateUtc = NormalizeOfflineBusinessDateUtc(item.AttendanceDate, clientVnTime);
+
+                itemsToProcess.Add((item, targetEnrollment, clientTsUtc, clientVnTime, attDateUtc));
+                candidatePartitions.Add((targetEnrollment.ClassRoomId, attDateUtc));
             }
 
-            if (preFlushPartitions.Count > 0)
+            if (itemsToProcess.Count == 0)
             {
-                await _redisAttendance.SyncDirtyClassesForPartitionsAsync(preFlushPartitions);
+                var idempOnlyIds = alreadyIdempotentClientIds.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                return Json(new
+                {
+                    success = true,
+                    syncedCount = 0,
+                    syncedClientIds = idempOnlyIds,
+                    skippedCount = skippedRecords.Count,
+                    skippedRecords,
+                    message = skippedRecords.Count > 0 && idempOnlyIds.Count == 0
+                        ? "Không có bản ghi hợp lệ để đồng bộ (một số mục bị từ chối do phân quyền)."
+                        : "Dữ liệu điểm danh ngoại tuyến đã được đồng bộ trước đó."
+                });
             }
 
-            var syncedClientIds = new List<string>();
+            var newlySyncedClientIds = new List<string>();
             int upsertedCount = 0;
             var touchedPartitions = new HashSet<(int ClassId, DateTime DateUtc)>();
             var touchedStudentIds = new HashSet<long>();
@@ -1681,266 +1834,331 @@ namespace ManagerStudentCaltholic.Controllers
 
             try
             {
-                await strategy.ExecuteAsync(async () =>
+                // LOG-CON-01: Khóa tuần tự theo phân vùng trên IRedisAttendanceService để không race với FlushSingleClassByIdAsync
+                await _redisAttendance.ExecuteWithPartitionsFlushLockAsync(candidatePartitions, async () =>
                 {
-                    syncedClientIds.Clear();
-                    upsertedCount = 0;
-                    touchedPartitions.Clear();
-                    touchedStudentIds.Clear();
-
-                    await using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    // Sắp xếp theo thời gian thực tế phát sinh ở Client từ sớm đến muộn
-                    var orderedRecords = request.Records.OrderBy(r => r.ClientTimestampUtc).ToList();
-
-                    var targetDates = orderedRecords
-                        .Select(r => DateTime.SpecifyKind(r.AttendanceDate.Date, DateTimeKind.Utc))
-                        .Distinct()
-                        .ToList();
-
-                    var validEnrIds = validEnrollments.Select(e => e.Id).ToList();
-
-                    var existingAttendances = await _context.Attendances
-                        .Where(a => validEnrIds.Contains(a.EnrollmentId) && targetDates.Contains(a.AttendanceDate))
-                        .ToListAsync();
-
-                    var attendanceMap = existingAttendances
-                        .ToDictionary(a => (a.EnrollmentId, a.AttendanceDate.Date), a => a);
-
-                    var pendingOfflineAudits = new List<(
-                        Attendance Record,
-                        string RecordType,
-                        bool IsNew,
-                        bool OldMassAtt,
-                        string OldMassSt,
-                        bool NewMassAtt,
-                        string NewMassSt,
-                        bool OldClassAtt,
-                        string OldClassSt,
-                        bool NewClassAtt,
-                        string NewClassSt,
-                        string? OldNote,
-                        string? NewNote)>();
-
-                    foreach (var item in orderedRecords)
+                    await strategy.ExecuteAsync(async () =>
                     {
-                        OfflineSyncEnrollmentProjection? targetEnrollment = null;
-                        if (item.EnrollmentId > 0 && enrollmentById.TryGetValue(item.EnrollmentId, out var enrById))
+                        const int maxConflictRetries = 2;
+                        for (int attempt = 0; attempt <= maxConflictRetries; attempt++)
                         {
-                            targetEnrollment = enrById;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(item.StudentCode) &&
-                                 enrollmentByCode.TryGetValue(item.StudentCode.Trim().ToUpperInvariant(), out var enrByCode))
-                        {
-                            targetEnrollment = enrByCode;
-                        }
+                            _context.ChangeTracker.Clear();
+                            newlySyncedClientIds.Clear();
+                            upsertedCount = 0;
+                            touchedPartitions.Clear();
+                            touchedStudentIds.Clear();
 
-                        if (targetEnrollment == null)
-                        {
-                            continue;
-                        }
-
-                        // P2-SEC-02 FIX: Chặn ghi đè điểm danh chéo lớp/khối đối với cả Teacher và BranchHead
-                        if (!authorizedClassIds.Contains(targetEnrollment.ClassRoomId))
-                        {
-                            continue;
-                        }
-
-                        // Chặn ghi chéo khối nếu là Trưởng khối
-                        if (!string.IsNullOrEmpty(managedGrade) &&
-                            !string.Equals(targetEnrollment.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        var attDate = DateTime.SpecifyKind(item.AttendanceDate.Date, DateTimeKind.Utc);
-                        TimeSpan? incomingMassTime = TimeSpan.TryParse(item.MassCheckInTimeStr, out var mTs) ? mTs : null;
-                        TimeSpan? incomingClassTime = TimeSpan.TryParse(item.ClassCheckInTimeStr, out var cTs) ? cTs : null;
-
-                        bool isNewRecord = false;
-                        bool oldMassAtt = false;
-                        string oldMassSt = AttendanceStatus.AbsentUnpermitted;
-                        bool oldClassAtt = false;
-                        string oldClassSt = AttendanceStatus.AbsentUnpermitted;
-                        string? oldNote = null;
-
-                        if (!attendanceMap.TryGetValue((targetEnrollment.Id, attDate), out var existing))
-                        {
-                            isNewRecord = true;
-                            existing = new Attendance
+                            await using var transaction = await _context.Database.BeginTransactionAsync();
+                            try
                             {
-                                EnrollmentId = targetEnrollment.Id,
-                                AttendanceDate = attDate,
-                                DayOfWeek = attDate.DayOfWeek,
-                                AttendedMass = item.AttendedMass,
-                                MassStatus = item.MassStatus,
-                                MassCheckInTime = incomingMassTime,
-                                ClassAttended = item.ClassAttended,
-                                ClassStatus = item.ClassStatus,
-                                ClassCheckInTime = incomingClassTime,
-                                Note = item.Note,
-                                CreatedAt = DateTime.UtcNow
-                            };
-                            _context.Attendances.Add(existing);
-                            attendanceMap[(targetEnrollment.Id, attDate)] = existing;
-                        }
-                        else
-                        {
-                            oldMassAtt = existing.AttendedMass;
-                            oldMassSt = existing.MassStatus;
-                            oldClassAtt = existing.ClassAttended;
-                            oldClassSt = existing.ClassStatus;
-                            oldNote = existing.Note;
+                                var targetDates = itemsToProcess.Select(x => x.AttDateUtc).Distinct().ToList();
+                                var targetEnrIds = itemsToProcess.Select(x => x.Enrollment.Id).Distinct().ToList();
 
-                            // THUẬT TOÁN XỬ LÝ XUNG ĐỘT (CONFLICT RESOLUTION - TASK-P3-06.5):
-                            // Nếu nhiều thiết bị cùng đồng bộ cho 1 học sinh:
-                            // 1. Ưu tiên giữ trạng thái Có mặt (Attended = true) và thời gian CheckInTime sớm nhất
-                            if (item.RecordType == "QR_SCAN")
-                            {
-                                if (item.AttendedMass)
+                                var existingAttendances = await _context.Attendances
+                                    .Where(a => targetEnrIds.Contains(a.EnrollmentId) && targetDates.Contains(a.AttendanceDate))
+                                    .ToListAsync();
+
+                                var attendanceMap = existingAttendances
+                                    .ToDictionary(a => (a.EnrollmentId, a.AttendanceDate.Date), a => a);
+
+                                var pendingOfflineAudits = new List<(
+                                    Attendance Record,
+                                    string RecordType,
+                                    bool IsNew,
+                                    bool OldMassAtt,
+                                    string OldMassSt,
+                                    bool NewMassAtt,
+                                    string NewMassSt,
+                                    bool OldClassAtt,
+                                    string OldClassSt,
+                                    bool NewClassAtt,
+                                    string NewClassSt,
+                                    string? OldNote,
+                                    string? NewNote)>();
+
+                                foreach (var (item, targetEnrollment, clientTsUtc, clientVnTime, attDate) in itemsToProcess)
                                 {
-                                    if (!existing.AttendedMass)
+                                    var normalizedType = string.Equals(item.RecordType?.Trim(), "QR_SCAN", StringComparison.OrdinalIgnoreCase)
+                                        ? "QR_SCAN"
+                                        : "BATCH_ROW";
+
+                                    bool effectiveMassAtt;
+                                    string effectiveMassSt;
+                                    TimeSpan? incomingMassTime;
+                                    bool effectiveClassAtt;
+                                    string effectiveClassSt;
+                                    TimeSpan? incomingClassTime;
+
+                                    if (normalizedType == "QR_SCAN")
                                     {
-                                        existing.AttendedMass = true;
-                                        existing.MassStatus = item.MassStatus;
-                                        existing.MassCheckInTime = incomingMassTime;
+                                        (effectiveMassAtt, effectiveMassSt, incomingMassTime,
+                                         effectiveClassAtt, effectiveClassSt, incomingClassTime) =
+                                            EvaluateServerSideOfflineQrStatus(item, targetEnrollment.GradeLevel, clientVnTime);
                                     }
-                                    else if (incomingMassTime.HasValue &&
-                                             (!existing.MassCheckInTime.HasValue || incomingMassTime.Value < existing.MassCheckInTime.Value))
+                                    else
                                     {
-                                        // Lấy thời점 quét sớm hơn và trạng thái tốt hơn
-                                        existing.MassCheckInTime = incomingMassTime;
-                                        existing.MassStatus = PickBetterAttendanceStatus(existing.MassStatus, item.MassStatus);
+                                        effectiveMassAtt = item.AttendedMass;
+                                        effectiveMassSt = RedisAttendanceService.NormalizeAttendanceStatus(item.AttendedMass, item.MassStatus, allowLinedUp: true);
+                                        incomingMassTime = null;
+
+                                        effectiveClassAtt = item.ClassAttended;
+                                        effectiveClassSt = RedisAttendanceService.NormalizeAttendanceStatus(item.ClassAttended, item.ClassStatus, allowLinedUp: false);
+                                        incomingClassTime = null;
                                     }
+
+                                    var trimmedNote = string.IsNullOrWhiteSpace(item.Note) ? null : item.Note.Trim();
+                                    if (trimmedNote != null && trimmedNote.Length > 500)
+                                    {
+                                        trimmedNote = trimmedNote[..500];
+                                    }
+
+                                    bool isNewRecord = false;
+                                    bool oldMassAtt = false;
+                                    string oldMassSt = AttendanceStatus.AbsentUnpermitted;
+                                    bool oldClassAtt = false;
+                                    string oldClassSt = AttendanceStatus.AbsentUnpermitted;
+                                    string? oldNote = null;
+
+                                    if (!attendanceMap.TryGetValue((targetEnrollment.Id, attDate.Date), out var existing))
+                                    {
+                                        isNewRecord = true;
+                                        existing = new Attendance
+                                        {
+                                            EnrollmentId = targetEnrollment.Id,
+                                            AttendanceDate = attDate,
+                                            DayOfWeek = attDate.DayOfWeek,
+                                            AttendedMass = effectiveMassAtt,
+                                            MassStatus = effectiveMassSt,
+                                            MassCheckInTime = incomingMassTime,
+                                            ClassAttended = effectiveClassAtt,
+                                            ClassStatus = effectiveClassSt,
+                                            ClassCheckInTime = incomingClassTime,
+                                            Note = trimmedNote,
+                                            CreatedAt = DateTime.UtcNow
+                                        };
+                                        _context.Attendances.Add(existing);
+                                        attendanceMap[(targetEnrollment.Id, attDate.Date)] = existing;
+                                    }
+                                    else
+                                    {
+                                        oldMassAtt = existing.AttendedMass;
+                                        oldMassSt = existing.MassStatus;
+                                        oldClassAtt = existing.ClassAttended;
+                                        oldClassSt = existing.ClassStatus;
+                                        oldNote = existing.Note;
+
+                                        var existingCreatedUtc = existing.CreatedAt.Kind == DateTimeKind.Unspecified
+                                            ? DateTime.SpecifyKind(existing.CreatedAt, DateTimeKind.Utc)
+                                            : existing.CreatedAt.ToUniversalTime();
+
+                                        bool massProtectedByNewerPermitted =
+                                            string.Equals(existing.MassStatus, AttendanceStatus.AbsentPermitted, StringComparison.OrdinalIgnoreCase) &&
+                                            existingCreatedUtc > clientTsUtc;
+
+                                        bool classProtectedByNewerPermitted =
+                                            string.Equals(existing.ClassStatus, AttendanceStatus.AbsentPermitted, StringComparison.OrdinalIgnoreCase) &&
+                                            existingCreatedUtc > clientTsUtc;
+
+                                        if (normalizedType == "QR_SCAN")
+                                        {
+                                            if (effectiveMassAtt && !massProtectedByNewerPermitted)
+                                            {
+                                                if (!existing.AttendedMass)
+                                                {
+                                                    existing.AttendedMass = true;
+                                                    existing.MassStatus = effectiveMassSt;
+                                                    existing.MassCheckInTime = incomingMassTime;
+                                                }
+                                                else
+                                                {
+                                                    if (incomingMassTime.HasValue &&
+                                                        (!existing.MassCheckInTime.HasValue || incomingMassTime.Value < existing.MassCheckInTime.Value))
+                                                    {
+                                                        existing.MassCheckInTime = incomingMassTime;
+                                                    }
+                                                    existing.MassStatus = PickBetterAttendanceStatus(existing.MassStatus, effectiveMassSt);
+                                                }
+                                            }
+
+                                            if (effectiveClassAtt && !classProtectedByNewerPermitted)
+                                            {
+                                                if (!existing.ClassAttended)
+                                                {
+                                                    existing.ClassAttended = true;
+                                                    existing.ClassStatus = effectiveClassSt;
+                                                    existing.ClassCheckInTime = incomingClassTime;
+                                                }
+                                                else
+                                                {
+                                                    if (incomingClassTime.HasValue &&
+                                                        (!existing.ClassCheckInTime.HasValue || incomingClassTime.Value < existing.ClassCheckInTime.Value))
+                                                    {
+                                                        existing.ClassCheckInTime = incomingClassTime;
+                                                    }
+                                                    existing.ClassStatus = PickBetterAttendanceStatus(existing.ClassStatus, effectiveClassSt);
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            // Bản ghi từ Sổ Điểm Danh Lớp (BATCH_ROW):
+                                            // 1. Không ghi đè ABSENT_PERMITTED nếu quyết định phép mới hơn timestamp offline
+                                            // 2. Bảo toàn lượt quét QR nếu bản lưu sổ lớp chưa có mặt
+                                            // 3. Không bao giờ để BATCH_ROW hạ bậc LINED_UP / PRESENT xuống LATE
+                                            bool preserveQrMass = existing.AttendedMass && existing.MassCheckInTime.HasValue && !effectiveMassAtt;
+                                            bool preventMassDowngrade =
+                                                (string.Equals(existing.MassStatus, AttendanceStatus.LinedUp, StringComparison.OrdinalIgnoreCase) ||
+                                                 string.Equals(existing.MassStatus, AttendanceStatus.Present, StringComparison.OrdinalIgnoreCase)) &&
+                                                string.Equals(effectiveMassSt, AttendanceStatus.Late, StringComparison.OrdinalIgnoreCase);
+
+                                            if (!massProtectedByNewerPermitted && !preserveQrMass && !preventMassDowngrade)
+                                            {
+                                                existing.AttendedMass = effectiveMassAtt;
+                                                existing.MassStatus = effectiveMassSt;
+                                                if (!effectiveMassAtt)
+                                                {
+                                                    existing.MassCheckInTime = null;
+                                                }
+                                            }
+
+                                            bool preserveQrClass = existing.ClassAttended && existing.ClassCheckInTime.HasValue && !effectiveClassAtt;
+                                            bool preventClassDowngrade =
+                                                (string.Equals(existing.ClassStatus, AttendanceStatus.Present, StringComparison.OrdinalIgnoreCase) ||
+                                                 string.Equals(existing.ClassStatus, AttendanceStatus.LinedUp, StringComparison.OrdinalIgnoreCase)) &&
+                                                string.Equals(effectiveClassSt, AttendanceStatus.Late, StringComparison.OrdinalIgnoreCase);
+
+                                            if (!classProtectedByNewerPermitted && !preserveQrClass && !preventClassDowngrade)
+                                            {
+                                                existing.ClassAttended = effectiveClassAtt;
+                                                existing.ClassStatus = effectiveClassSt;
+                                                if (!effectiveClassAtt)
+                                                {
+                                                    existing.ClassCheckInTime = null;
+                                                }
+                                            }
+
+                                            if (!string.IsNullOrWhiteSpace(trimmedNote))
+                                            {
+                                                existing.Note = trimmedNote;
+                                            }
+                                        }
+                                    }
+
+                                    bool changed = isNewRecord
+                                        ? (existing.AttendedMass ||
+                                           existing.MassStatus != AttendanceStatus.AbsentUnpermitted ||
+                                           existing.ClassAttended ||
+                                           existing.ClassStatus != AttendanceStatus.AbsentUnpermitted ||
+                                           !string.IsNullOrWhiteSpace(existing.Note))
+                                        : RedisAttendanceService.HasAttendanceStateChanged(
+                                            oldMassAtt, oldMassSt, existing.AttendedMass, existing.MassStatus,
+                                            oldClassAtt, oldClassSt, existing.ClassAttended, existing.ClassStatus,
+                                            oldNote, existing.Note);
+
+                                    if (changed)
+                                    {
+                                        pendingOfflineAudits.Add((
+                                            existing,
+                                            normalizedType,
+                                            isNewRecord,
+                                            oldMassAtt,
+                                            oldMassSt,
+                                            existing.AttendedMass,
+                                            existing.MassStatus,
+                                            oldClassAtt,
+                                            oldClassSt,
+                                            existing.ClassAttended,
+                                            existing.ClassStatus,
+                                            oldNote,
+                                            existing.Note));
+                                    }
+
+                                    var cid = (item.ClientRecordId ?? string.Empty).Trim();
+                                    if (!string.IsNullOrEmpty(cid))
+                                    {
+                                        newlySyncedClientIds.Add(cid);
+                                    }
+                                    upsertedCount++;
+                                    touchedPartitions.Add((targetEnrollment.ClassRoomId, attDate));
+                                    touchedStudentIds.Add(targetEnrollment.StudentId);
                                 }
 
-                                if (item.ClassAttended)
+                                await _context.SaveChangesAsync();
+
+                                if (pendingOfflineAudits.Any())
                                 {
-                                    if (!existing.ClassAttended)
+                                    var operatorName = RedisAttendanceService.SafeTruncate(CurrentOperatorName, 100) ?? "GLV";
+                                    var clientIp = RedisAttendanceService.SafeTruncate(CurrentClientIp, 45);
+
+                                    var offlineAuditLogs = pendingOfflineAudits.Select(p =>
                                     {
-                                        existing.ClassAttended = true;
-                                        existing.ClassStatus = item.ClassStatus;
-                                        existing.ClassCheckInTime = incomingClassTime;
-                                    }
-                                    else if (incomingClassTime.HasValue &&
-                                             (!existing.ClassCheckInTime.HasValue || incomingClassTime.Value < existing.ClassCheckInTime.Value))
-                                    {
-                                        existing.ClassCheckInTime = incomingClassTime;
-                                        existing.ClassStatus = PickBetterAttendanceStatus(existing.ClassStatus, item.ClassStatus);
-                                    }
+                                        var actionType = p.RecordType == "QR_SCAN" ? "OFFLINE_QR_SYNC" : "OFFLINE_BATCH_SYNC";
+                                        var prefix = p.RecordType == "QR_SCAN" ? "Đồng bộ QR Offline" : "Đồng bộ Sổ lớp Offline";
+                                        return new AttendanceAuditLog
+                                        {
+                                            AttendanceId = p.Record.Id,
+                                            ActionType = actionType,
+                                            OldValues = RedisAttendanceService.FormatStateSnapshot(p.OldMassAtt, p.OldMassSt, p.OldClassAtt, p.OldClassSt, p.OldNote, isNewRecord: p.IsNew),
+                                            NewValues = RedisAttendanceService.FormatStateSnapshot(p.NewMassAtt, p.NewMassSt, p.NewClassAtt, p.NewClassSt, p.NewNote),
+                                            ModifiedBy = operatorName,
+                                            Reason = RedisAttendanceService.BuildAuditReasonSummary(
+                                                prefix, p.IsNew,
+                                                p.OldMassAtt, p.OldMassSt, p.NewMassAtt, p.NewMassSt,
+                                                p.OldClassAtt, p.OldClassSt, p.NewClassAtt, p.NewClassSt,
+                                                p.OldNote, p.NewNote),
+                                            IpAddress = clientIp,
+                                            CreatedAt = DateTime.UtcNow
+                                        };
+                                    }).ToList();
+
+                                    await _context.AttendanceAuditLogs.AddRangeAsync(offlineAuditLogs);
+                                    await _context.SaveChangesAsync();
                                 }
+
+                                await transaction.CommitAsync();
+                                break;
                             }
-                            else
+                            catch (DbUpdateException dbEx) when (IsPostgresUniqueViolation(dbEx) && attempt < maxConflictRetries)
                             {
-                                // Bản ghi từ Sổ Điểm Danh Lớp (BATCH_ROW):
-                                // Nếu trước đó học sinh đã quét QR có mặt (có MassCheckInTime / ClassCheckInTime) mà bản lưu sổ lớp chưa kịp cập nhật thì bảo toàn lượt quét QR
-                                if (!(existing.AttendedMass && existing.MassCheckInTime.HasValue && !item.AttendedMass))
-                                {
-                                    existing.AttendedMass = item.AttendedMass;
-                                    existing.MassStatus = item.MassStatus;
-                                }
-
-                                if (!(existing.ClassAttended && existing.ClassCheckInTime.HasValue && !item.ClassAttended))
-                                {
-                                    existing.ClassAttended = item.ClassAttended;
-                                    existing.ClassStatus = item.ClassStatus;
-                                }
-
-                                if (!string.IsNullOrWhiteSpace(item.Note))
-                                {
-                                    existing.Note = item.Note;
-                                }
+                                await transaction.RollbackAsync();
+                                _context.ChangeTracker.Clear();
+                                _logger.LogWarning(
+                                    dbEx,
+                                    "Phát hiện xung đột khóa duy nhất (23505) khi đồng bộ offline (lần {Attempt}), tải lại bản ghi hiện hành và hợp nhất lại.",
+                                    attempt + 1);
                             }
                         }
+                    });
 
-                        bool changed = isNewRecord
-                            ? (existing.AttendedMass ||
-                               existing.MassStatus != AttendanceStatus.AbsentUnpermitted ||
-                               existing.ClassAttended ||
-                               existing.ClassStatus != AttendanceStatus.AbsentUnpermitted ||
-                               !string.IsNullOrWhiteSpace(existing.Note))
-                            : RedisAttendanceService.HasAttendanceStateChanged(
-                                oldMassAtt, oldMassSt, existing.AttendedMass, existing.MassStatus,
-                                oldClassAtt, oldClassSt, existing.ClassAttended, existing.ClassStatus,
-                                oldNote, existing.Note);
-
-                        if (changed)
-                        {
-                            pendingOfflineAudits.Add((
-                                existing,
-                                item.RecordType,
-                                isNewRecord,
-                                oldMassAtt,
-                                oldMassSt,
-                                existing.AttendedMass,
-                                existing.MassStatus,
-                                oldClassAtt,
-                                oldClassSt,
-                                existing.ClassAttended,
-                                existing.ClassStatus,
-                                oldNote,
-                                existing.Note));
-                        }
-
-                        syncedClientIds.Add(item.ClientRecordId);
-                        upsertedCount++;
-                        touchedPartitions.Add((targetEnrollment.ClassRoomId, attDate));
-                        touchedStudentIds.Add(targetEnrollment.StudentId);
-                    }
-
-                    await _context.SaveChangesAsync();
-
-                    if (pendingOfflineAudits.Any())
-                    {
-                        var operatorName = RedisAttendanceService.SafeTruncate(CurrentOperatorName, 100) ?? "GLV";
-                        var clientIp = RedisAttendanceService.SafeTruncate(CurrentClientIp, 45);
-
-                        var offlineAuditLogs = pendingOfflineAudits.Select(p =>
-                        {
-                            var actionType = p.RecordType == "QR_SCAN" ? "OFFLINE_QR_SYNC" : "OFFLINE_BATCH_SYNC";
-                            var prefix = p.RecordType == "QR_SCAN" ? "Đồng bộ QR Offline" : "Đồng bộ Sổ lớp Offline";
-                            return new AttendanceAuditLog
-                            {
-                                AttendanceId = p.Record.Id,
-                                ActionType = actionType,
-                                OldValues = RedisAttendanceService.FormatStateSnapshot(p.OldMassAtt, p.OldMassSt, p.OldClassAtt, p.OldClassSt, p.OldNote, isNewRecord: p.IsNew),
-                                NewValues = RedisAttendanceService.FormatStateSnapshot(p.NewMassAtt, p.NewMassSt, p.NewClassAtt, p.NewClassSt, p.NewNote),
-                                ModifiedBy = operatorName,
-                                Reason = RedisAttendanceService.BuildAuditReasonSummary(
-                                    prefix, p.IsNew,
-                                    p.OldMassAtt, p.OldMassSt, p.NewMassAtt, p.NewMassSt,
-                                    p.OldClassAtt, p.OldClassSt, p.NewClassAtt, p.NewClassSt,
-                                    p.OldNote, p.NewNote),
-                                IpAddress = clientIp,
-                                CreatedAt = DateTime.UtcNow
-                            };
-                        }).ToList();
-
-                        await _context.AttendanceAuditLogs.AddRangeAsync(offlineAuditLogs);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    await transaction.CommitAsync();
+                    await _redisAttendance.FinalizePartitionsAfterExternalSyncAsync(touchedPartitions);
                 });
 
-                foreach (var (clsId, dtUtc) in touchedPartitions)
+                // Lưu khóa idempotency 24h SAU KHI transaction PostgreSQL commit thành công
+                foreach (var cid in newlySyncedClientIds.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    await _cache.RemoveAsync(RedisAttendanceKeys.ClassSheet(clsId, dtUtc));
-                    await _cache.RemoveAsync(RedisAttendanceKeys.ClassSessionInfo(clsId, dtUtc));
+                    await _cache.SetAsync(GetOfflineIdempotencyKey(cid), "1", OfflineIdempotencyTtl);
                 }
+
                 foreach (var studentId in touchedStudentIds)
                 {
                     await _cache.RemoveAsync($"staff_lookup:student_360:{studentId}");
                 }
 
-                _logger.LogInformation("AUDIT OFFLINE_SYNC: User={User} synced {Count} offline attendance records.",
-                    User.Identity?.Name, upsertedCount);
+                var syncedClientIds = alreadyIdempotentClientIds
+                    .Concat(newlySyncedClientIds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                _logger.LogInformation("AUDIT OFFLINE_SYNC: User={User} synced {Count} new + {ReplayCount} idempotent offline records.",
+                    User.Identity?.Name, upsertedCount, alreadyIdempotentClientIds.Count);
 
                 return Json(new
                 {
                     success = true,
                     syncedCount = upsertedCount,
                     syncedClientIds,
+                    skippedCount = skippedRecords.Count,
+                    skippedRecords,
                     message = $"Đã đồng bộ thành công {upsertedCount} lượt điểm danh ngoại tuyến lên máy chủ!"
                 });
             }
@@ -1954,6 +2172,97 @@ namespace ManagerStudentCaltholic.Controllers
                 });
             }
         }
+
+        private static DateTime NormalizeClientTimestampUtc(DateTime rawTimestamp)
+        {
+            if (rawTimestamp == default)
+            {
+                return DateTime.UtcNow;
+            }
+
+            return rawTimestamp.Kind switch
+            {
+                DateTimeKind.Utc => rawTimestamp,
+                DateTimeKind.Local => rawTimestamp.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(rawTimestamp, DateTimeKind.Utc)
+            };
+        }
+
+        private static DateTime NormalizeOfflineBusinessDateUtc(DateTime rawAttendanceDate, DateTime clientVnTime)
+        {
+            if (rawAttendanceDate == default)
+            {
+                return VietnamTimeHelper.NormalizeBusinessDateUtcKind(clientVnTime);
+            }
+
+            if (rawAttendanceDate.Kind == DateTimeKind.Utc && rawAttendanceDate.TimeOfDay != TimeSpan.Zero)
+            {
+                return VietnamTimeHelper.NormalizeBusinessDateUtcKind(VietnamTimeHelper.ToVietnamTime(rawAttendanceDate));
+            }
+
+            return VietnamTimeHelper.NormalizeBusinessDateUtcKind(rawAttendanceDate);
+        }
+
+        private static (
+            bool MassAtt,
+            string MassStatus,
+            TimeSpan? MassTime,
+            bool ClassAtt,
+            string ClassStatus,
+            TimeSpan? ClassTime) EvaluateServerSideOfflineQrStatus(
+                OfflineSyncItemDto item,
+                string gradeLevel,
+                DateTime clientVnTime)
+        {
+            var mode = (item.SessionMode ?? string.Empty).Trim().ToUpperInvariant();
+            var timeOfDay = clientVnTime.TimeOfDay;
+
+            if (mode == "SUNDAY_MASS" || mode == "THURSDAY_MASS" || mode == "CATECHISM_CLASS" || mode == "CAMPAIGN_MONTH")
+            {
+                var (isMass, isClass, status, _) = RedisAttendanceService.EvaluateSessionCheckIn(clientVnTime, gradeLevel, mode);
+                return (
+                    isMass,
+                    isMass ? status : AttendanceStatus.AbsentUnpermitted,
+                    isMass ? timeOfDay : null,
+                    isClass,
+                    isClass ? status : AttendanceStatus.AbsentUnpermitted,
+                    isClass ? timeOfDay : null);
+            }
+
+            var eval = AttendanceTimeHelper.EvaluateCheckIn(clientVnTime, gradeLevel);
+            if (eval.isMass || eval.isClass)
+            {
+                return (
+                    eval.isMass,
+                    eval.isMass ? eval.calculatedStatus : AttendanceStatus.AbsentUnpermitted,
+                    eval.isMass ? timeOfDay : null,
+                    eval.isClass,
+                    eval.isClass ? eval.calculatedStatus : AttendanceStatus.AbsentUnpermitted,
+                    eval.isClass ? timeOfDay : null);
+            }
+
+            // Ngoài khung giờ chuẩn (ví dụ quét thử hoặc quét bù): đánh giá theo loại buổi nhưng vẫn suy luận trạng thái từ clientVnTime
+            if (item.AttendedMass)
+            {
+                var massStatus = clientVnTime.DayOfWeek == DayOfWeek.Sunday
+                    ? (timeOfDay < new TimeSpan(6, 35, 0)
+                        ? AttendanceStatus.LinedUp
+                        : (timeOfDay < new TimeSpan(7, 0, 0) ? AttendanceStatus.Present : AttendanceStatus.Late))
+                    : AttendanceStatus.Present;
+                return (true, massStatus, timeOfDay, false, AttendanceStatus.AbsentUnpermitted, null);
+            }
+
+            bool isMorning = !GradeLevel.IsAfternoonGrade(gradeLevel);
+            var classStatus = clientVnTime.DayOfWeek == DayOfWeek.Sunday
+                ? ((isMorning ? timeOfDay < new TimeSpan(9, 30, 0) : timeOfDay < new TimeSpan(15, 15, 0))
+                    ? AttendanceStatus.Present
+                    : AttendanceStatus.Late)
+                : AttendanceStatus.Present;
+            return (false, AttendanceStatus.AbsentUnpermitted, null, true, classStatus, timeOfDay);
+        }
+
+        private static bool IsPostgresUniqueViolation(DbUpdateException ex) =>
+            ex.InnerException is Npgsql.PostgresException pgEx && pgEx.SqlState == "23505";
 
         /// <summary>
         /// Ưu tiên giữ trạng thái điểm danh có lợi nhất khi 2 thiết bị cùng quét mã cho 1 học sinh
@@ -2003,7 +2312,10 @@ namespace ManagerStudentCaltholic.Controllers
                 RedisAttendanceKeys.TeacherAuthorizedClassIds(userId, academicYearId),
                 async () => await _context.ClassTeachers
                     .AsNoTracking()
-                    .Where(ct => ct.UserId == userId && (academicYearId == 0 || ct.ClassRoom.AcademicYearId == academicYearId))
+                    .Where(ct => ct.UserId == userId &&
+                                 (academicYearId == 0
+                                     ? ct.AcademicYearId == ct.ClassRoom.AcademicYearId
+                                     : (ct.AcademicYearId == academicYearId && ct.ClassRoom.AcademicYearId == academicYearId)))
                     .Select(ct => ct.ClassRoomId)
                     .Distinct()
                     .ToListAsync(),
@@ -2013,11 +2325,11 @@ namespace ManagerStudentCaltholic.Controllers
         }
 
         /// <summary>
-        /// P2-SEC-01 & P2-SEC-02 FIX / TASK-INF-08: Lấy danh sách lớp học mà người dùng hiện tại được phép truy cập (đệm trên Redis 2 phút)
+        /// P2-SEC-01 & P2-SEC-02 FIX / SEC-APP-01 / TASK-INF-08: Lấy danh sách lớp học mà người dùng hiện tại được phép truy cập (đệm trên Redis 2 phút)
         /// - Leadership (Admin, Cha Xứ, BĐH): Toàn bộ lớp
-        /// - BranchHead (Trưởng khối): Các lớp thuộc khối phụ trách + lớp đứng dạy trực tiếp
-        /// - Teacher (Giáo lý viên): Chỉ các lớp được phân công trong bảng ClassTeachers
-        /// - ProbationaryTeacher (GLV Dự Bị): Chỉ các lớp được phân công thuộc Ca Sáng (loại trừ Bao Đồng, Dự Bị)
+        /// - BranchHead (Trưởng khối): Fail-closed nếu chưa gán ManagedGradeLevel; chỉ các lớp thuộc khối phụ trách
+        /// - Teacher (Giáo lý viên): Chỉ các lớp được phân công trong ClassTeachers khớp AcademicYearId
+        /// - ProbationaryTeacher (GLV Dự Bị): Chỉ các lớp được phân công khớp AcademicYearId thuộc Ca Sáng (loại trừ Bao Đồng, Dự Bị)
         /// </summary>
         private async Task<List<ClassRoom>> GetAuthorizedClassesAsync(int academicYearId)
         {
@@ -2036,42 +2348,47 @@ namespace ManagerStudentCaltholic.Controllers
                 return allYearClasses;
             }
 
-            var uid = CurrentUserId;
-            var assignedClassIds = await GetTeacherAssignedClassIdsCachedAsync(uid, academicYearId);
-
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade))
+                if (string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    return allYearClasses
-                        .Where(c => string.Equals(c.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase) ||
-                                    assignedClassIds.Contains(c.Id))
-                        .ToList();
+                    return new List<ClassRoom>();
                 }
 
                 return allYearClasses
-                    .Where(c => assignedClassIds.Contains(c.Id))
+                    .Where(c => string.Equals(c.GradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase))
                     .ToList();
+            }
+
+            var uid = CurrentUserId;
+            if (uid <= 0)
+            {
+                return new List<ClassRoom>();
             }
 
             if (User.IsInRole(UserRole.ProbationaryTeacher))
             {
-                // TASK-02.3: GLV Dự Bị chỉ được thao tác các lớp được phân công thuộc Ca Sáng
+                var assignedClassIds = await GetTeacherAssignedClassIdsCachedAsync(uid, academicYearId);
                 return allYearClasses
                     .Where(c => assignedClassIds.Contains(c.Id) &&
                                 !GradeLevel.IsAfternoonSession(c.Session, c.GradeLevel))
                     .ToList();
             }
 
-            // Vai trò Teacher: Bắt buộc chỉ lấy các lớp được phân công dạy
-            return allYearClasses
-                .Where(c => assignedClassIds.Contains(c.Id))
-                .ToList();
+            if (User.IsInRole(UserRole.Teacher))
+            {
+                var assignedClassIds = await GetTeacherAssignedClassIdsCachedAsync(uid, academicYearId);
+                return allYearClasses
+                    .Where(c => assignedClassIds.Contains(c.Id))
+                    .ToList();
+            }
+
+            return new List<ClassRoom>();
         }
 
         /// <summary>
-        /// P2-SEC-01 FIX / TASK-INF-08: Kiểm tra người dùng hiện tại có quyền thao tác trên classId hay không (đệm metadata trên Redis 2 phút)
+        /// P2-SEC-01 FIX / SEC-APP-01 / TASK-INF-08: Kiểm tra người dùng hiện tại có quyền thao tác trên classId hay không (đệm metadata trên Redis 2 phút)
         /// </summary>
         private async Task<bool> CanAccessClassAsync(int classId)
         {
@@ -2096,21 +2413,27 @@ namespace ManagerStudentCaltholic.Controllers
 
             if (targetClass == null) return false;
 
-            // TASK-02.3: Chặn tuyệt đối GLV Dự Bị truy cập / thao tác các lớp Ca Chiều (IDOR)
-            if (User.IsInRole(UserRole.ProbationaryTeacher) &&
-                GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
-            {
-                return false;
-            }
-
             if (User.IsInRole(UserRole.BranchHead))
             {
                 var managedGrade = User.FindFirst("ManagedGradeLevel")?.Value;
-                if (!string.IsNullOrWhiteSpace(managedGrade) &&
-                    string.Equals(targetClass.GradeLevel, managedGrade, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(managedGrade))
                 {
-                    return true;
+                    return false;
                 }
+
+                return string.Equals(targetClass.GradeLevel.Trim(), managedGrade.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (User.IsInRole(UserRole.ProbationaryTeacher))
+            {
+                if (GradeLevel.IsAfternoonSession(targetClass.Session, targetClass.GradeLevel))
+                {
+                    return false;
+                }
+            }
+            else if (!User.IsInRole(UserRole.Teacher))
+            {
+                return false;
             }
 
             var uid = CurrentUserId;
@@ -2127,6 +2450,7 @@ namespace ManagerStudentCaltholic.Controllers
             public int ClassRoomId { get; set; }
             public string StudentCode { get; set; } = string.Empty;
             public string GradeLevel { get; set; } = string.Empty;
+            public string Session { get; set; } = string.Empty;
         }
         #endregion
 
@@ -2167,9 +2491,9 @@ namespace ManagerStudentCaltholic.Controllers
         [HttpGet]
         public async Task<IActionResult> GetClassDisputes(int classId, string status = "PENDING")
         {
-            if (User.IsInRole(UserRole.ProbationaryTeacher) && !await CanAccessClassAsync(classId))
+            if (!await CanAccessClassAsync(classId))
             {
-                return Forbid();
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền xem phản ánh của lớp này." });
             }
 
             var list = await _disputeService.GetDisputesForClassAsync(classId, status, User);
@@ -2183,6 +2507,31 @@ namespace ManagerStudentCaltholic.Controllers
             if (!ModelState.IsValid)
             {
                 return BadRequest(new { success = false, message = "Dữ liệu xét duyệt không hợp lệ." });
+            }
+
+            var disputeMeta = await _context.AttendanceDisputeRequests
+                .AsNoTracking()
+                .Where(d => d.Id == dto.DisputeId)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.ClassRoomId,
+                    StudentId = d.Enrollment != null ? d.Enrollment.StudentId : d.StudentId
+                })
+                .FirstOrDefaultAsync();
+
+            if (disputeMeta != null)
+            {
+                if (!await CanAccessClassAsync(disputeMeta.ClassRoomId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có thẩm quyền xét duyệt yêu cầu của lớp này." });
+                }
+
+                var linkedStudentId = await StaffSelfActionGuard.GetLinkedStudentIdAsync(_context, CurrentUserId);
+                if (StaffSelfActionGuard.IsSelfStudentAction(linkedStudentId, disputeMeta.StudentId))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Bạn không có quyền tự xét duyệt yêu cầu đính chính điểm danh của chính mình." });
+                }
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
