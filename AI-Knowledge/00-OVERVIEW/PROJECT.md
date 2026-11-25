@@ -5,8 +5,9 @@ Dự án **ManagerStudentCaltholic** là một ứng dụng Web Monolithic quả
 - **Vai trò:** Hệ thống hóa việc quản lý hồ sơ thiếu nhi, xếp lớp, điểm danh (tích hợp mã QR và Offline-first), đánh giá học lực, xét duyệt điều kiện lãnh nhận Bí tích, và thông tin liên lạc với phụ huynh.
 
 ## 2. Project References & Entry Points
-- **Entry Point:** `Program.cs` (Khởi tạo WebApplication, Kestrel server, cấu hình Middleware, Hangfire, Serilog, và Route mặc định).
-- **Cấu trúc Solution:** Là một dự án duy nhất (Single-project Monolith), không chia thành các thư viện class (`.csproj`) riêng biệt. Mọi thành phần (Data, Services, Controllers, Views) đều nằm trong project `ManagerStudentCaltholic.csproj`.
+- **Entry Point:** `Program.cs` (Khởi tạo WebApplication, Kestrel server, cấu hình Middleware, ForwardedHeaders, Rate Limiter, Hangfire, Serilog, endpoint sức khỏe `GET /health`, và Route mặc định).
+- **Cấu trúc Solution:** Là một dự án ứng dụng chính duy nhất (`ManagerStudentCaltholic.csproj` — Single-project Monolith chứa toàn bộ Data, Services, Controllers, Views), đi kèm project kiểm thử đơn vị độc lập `tests/ManagerStudentCaltholic.Tests/ManagerStudentCaltholic.Tests.csproj` (xUnit, loại trừ khỏi Docker build context).
+- **Nhóm Helper Chuẩn hóa Nền tảng (`Services/`):** `VietnamTimeHelper` (múi giờ UTC+7), `AgeValidationHelper` (ràng buộc `>= 18` tuổi & năm nhuận `29/02`), `FileUploadSecurityHelper` (Magic Bytes, MIME allow-list, Path Traversal containment), và `StaffSelfActionGuard` (chặn tự điểm danh/tự chấm điểm cho `LinkedStudentId`).
 
 ## 3. Các Module Chính (Xác minh từ Controllers & Services)
 1. **Quản lý Hồ sơ & Lớp học (Student & Class Management):** 
@@ -29,4 +30,4 @@ Dự án **ManagerStudentCaltholic** là một ứng dụng Web Monolithic quả
 ## 4. External Integrations
 - **Redis Cache:** Sử dụng `StackExchange.Redis` để lưu trữ tạm thời dữ liệu điểm danh, tăng tốc độ quét QR, và cache hồ sơ tra cứu 360 độ thiếu nhi nội bộ (`staff_lookup:student_360:{studentId}`), tích hợp cơ chế Circuit Breaker `30 giây` kết hợp `IMemoryCache` fallback khi Redis ngoại tuyến. (*Bằng chứng:* `RedisAttendanceService.cs`, `RedisCacheService.cs`, `HomeController.cs`, `appsettings.json`).
 - **PostgreSQL Database:** Lưu trữ dữ liệu chính. (*Bằng chứng:* `ParishDbContext.cs`, `Npgsql.EntityFrameworkCore.PostgreSQL`).
-- **Nginx (Reverse Proxy) & Docker Compose:** Xử lý chuyển tiếp reverse proxy (`nginx` service phụ thuộc `app` trong `docker-compose.yml`), Rate Limiting, và mount volume `dataprotection_keys:/app/dataprotection-keys` để bảo toàn khóa Cookie/Antiforgery. (*Bằng chứng:* `docker-compose.yml`, `Dockerfile`, `ServiceCollectionExtensions.cs`; `nginx/default.conf` hiện ở trạng thái untracked — `NEEDS_VERIFICATION`).
+- **Nginx (Reverse Proxy) & Docker Compose:** Xử lý chuyển tiếp reverse proxy (`dotnet_app` là tên service chuẩn hóa trên `README.md`, `docs/DOCKER-BUILD-DEPLOY.md`, `gemini.md`), Rate Limiting (`GlobalLimiter` 200 req/min/IP kết hợp các policy chuyên biệt), `HEALTHCHECK` gọi `/health`, và mount volume `dataprotection_keys:/app/dataprotection-keys` + `/app/PrivateUploads` (*bằng chứng:* `Dockerfile`, `appsettings.json`, `ServiceCollectionExtensions.cs`, `SecurityExtensions.cs`; cấu hình deploy `docker-compose.yml` và `nginx/default.conf` tách riêng tại `parish-infra-config` — `NEEDS_VERIFICATION`).

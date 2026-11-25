@@ -2,7 +2,7 @@
 
 > **Trạng thái:** NEW FILE (Bổ sung từ commit `c0e828a`)  
 > **Module:** `Common` / `StaffLookup`  
-> **Mức độ truy cập:** Nội bộ — Yêu cầu đăng nhập (`[Authorize]`: GLV / Huynh Trưởng, Trưởng Ngành, Ban Điều Hành, Admin)
+> **Mức độ truy cập:** Nội bộ — Bắt buộc `[Authorize(Policy = "RequireStaff")]` (chặn hoàn toàn tài khoản chưa đăng nhập & vai trò `Parent`, kèm lọc phạm vi lớp/khối trong `StaffStudentLookupService` trước khi đọc/trả cache)
 
 ---
 
@@ -18,26 +18,27 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 | **Entity** | `Models/Entities/LookupViewOption.cs` | `LookupViewOption` | Bảng `LookupViewOptions` cấu hình các tab chế độ xem kết quả |
 | **Entity** | `Models/Entities/StaffQuickLookupLog.cs` | `StaffQuickLookupLog` | Bảng `StaffQuickLookupLogs` lưu lịch sử tra cứu của nhân sự |
 | **DTO** | `Models/DTOs/StaffStudentLookupDtos.cs` | `StaffStudentQuickSearchResultDto`, `StaffStudent360DetailDto`, ... (14 DTOs) | Cấu trúc dữ liệu trả về cho gợi ý autocomplete và hồ sơ 360 độ |
-| **Interface** | `Interface/Services/IStaffStudentLookupService.cs` | `IStaffStudentLookupService` | Hợp đồng dịch vụ tra cứu nội bộ (5 phương thức) |
-| **Service** | `Services/StaffStudentLookupService.cs` | `StaffStudentLookupService` | Truy vấn đa bảng với `.AsNoTracking()` và tổng hợp dữ liệu 360 độ |
-| **Controller** | `Controllers/HomeController.cs` | `Index`, `StaffSearchSuggestions`, `StaffStudentLookup`, `StaffRecentLookups`, `StaffLookupOptions` | Endpoints phục vụ giao diện Trang chủ và AJAX JSON API |
+| **Interface** | `Interface/Services/IStaffStudentLookupService.cs` | `IStaffStudentLookupService` | Hợp đồng dịch vụ tra cứu nội bộ (8 phương thức, gồm các overload có `ClaimsPrincipal caller` và `CanCallerAccessStudentAsync`) |
+| **Service** | `Services/StaffStudentLookupService.cs` | `StaffStudentLookupService` | Truy vấn đa bảng với `.AsNoTracking()`, lọc phạm vi theo vai trò (`ResolveCallerScopeAsync`) và tổng hợp dữ liệu 360 độ |
+| **Controller** | `Controllers/HomeController.cs` | `Index`, `StaffSearchSuggestions`, `StaffStudentLookup`, `StaffRecentLookups`, `StaffLookupOptions` | Endpoints gắn `[Authorize(Policy = "RequireStaff")]` và trả `403` nếu tra cứu ngoài phạm vi |
 | **View** | `Views/Home/_StaffStudentLookupWidget.cshtml` | Partial View | Giao diện thanh tìm kiếm tức thời, chip lịch sử tra cứu, 4 tab kết quả |
-| **Client JS** | `wwwroot/js/staff-student-lookup.js` | IIFE Module | Debounce search (280ms), điều hướng bàn phím, render 4 tab & copy tin nhắn 1-chạm |
+| **Client JS** | `wwwroot/js/staff-student-lookup.js` | IIFE Module | Debounce search (280ms), điều hướng bàn phím, render 4 tab an toàn XSS (`escapeHtml` + delegated click listener thay inline `onclick`) |
 
 ---
 
 ## 3. Luồng Xử lý Chi tiết (End-to-End Flow)
 
 ### 3.1. Khởi tạo Widget tại Trang chủ (`GET /Home/Index`)
-1. Khi người dùng đã xác thực (`User.Identity?.IsAuthenticated == true`), `HomeController.Index` lấy `userId` từ `ClaimTypes.NameIdentifier`.
-2. Gọi `_lookupService.GetRecentLookupsAsync(userId, 5)` và `_lookupService.GetViewOptionsAsync()` để gán vào `MasterWorkspaceViewModel.RecentStaffLookups` và `MasterWorkspaceViewModel.LookupOptions`.
+1. Khi người dùng đã xác thực (`User.Identity?.IsAuthenticated == true`) và không phải `UserRole.Parent`, `HomeController.Index` lấy `userId` từ `ClaimTypes.NameIdentifier`.
+2. Gọi `_lookupService.GetRecentLookupsAsync(userId, User, 5)` (chỉ trả về các học sinh còn nằm trong phạm vi được phép của nhân sự) và `_lookupService.GetViewOptionsAsync()` để gán vào `MasterWorkspaceViewModel.RecentStaffLookups` và `MasterWorkspaceViewModel.LookupOptions`.
 3. `Views/Home/Index.cshtml` render partial `_StaffStudentLookupWidget.cshtml` kèm các chip "Đã xem gần đây" và 4 nút Option (chỉ hiển thị khi đang ở phân khu Tab "Chung" `COMMON`, ẩn ở các tab còn lại như "Điểm Danh", "Học Vụ", "Bí Tích", "Quản Trị").
 
 ### 3.2. Gợi ý Tìm kiếm Đa khóa (`GET /Home/StaffSearchSuggestions?term=...`)
 1. Người dùng gõ từ khóa (tối thiểu 1 ký tự, `term.length > 0`) vào ô `#staffStudentQuickSearchInput`.
 2. `staff-student-lookup.js` debounce 280ms và gọi `GET /Home/StaffSearchSuggestions?term=...`.
-3. `StaffStudentLookupService.SearchStudentsQuickAsync(term, limit = 8)`:
-   - Tìm trong bảng `Students` theo `StudentCode`, `FirstName`, `LastName`, `ChristianName`, hoặc chuỗi ghép không dấu/có dấu.
+3. `StaffStudentLookupService.SearchStudentsQuickAsync(term, User, limit = 8)`:
+   - Gọi `ResolveCallerScopeAsync(User)`: Leadership xem toàn xứ; `BranchHead` lọc theo `ManagedGradeLevel` niên khóa hiện hành (fail-closed nếu rỗng); `Teacher` lọc theo `ClassTeachers` niên khóa hiện hành; `ProbationaryTeacher` chỉ xem lớp Ca Sáng được phân công (`!GradeLevel.IsAfternoonSession`).
+   - Tìm trong bảng `Students` theo `StudentCode`, `FirstName`, `LastName`, `ChristianName`, hoặc chuỗi ghép không dấu/có dấu trong phạm vi được phép.
    - Tìm trong bảng `StudentCodeHistories` theo `OriginalCode`, `ArchivedYearCode` hoặc `NewCode` để phát hiện thiếu nhi được tìm bằng **mã năm cũ**.
    - Kết hợp thông tin lớp hiện hành từ `Enrollments` (thuộc niên khóa `IsCurrent = true`).
    - Trả về danh sách `StaffStudentQuickSearchResultDto` có cờ `IsHistoricalMatch` và `MatchedHistoricalCode`.
@@ -45,7 +46,8 @@ Cho phép Giáo lý viên (GLV) và Ban Điều Hành (BĐH) đã đăng nhập 
 ### 3.3. Tải Hồ sơ 360 Độ & Cache Redis (`GET /Home/StaffStudentLookup`)
 1. Khi chọn một thiếu nhi từ danh sách gợi ý hoặc nhấn vào chip "Đã xem gần đây", client gọi:
    `GET /Home/StaffStudentLookup?studentId={id}&option={optionCode}&searchTerm={term}`
-2. **Tầng Cache (`HomeController.cs`):**
+2. **Kiểm tra phạm vi & Tầng Cache (`HomeController.cs`):**
+   - Bắt buộc gọi `_lookupService.CanCallerAccessStudentAsync(User, studentId)` **trước** khi truy xuất cache Redis; nếu ngoài phạm vi lớp/khối, trả ngay HTTP **`403 Forbidden`**.
    - Sử dụng khóa Redis `staff_lookup:student_360:{studentId}` thông qua `_cacheService.GetOrSetAsync(..., TimeSpan.FromMinutes(5))`.
 3. **Tổng hợp Dữ liệu (`StaffStudentLookupService.GetStudent360DetailAsync`):**
    - **Thông tin cơ bản (`StudentBasicInfoDto`):** Hồ sơ `Students`, lớp hiện tại (`Enrollments` + `Classes` + `ClassTeachers`), và chuỗi mã học viên 2 năm trước (`StudentCodeHistories`).

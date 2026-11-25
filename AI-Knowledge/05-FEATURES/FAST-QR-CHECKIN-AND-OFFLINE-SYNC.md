@@ -28,10 +28,10 @@
 1. **Entry point:** HTTP POST `/Attendance/ScanCheckIn` (`[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`: TokenBucket 60 req/s bền vững, burst 180 req, queue 60 — không chặn HTTP 429 khi 20–30 máy GLV quét đồng thời sau 1 IP NAT Wi-Fi nhà thờ) nhận `QrScanRequestDto` (`StudentCode`, `SessionMode`, `ScanTimestamp`, `CampaignId`).
 
 
-2. **Auth Principal Cache & Validation:** `CookieAuthenticationEvents.OnValidatePrincipal` đọc trạng thái nhân sự ngắn hạn từ `ICacheService` (`auth:user_state:{userId}`, TTL 60s) để tránh truy vấn bảng `Users` trên từng lượt quét. `AttendanceController.ScanCheckIn` kiểm tra `StudentCode` không được rỗng.
+2. **Auth Principal Cache & Validation:** `CookieAuthenticationEvents.OnValidatePrincipal` đọc trạng thái nhân sự ngắn hạn từ `ICacheService` (`auth:user_state:{userId}`, TTL 60s) để tránh truy vấn bảng `Users` trên từng lượt quét. `AttendanceController.ScanCheckIn` kiểm tra `StudentCode` không được rỗng và truyền `User` vào `ProcessQrCheckInViaRedisAsync(request, User)` để kiểm tra quyền truy cập lớp (`CanCallerAccessClassAsync` — fail-closed `BranchHead`, `ClassTeachers.AcademicYearId`, chặn `ProbationaryTeacher` ca chiều) và chặn tự điểm danh `LinkedStudentId` qua `StaffSelfActionGuard` (`403 Forbidden`).
 
 
-3. **Controller processing:** Chuyển `QrScanRequestDto` sang `IRedisAttendanceService.ProcessQrCheckInViaRedisAsync` (KHÔNG còn gọi đồng bộ `SyncDirtyAttendancesToDatabaseAsync` trực tiếp trên mỗi lượt quét).
+3. **Controller processing:** Chuyển `QrScanRequestDto` và `User` sang `IRedisAttendanceService.ProcessQrCheckInViaRedisAsync(request, User)` (KHÔNG còn gọi đồng bộ `SyncDirtyAttendancesToDatabaseAsync` trực tiếp trên mỗi lượt quét). Nếu `response.IsForbidden`, trả HTTP `403`.
 
 
 4. **Cache Lookup, Negative Cache & Historical Code Fallback:** Tìm khóa `ATT:QR:DATE:{date}:CODE:{code}` trên Redis (Job `PreWarmDailyAttendanceAndTasksAsync` chạy theo múi giờ Việt Nam UTC+7 đã pre-warm sẵn cả mã chính thức lẫn alias mã năm cũ từ `StudentCodeHistories` và trạng thái chiến dịch `ATT:CAMPAIGN:CLASS:{classId}:DATE:{date}`). Nếu Cache Miss: kiểm tra Negative Cache `ATT:QR:MISS:DATE:{date}:CODE:{code}` (TTL 30s) để chặn spam mã sai, sau đó mới truy vấn PostgreSQL với `.AsNoTracking()` + projection gọn (`AcademicYears` từ cache, `Enrollments`, `StudentCodeHistories`), nạp ClassSheet (single-flight theo lớp) và cache alias mã cũ đạt `O(1)` cho các lần quét sau.
@@ -40,7 +40,7 @@
 5. **Business logic (Time Evaluation & Campaign Cache):** Gọi `AttendanceTimeHelper.EvaluateCheckIn()` đánh giá thời điểm quét (kết hợp `SessionMode` nếu được chọn trên HUD) để xác định ca học/lễ và tính toán trạng thái (`PRESENT`, `LATE`, `LINED_UP`). Ở chế độ `CAMPAIGN_MONTH`, chiến dịch đang mở được đọc từ cache `ATT:CAMPAIGN:CLASS:{classId}:DATE:{date}` (TTL 5 phút) và dedup qua `ATT:CAMPAIGN:SCAN:{campaignId}:ENR:{enrollmentId}:DATE:{date}`.
 
 
-6. **Thread-Safe Redis Update (Striped Locks):** Dưới per-class striped lock (`ClassSheetLocks`), đọc/cập nhật lưới điểm danh lớp `ATT:CLASS:{classId}:DATE:{date}` cho đúng học sinh vừa quét, tăng `Revision`, đánh dấu `IsDirty = true`, ghi `EnrollmentId` vào `DirtyEnrollmentIds` cùng thông tin audit riêng theo học sinh (`DirtyAuditMetaByEnrollment`) và hàng đợi chiến dịch (`PendingCampaignCheckIns`, nếu có).
+6. **Thread-Safe Redis Update (Striped Locks):** Dưới per-class striped lock (`ClassSheetLocks`), đọc/cập nhật lưới điểm danh lớp `ATT:CLASS:{classId}:DATE:{date}` cho đúng học sinh vừa quét, tăng `Revision`, đánh dấu `IsDirty = true`, ghi `EnrollmentId` vào `DirtyEnrollmentIds`, thông tin audit riêng theo học sinh (`DirtyAuditMetaByEnrollment`), hàng đợi chiến dịch (`PendingCampaignCheckIns`, nếu có) và khóa metadata hoàn tác `ATT:QR:UNDO:{classId}:{date}:{enrollmentId}` (TTL 5 phút) lưu thời điểm + người quét gốc.
 
 
 7. **Adaptive Persistence (Write-Behind Batch vs. Redis-Down Single-Row Fallback):**
@@ -60,30 +60,29 @@
 2. **Entry point Sync:** HTTP POST `/Attendance/SyncOfflineQueue` (`[EnableRateLimiting(SecurityExtensions.PolicyQrAttendance)]`).
 
 
-3. **Validation & Pre-Flush:** Kiểm tra quyền `GetAuthorizedClassesAsync` của người đồng bộ trên các lớp liên quan, truy vấn danh sách `Enrollments` hợp lệ bằng `.AsNoTracking()` + projection gọn, và gọi `IRedisAttendanceService.SyncDirtyClassesForPartitionsAsync` cho các phân vùng `(ClassRoomId, AttendanceDate)` bị chạm tới nhằm đảm bảo mọi lượt quét QR còn đang chờ trên Redis được ghi xuống DB trước khi hợp nhất xung đột và hủy cache `ClassSheet`.
+3. **Validation, Idempotency & Partition Flush Lock:** Kiểm tra quyền `GetAuthorizedClassesAsync` (fail-closed `BranchHead`, `ClassTeachers.AcademicYearId`, chặn Dự Bị ca chiều) + kiểm tra từng bản ghi và `StaffSelfActionGuard` (bỏ qua mục tự đồng bộ vào `skippedRecords`); chống trùng lặp bằng Redis idempotency key `ATT:OFFLINE:IDEMP:{clientRecordId}` (TTL 24h); truy vấn danh sách `Enrollments` hợp lệ bằng `.AsNoTracking()` + projection gọn; giữ khóa phân vùng qua `IRedisAttendanceService.ExecuteWithPartitionsFlushLockAsync` nhằm đảm bảo mọi lượt quét QR còn đang chờ trên Redis được ghi xuống DB tuần tự trước khi hợp nhất xung đột (không race với `FlushSingleClassByIdAsync`).
 
 
-4. **Database queries:** Truy vấn bảng `Attendances` của các học sinh và ngày tương ứng vào một `Dictionary` trong bộ nhớ.
+4. **Database queries & Retry `23505`:** Truy vấn bảng `Attendances` của các học sinh và ngày tương ứng vào một `Dictionary` trong bộ nhớ, đồng thời có vòng retry (`maxConflictRetries = 2`) khi đụng vi phạm ràng buộc duy nhất PostgreSQL `23505`.
 
 
 5. **Business logic (Conflict Resolution):**
-* Duyệt qua từng bản ghi Offline. Nếu là quét QR (`RecordType == "QR_SCAN"`), ưu tiên ghi đè nếu trạng thái có lợi hơn hoặc thời gian quét sớm hơn bản ghi hiện tại trên DB.
-
-
+* Đánh giá lại trạng thái QR phía Server từ `ClientTimestampUtc` quy đổi qua `VietnamTimeHelper.ToVietnamTime` (`EvaluateServerSideOfflineQrStatus`), bỏ qua việc tin mù trạng thái từ Client (`OfflineSyncItemDto.SessionMode`).
+* Bảo vệ chống ghi đè ngược thứ tự: không để `BATCH_ROW` hạ cấp `LINED_UP`/`PRESENT` xuống `LATE`, và không ghi đè `ABSENT_PERMITTED` mới hơn bằng lượt quét offline cũ hơn.
 * Dùng hàm `PickBetterAttendanceStatus` để ưu tiên trạng thái (VD: `LINED_UP` > `PRESENT` > `LATE` > `ABSENT_PERMITTED`).
 
 
-6. **Database Write:** Dùng `CreateExecutionStrategy` và `BeginTransactionAsync` để Upsert (thêm mới hoặc cập nhật) dữ liệu vào bảng `Attendances` + `AttendanceAuditLogs`, sau đó xóa cache `ClassSheet`, `ClassSessionInfo` và `staff_lookup:student_360:{studentId}`.
+6. **Database Write:** Dùng `CreateExecutionStrategy` và `BeginTransactionAsync` để Upsert (thêm mới hoặc cập nhật) dữ liệu vào bảng `Attendances` + `AttendanceAuditLogs`, sau đó gọi `FinalizePartitionsAfterExternalSyncAsync` và xóa cache `staff_lookup:student_360:{studentId}`.
 
 
-7. **Response:** Trả về JSON chứa số lượng đã đồng bộ `syncedCount` và `syncedClientIds`.
+7. **Response:** Trả về JSON chứa `syncedCount`, `syncedClientIds`, `skippedCount`, `skippedRecords`. Phía Client (`offline-attendance.js` `DB_VERSION = 2` với index `by_enrollmentId` non-unique và ngày local `formatLocalDateYyyyMmDd`) **chỉ xóa đúng các bản ghi nằm trong `syncedClientIds`**.
 
 
 
 ### Flow 3: Undo QR Check-in (5-Second Window - `FEAT-P5-04`)
 
-1. **Online Undo:** Client nhấn nút Hoàn tác trong 5 giây -> `POST /Attendance/UndoScanCheckIn` với `UndoScanRequestDto` (`EnrollmentId`, `ClassId`, `StudentCode`, `AttendanceDate`, `ActivityType`, `SessionMode`) -> `AttendanceController.UndoScanCheckIn` kiểm tra `EnrollmentId > 0` -> gọi `IRedisAttendanceService.UndoScanCheckInAsync` -> reset cờ điểm danh trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`, `IsDirty = true`) và cập nhật trực tiếp xuống PostgreSQL (`Attendances`, `MassCampaignRecords` nếu `ActivityType` chứa `"CHIẾN DỊCH"`).
-2. **Offline Undo:** Client gọi `ParishOfflineEngine.undoOfflineQrScan(clientRecordId)` (`wwwroot/js/offline-attendance.js`) để xóa bản ghi vừa lưu khỏi IndexedDB `STORE_PENDING` trước khi đồng bộ.
+1. **Online Undo:** Client nhấn nút Hoàn tác trong 5 giây -> `POST /Attendance/UndoScanCheckIn` với `UndoScanRequestDto` (`EnrollmentId`, `ClassId`, `StudentCode`, `AttendanceDate`, `ActivityType`, `SessionMode`) -> `AttendanceController.UndoScanCheckIn` kiểm tra `EnrollmentId > 0`, `CanAccessClassAsync` và `StaffSelfActionGuard` (`403` nếu vi phạm) -> gọi `IRedisAttendanceService.UndoScanCheckInAsync(request, User)` giữ khóa nguyên tử `ClassFlushLock -> ClassSheetLock`, kiểm tra cửa sổ thời gian `15 giây` (`UndoGraceWindow`) và người quét gốc (trừ Leadership) qua `QrScanUndoMetaKey`, thu hồi cờ điểm danh trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), xóa `CampaignScanMarker` đang mở trong DB/Redis, luôn ghi audit log `QR_UNDO`, và cập nhật trực tiếp xuống PostgreSQL (`Attendances`, `MassCampaignRecords`).
+2. **Offline Undo:** Client gọi `ParishOfflineEngine.undoOfflineQrScan(clientRecordId)` (`wwwroot/js/offline-attendance.js`) để kiểm tra `store.get` và xóa bản ghi vừa lưu khỏi IndexedDB trước khi đồng bộ; nếu đã tự đồng bộ khi có mạng (`alreadySynced: true`), `ScanQr.cshtml` tự động fallback gọi `POST /Attendance/UndoScanCheckIn`. Nút Hoàn tác không kích hoạt khi `isDuplicate === true`.
 
 
 

@@ -1,9 +1,9 @@
 {
   "solution": "ManagerStudentCaltholic",
   "lastIndexedCommit": "2a3263d",
-  "lastFeatureSync": "FEAT-P5-08",
-  "lastFeatureSyncCommit": "4589783",
-  "lastUpdatedAt": "2026-11-23T10:06:00+07:00",
+  "lastFeatureSync": "Fix-Sec-Inf (PR #99) + OAuth2 Drive (37a30f3)",
+  "lastFeatureSyncCommit": "37a30f3",
+  "lastUpdatedAt": "2026-11-24T12:32:00+07:00",
   "status": "completed",
-  "notes": "Incremental FEAT-P5-08 sync applied from branch Phase-F5.8 commit 4589783; full repository code-index baseline remains at 2a3263d pending Phase 6/7 catch-up."
+  "notes": "Incremental sync for PR #96 (997507f), PR #99 (Fix-Sec-Inf merged at e147f88), and OAuth2 Refresh Token Drive auth (37a30f3) on main applied across 00-OVERVIEW/, 01-MODULES/, 03-CODE-INDEX/, 04-INTEGRATIONS/, 05-FEATURES/, and 06-UPDATE-LOG/. Full repository 03-CODE-INDEX re-scan from 2a3263d..4589783 (Phase 6/7 intermediate symbols/routes) remains tracked in PENDING-UPDATES.md."
 }

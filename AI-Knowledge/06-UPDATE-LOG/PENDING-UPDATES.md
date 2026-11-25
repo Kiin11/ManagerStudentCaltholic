@@ -1,17 +1,18 @@
 # PENDING UPDATES - AI-KNOWLEDGE
 
-> **Trạng thái cập nhật gần nhất:** `2026-11-20` (Hoàn thành toàn bộ `14/14` Sub-tasks Phase 6 `FEAT-P6-01`: `TASK-01` ➔ `TASK-04`)  
-> **Tiến độ xử lý Issue kiểm định:** `9/9` issues (`ISS-AUD-001` ➔ `ISS-AUD-009`) đã được **khắc phục (`RESOLVED`)**.
+> **Trạng thái cập nhật gần nhất:** `2026-11-24` (Đồng bộ `PR #99` / `Fix-Sec-Inf` tại commit `e147f88` trên nhánh `main`)  
+> **Tiến độ xử lý Issue kiểm định:** `9/9` issues (`ISS-AUD-001` ➔ `ISS-AUD-009`) đã **khắc phục (`RESOLVED`)**; `13/17` hạng mục bảng `Ke_Hoach_Va_Loi_Bao_Mat_Logic_ManagerStudentCaltholic` đã vá trong mã nguồn, `4/17` hạng mục hạ tầng (`SEC-INF-01..04`) đang xử lý phía Ops.
 
-## 1. Trạng thái Đồng bộ Phase 6 (`FEAT-P6-01` — `14/14 COMPLETED`)
-* **Tài liệu đặc tả:** `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md` (`100.0%` hoàn thành trên Google Sheet).
-* **SQL Script PostgreSQL:** Người dùng đã xác nhận chạy xong `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql`.
-* **Đã đồng bộ trong `AI-Knowledge/`:** `02-DATABASE/` (`DATABASE-OVERVIEW.md`, `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md`), `00-OVERVIEW/CODING-RULES.md`, `05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`, `06-UPDATE-LOG/` (`PENDING-UPDATES.md`, `UPDATE-LOG.md`).
-* **Mở rộng tùy chọn sau commit Phase 6:** Khi chốt commit Phase 6 lên Git, chạy đồng bộ lại `03-CODE-INDEX/` (`FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl`), `00-OVERVIEW/` (`PROJECT.md`, `ARCHITECTURE.md`, `SOURCE-INVENTORY.md`) và `KNOWLEDGE-BASELINE.json`.
+## 1. Trạng thái Đồng bộ Đợt `Fix-Sec-Inf` (`e183ccd..e147f88`)
+* **Đã cập nhật trong `AI-Knowledge/`:** `00-OVERVIEW/` (`PROJECT.md`, `ARCHITECTURE.md`, `CODING-RULES.md`, `TECH-STACK.md`, `SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json`), `01-MODULES/ATTENDANCE.md`, `03-CODE-INDEX/*.jsonl`, `04-INTEGRATIONS/` (`INTEGRATION-OVERVIEW.md`, `EXTERNAL-APIS.md`), `05-FEATURES/` (`FAST-QR`, `FEAT-P5-01`, `04`, `07`, `08`, `FEAT-P6-01`), và `06-UPDATE-LOG/` (`CHANGE-ANALYSIS.md`, `IMPACT-ANALYSIS.md`, `KNOWLEDGE-UPDATE-PLAN.md`, `AFFECTED-FILES.json`, `KNOWLEDGE-BASELINE.json`, `UPDATE-LOG.md`, `PENDING-UPDATES.md`, `UPDATE-REPORT.md`).
+* **Không thay đổi (`02-DATABASE/`):** Không có thay đổi Entity/Schema/Migration trong `e183ccd..e147f88` (chỉ xóa tệp cũ `script/fix-db-1.txt`).
 
-## 2. Hạng Mục Đang Chờ / Mở Rộng Tiếp Theo (Non-blocking Backlog)
-* Không còn cảnh báo hay sai lệch mức `HIGH` / `MEDIUM` / `LOW` nào từ đợt kiểm định độc lập (`KNOWLEDGE-VALIDATION-REPORT.md`).
-* **Ghi chú xác nhận từ Developer (`2026-11-15`):**
-  * **`ISS-AUD-002`:** Developer đã xác nhận chạy và kiểm chứng đầy đủ migrations/DDL trên PostgreSQL thực tế (không cần gắn cờ chờ kiểm tra thêm).
-  * **`ISS-AUD-005`:** Luồng đồng bộ điểm danh trực tiếp (**Write-Through** ở cả `ScanCheckIn` và `SaveBatch`) đã được đồng bộ hóa giữa mã nguồn, XML comments và toàn bộ tài liệu Markdown (`ATTENDANCE.md`, `ARCHITECTURE.md`, `Request Flow Diagram.md`, `INTEGRATION-OVERVIEW.md`).
-  * **Mở rộng tùy chọn trong tương lai:** Bổ sung chi tiết symbol cấp phương thức cho nhóm Controller phụ trợ còn lại hoặc thêm vào `ROUTE-INDEX.jsonl` khi phát sinh endpoint mới.
+## 2. Hạng Mục Đang Chờ / Mở Rộng Tiếp Theo (`NEEDS_VERIFICATION` & Backlog)
+1. **Tái quét đầy đủ `03-CODE-INDEX/*.jsonl` cho khoảng trung gian `2a3263d..4589783` (`Phase 6/7`):**
+   * Các commit `e183ccd` và `e147f88` cập nhật tăng dần phần `FEAT-P5-08` và `Fix-Sec-Inf`, trong khi `lastIndexedCommit` vẫn giữ `2a3263d` chờ một đợt quét đầy đủ toàn bộ symbol/route mới của `GradeLevel`, `ProfileHistoryService`, `SacramentsController`, `GradesController`, `ClassesController`, `UsersController`, `GovernanceController`, v.v.
+2. **Bổ sung đặc tả chuyên đề Học vụ, Bí tích & Báo cáo Hiệu năng (Tùy chọn):**
+   * Hiện chưa có tài liệu riêng trong `01-MODULES/` hoặc `05-FEATURES/` cho `GradesController` / `GradeCalculationService`, `SacramentsController` / `SacramentEvaluationService`, `BackgroundExportJobService`, và `LogsController`.
+3. **Xác minh Hạ tầng Ngoài Repository (`parish-infra-config` & Production VM):**
+   * Xác nhận `SEC-INF-01` (quét `gitleaks`, xoay vòng secret và `git filter-repo` hoặc chuyển Private), `SEC-INF-03` (`SSL Mode=VerifyCA`/`VerifyFull`), `SEC-INF-04` (Redis `--requirepass`), và `SEC-APP-05` (dải IP `parish_nginx` khớp `ReverseProxy:KnownNetworks`).
+4. **Dọn Service Chưa có Caller Trực tiếp (`IGradePermissionService`, `ILessonPlanImportService`):**
+   * Xác nhận xem `IGradePermissionService` (chỉ đăng ký DI) và `ILessonPlanImportService` (chỉ inject vào `FacilitiesController` nhưng chưa gọi method) có tiếp tục giữ dự phòng hay cần tích hợp/gỡ bỏ.

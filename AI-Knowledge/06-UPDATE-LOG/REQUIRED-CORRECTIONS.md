@@ -1,118 +1,103 @@
 # HƯỚNG DẪN KHẮC PHỤC CÁC VẤN ĐỀ KHO TRI THỨC (REQUIRED CORRECTIONS)
 
-> **Tài liệu liên quan:** [`KNOWLEDGE-VALIDATION-REPORT.md`](file:///d:/github/ManagerStudentCaltholic/AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-VALIDATION-REPORT.md), [`KNOWLEDGE-ISSUES.jsonl`](file:///d:/github/ManagerStudentCaltholic/AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-ISSUES.jsonl)  
-> **Lưu ý:** Tài liệu này liệt kê chính xác vị trí và nội dung cần chỉnh sửa cho đợt vá tài liệu tiếp theo. Chưa tự động sửa các file này trong bước audit độc lập theo đúng nguyên tắc kiểm định.
+> **Phạm vi kiểm định:** Đối chiếu `AI-Knowledge/` sau đợt cập nhật ngày `2026-11-24` với mã nguồn thực tế trên nhánh `main` tại commit `37a30f3` (bao gồm `PR #99` `Fix-Sec-Inf` tại `e147f88` và OAuth2 Refresh Token Drive tại `37a30f3`).  
+> **Tổng số vấn đề cần xử lý:** `10` (`3 HIGH`, `5 MEDIUM`, `2 LOW`).  
+> **Lưu ý:** Toàn bộ `9` vấn đề của đợt kiểm định trước (`ISS-AUD-001`..`ISS-AUD-009`) đã được xác nhận khắc phục xong trước đợt kiểm định này.
 
 ---
 
-## Priority 1 — Mức Độ `HIGH` (Cần xử lý trước tiên)
+## Priority 1 — Mức độ Nghiêm trọng Cao (`HIGH`)
 
-### 1. [`ISS-AUD-001`] Loại bỏ tên miền giả lập (`Booking`, `Payment`, `Hotel`) & cập nhật kiểm kê trong `00-OVERVIEW/`
-- **Vị trí cần sửa:**
-  - `AI-Knowledge/00-OVERVIEW/MODULE-INVENTORY.json` (dòng `15-37`)
-  - `AI-Knowledge/00-OVERVIEW/SOURCE-INVENTORY.md` (dòng `6-7, 21, 23, 24, 32`)
-  - `AI-Knowledge/00-OVERVIEW/PROJECT-INVENTORY.json` (dòng `80, 104`)
-- **Sai lệch hiện tại:**
-  - `MODULE-INVENTORY.json` định nghĩa `"BookingEnrollmentModule"` (`module: "Booking"`) và `"PaymentPaymentModule"` (`module: "Payment"`).
-  - `SOURCE-INVENTORY.md` và `PROJECT-INVENTORY.json` gán các Controller thực tế (`ClassesController`, `EnrollmentsController`, `FacilitiesController`, `MassCampaignsController`) vào các domain không tồn tại (`"Hotel / Class Management"`, `"Booking / Enrollment"`, `"Hotel / Facilities"`, `"Booking / MassCampaigns"`, `"Class / Hotel"`).
-  - Cả 3 tệp chưa bao gồm toàn bộ `28` Controllers và các nhóm tệp mới (`PublicRegistrationController`, `PwaController`, `SacramentsController`, `SacramentApprovalsController`, `StudentsController`, `StaffStudentLookupService`, `ClassCurriculumService`).
-- **Hành động yêu cầu:**
-  1. Trong `MODULE-INVENTORY.json`, thay thế hoàn toàn module `Booking`/`Payment` bằng danh mục module thực tế khớp với `AI-KNOWLEDGE-STRUCTURE.md` & `PROJECT.md` (`Student & Class`, `Attendance`, `Academic / Grades / LessonPlans`, `Sacraments`, `MassCampaigns`, `PublicLookup / PublicRegistration`, `UserAccount & Governance`, `PWA & Common`).
-  2. Trong `SOURCE-INVENTORY.md` và `PROJECT-INVENTORY.json`, chuẩn hóa cột `module` về đúng tên miền thực tế (`Class`, `Enrollment`, `Facilities`, `MassCampaigns`) và cập nhật ngày/số lượng kiểm kê khớp hiện trạng (`28` Controllers).
+### 1. `[ISS-AUD-010]` Đồng bộ lại sơ đồ luồng Điểm danh QR (`Write-Behind` thay cho `Write-Through`)
+- **Tài liệu cần sửa:**
+  1. `AI-Knowledge/00-OVERVIEW/Request Flow Diagram.md` (`lines 22-36`)
+  2. `AI-Knowledge/05-FEATURES/FEAT-P5-04-QR-SCANNER-UPGRADE.md` (`line 46`)
+- **Hiện trạng sai lệch:**
+  - `Request Flow Diagram.md:23-24` vẫn vẽ `Ctrl->>R_Svc: Write-Through SyncDirtyAttendancesToDatabaseAsync()` và `Batch Upsert ngay trong Request xuống PostgreSQL`.
+  - `FEAT-P5-04-QR-SCANNER-UPGRADE.md:46` vẫn ghi `──> Cập nhật lưới điểm danh Redis (IsDirty = true) & Write-Through DB`.
+- **Giá trị đúng cần cập nhật (theo `AttendanceController.cs:307`, `AttendanceWriteBehindBackgroundService.cs:10-97`, `ATTENDANCE.md`, `FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`):**
+  - Luồng `ScanCheckIn` online dùng **Redis-First & Write-Behind**: `RedisAttendanceService` cập nhật Redis (`IsDirty = true`) và gọi `IAttendanceFlushSignal.NotifyDirty(...)` để `AttendanceWriteBehindBackgroundService` gom nhóm Batch Upsert xuống PostgreSQL theo cửa sổ `~5 giây` hoặc ngưỡng `25` lượt quét (cùng flush khi tắt ứng dụng `StopAsync` và Hangfire job `*/2 * * * *` dự phòng). Chỉ thực hiện ghi thẳng 1 dòng xuống PostgreSQL khi `!IsRedisAvailable`. (Cơ chế Write-Through chỉ áp dụng cho `SaveBatch` và `QuickUpdateSingle`.)
 
-### 2. [`ISS-AUD-002`] Xử lý mâu thuẫn Migration trong `UPDATE-LOG.md` & xác minh DDL PostgreSQL (`NEEDS_VERIFICATION`)
-- **Vị trí cần sửa trong tài liệu:**
-  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md` (dòng `95` trong khối lịch sử `05/11/2026 - FEAT-P5-07`)
-  - `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` (dòng `5`)
-- **Sai lệch hiện tại:**
-  - `UPDATE-LOG.md:95` ghi: `Cấu hình Fluent API và tạo EF Migration AddClassCurriculumDocumentsAndVersions.`
-  - `DATABASE-OVERVIEW.md:5` ghi: `Phương pháp tiếp cận: Code-First Migrations.` (nhưng `ManagerStudentCaltholic/Migrations/` hiện có **`0` file**).
-- **Hành động yêu cầu:**
-  1. Cập nhật `UPDATE-LOG.md:95` thêm chú thích `[NEEDS_VERIFICATION - Tệp migration hiện không còn trong ManagerStudentCaltholic/Migrations/]` để đồng nhất với dòng `11` của cùng file và `UPDATE-REPORT.md:86`.
-  2. Bổ sung ngay tại `DATABASE-OVERVIEW.md:5` ghi chú rằng repository hiện chưa lưu tệp migration nào trong `Migrations/` nên quy trình đồng bộ DDL thực tế cần Developer xác nhận.
-  3. **Hành động cho Developer (Ngoài scope sửa tài liệu):**
-     - Kiểm tra trên PostgreSQL sự tồn tại các bảng `ClassCurriculumDocuments`, `ClassCurriculumVersions`, `StaffQuickLookupLogs`, `LookupViewOptions` và các cột `CurriculumDocumentId`, `WeekNumber`, `Semester` trên `ClassLessonPlans`.
-     - Quyết định tạo lại EF Core Migration baseline vào `ManagerStudentCaltholic/Migrations/` hoặc ghi nhận SQL script quản lý schema chính thức.
+### 2. `[ISS-AUD-012]` Chỉnh dòng/chữ ký trong `SYMBOL-INDEX.jsonl` và bổ sung `11` symbol đang thiếu khỏi `DEPENDENCY-INDEX.jsonl`
+- **Tài liệu cần sửa:**
+  - `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl`
+- **Hiện trạng sai lệch:**
+  - Có **`56 / 264`** bản ghi bị lệch `startLine` / chữ ký across `20` tệp (`AbsenceController.cs`, `AccountController.cs`, `AnnouncementsController.cs`, `AttendanceController.cs`, `AttendanceViewModels.cs`, `ClassCurriculumService.cs`, `ClassesController.cs`, `CurriculumDtos.cs`, `FacilitiesController.cs`, `GradesController.cs`, `HomeController.cs`, `IRedisAttendanceService.cs`, `LessonPlansController.cs`, `LogsController.cs`, `PublicRegistrationController.cs`, `RedisAttendanceService.cs`, `SacramentsController.cs`, `StaffStudentLookupService.cs`, `StudentsController.cs`, `UsersController.cs`), điển hình như `IRedisAttendanceService.ProcessQrCheckInViaRedisAsync` (`:31`), `UndoScanCheckInAsync` (`:36`), `ClassCurriculumService.SaveCurriculumAsync` (`:298`), `ExportCurriculumToExcelAsync` (`:546`), `AccountController.Profile` (`:399`) / `UpdateProfile` (`:419`).
+  - **`11` symbolKey được tham chiếu trong `DEPENDENCY-INDEX.jsonl` bị thiếu khai báo trong `SYMBOL-INDEX.jsonl`:**
+    1. `ManagerStudentCaltholic.Controllers.AbsenceController.Review`
+    2. `ManagerStudentCaltholic.Controllers.BackgroundJobsController.DownloadExport`
+    3. `ManagerStudentCaltholic.Controllers.GovernanceController.ChangeExecutiveRole`
+    4. `ManagerStudentCaltholic.Interface.Services.IDriveLogUploadService.RunUploadCycleAsync`
+    5. `ManagerStudentCaltholic.Models.ViewModels.StudentViewModel.CalculateAgeAtDate`
+    6. `ManagerStudentCaltholic.Services.AttendanceDisputeService.ReviewDisputeByTeacherAsync`
+    7. `ManagerStudentCaltholic.Services.BackgroundExportJobService.GenerateClassExcelReportJobAsync`
+    8. `ManagerStudentCaltholic.Services.ClassEvaluationService.SubmitClassEvaluationAsync`
+    9. `ManagerStudentCaltholic.Services.LogRetentionBackgroundService.CleanUpOldLogsAndTempExports`
+    10. `ManagerStudentCaltholic.Services.MassCampaignService.UpdateSingleCellAsync`
+    11. `ManagerStudentCaltholic.Services.VietnamTimeHelper.Today`
+- **Hành động khắc phục:**
+  - Chạy quét lại toàn bộ `SYMBOL-INDEX.jsonl` theo `HEAD` hiện hành (`37a30f3`), cập nhật chính xác `startLine`/`endLine`/`signature`, và bổ sung đủ `11` symbol bị thiếu (cũng như các symbol của `AttendanceWriteBehindBackgroundService`, `ProfileHistoryService`, `IProfileHistoryService`), sau đó nâng `lastIndexedCommit` trong `KNOWLEDGE-BASELINE.json` từ `2a3263d` lên `37a30f3`.
 
----
-
-## Priority 2 — Mức Độ `MEDIUM` (Cần đồng bộ để tránh hiểu sai luồng & index)
-
-### 3. [`ISS-AUD-003`] Đồng bộ tập bảng giữa `TABLE-INDEX.json`, `TABLE-RELATIONSHIPS.md` và `DATABASE-OVERVIEW.md`
-- **Vị trí cần sửa:**
-  - `AI-Knowledge/02-DATABASE/TABLE-INDEX.json` (hiện `23` bảng)
-  - `AI-Knowledge/02-DATABASE/TABLE-RELATIONSHIPS.md` (dòng `69-276`, khối `### 3. TABLE-INDEX.json` hiện `20` bảng)
-- **Hành động yêu cầu:**
-  1. Khôi phục `5` bảng đang thiếu trong JSON của `TABLE-RELATIONSHIPS.md` nhưng đã có trong `TABLE-INDEX.json`: `Announcements`, `BuildingZones`, `ClassRoomLocations`, `ClassSchedules`, `RoomIncidentReports`.
-  2. Bổ sung `2` bảng `MassCampaigns`, `MassCampaignRecords` vào `TABLE-INDEX.json` (hiện chỉ có ở JSON nhúng của `TABLE-RELATIONSHIPS.md`).
-  3. Mở rộng `TABLE-INDEX.json` (và/hoặc loại bỏ phần JSON lặp trong `TABLE-RELATIONSHIPS.md` nếu giữ single source of truth) để bao phủ thêm `20` bảng còn lại đã liệt kê trong `DATABASE-OVERVIEW.md` (`StudentCodeHistories`, `StudentRegistrationRequests`, `GradeColumns`, `StudentGrades`, `AttendanceScoreRules`, `GradingFormulas`, `StudentGradeSummaries`, `TeacherClasses`, `ParentMessageTemplates`, `PromotionRuleConfigs`, `SacramentApprovalBatches`, `SacramentApprovalItems`, `BranchHeadAssignments`, `UserRoleHistories`, `ClassLessonDocuments`, `AbsenceRequests`, `AttendanceRuleConfigs`, `FeaturePermissionRules`, v.v.).
-
-### 4. [`ISS-AUD-004`] Hiệu chỉnh số dòng, chữ ký & bổ sung Symbol/Dependency còn thiếu trong `03-CODE-INDEX/`
-- **Vị trí cần sửa:**
-  - `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl` (dòng `63-80` + thêm định nghĩa còn thiếu)
-  - `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl` (dòng `31-35`)
-  - `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl` (dòng `43-49` + bổ sung cạnh mới)
-- **Giá trị chuẩn từ source code cần sửa vào:**
-  1. `Controllers/HomeController.cs` (tổng `154` dòng):
-     - Class `HomeController`: `startLine: 9, endLine: 153`.
-     - `Index`: `startLine: 29, endLine: 48` (route `startLine: 28` hoặc `29`).
-     - `StaffSearchSuggestions`: `signature: "public async Task<IActionResult> StaffSearchSuggestions(string? term)"` (bỏ `[FromQuery]`), `startLine: 52, endLine: 62`.
-     - `StaffStudentLookup`: `signature: "public async Task<IActionResult> StaffStudentLookup(long studentId, string? option = \"OVERVIEW\", string? searchTerm = null)"` (bỏ `[FromQuery]`), `startLine: 67, endLine: 105`.
-     - `StaffRecentLookups`: `startLine: 109, endLine: 120`.
-     - `StaffLookupOptions`: `startLine: 124, endLine: 128`.
-     - `DEPENDENCY-INDEX.jsonl`: sửa `sourceLine` của `HomeController` DI thành `16` (constructor) hoặc `22-25`; sửa `StaffSearchSuggestions -> SearchStudentsQuickAsync` thành `60`, `StaffStudentLookup -> GetStudent360DetailAsync` thành `81`, `StaffStudentLookup -> RecordLookupLogAsync` thành `96`.
-  2. `Interface/Services/IStaffStudentLookupService.cs`: `startLine: 8, endLine: 15` (cũng kiểm tra chữ ký `SearchStudentsQuickAsync(string keyword, int limit = 8)`).
-  3. `Services/StaffStudentLookupService.cs`: `endLine: 714`; chỉnh lại `startLine`/`endLine` các method; thêm cạnh `INJECTS` cho `StaffStudentLookupService -> IGradeCalculationService` tại `sourceLine: 20` (hoặc `22`).
-  4. `Extensions/HttpRequestExtensions.cs`: `class` `startLine: 10, endLine: 74`; `IsMobileDevice` `startLine: 30, endLine: 73`.
-  5. Bổ sung vào `SYMBOL-INDEX.jsonl` bản ghi `Class`/`Interface`/`Method` cho `22` `symbolKey` đang được tham chiếu trong `DEPENDENCY-INDEX.jsonl` nhưng chưa có trong `SYMBOL-INDEX.jsonl` (ví dụ: `RedisAttendanceService`, `AttendanceDisputeService`, `RedisCacheService`, `TokenService`, `AcademicYearsController`, `IFeatureNavigationService`, `IDeviceStudentRecognitionService`, `IClassEvaluationService`, `IMassCampaignService`, `AbsenceRequest`, `AttendanceTimeHelper.EvaluateCheckIn`, các method của `IClassCurriculumService` & `IStaffStudentLookupService`).
-
-### 5. [`ISS-AUD-005`] Cập nhật Dependency & Cơ chế Write-Through của `SaveBatch` trong `01-MODULES/ATTENDANCE.md`
-- **Vị trí cần sửa:** `AI-Knowledge/01-MODULES/ATTENDANCE.md` (dòng `240` và dòng `280`).
-- **Nội dung sửa:**
-  1. Dòng `240` (Section 6 `Dependencies`): Đổi `"Gọi IStudentCodeRolloverService (để xử lý mã QR cũ của năm ngoái)"` thành:
-     `"Truy vấn trực tiếp bảng StudentCodeHistories thông qua ParishDbContext (trong RedisAttendanceService.ProcessQrCheckInViaRedisAsync và AttendanceController.GetOfflineStudentsCache) để nhận diện thẻ mã năm cũ; IStudentCodeRolloverService được dùng bởi AttendanceDisputeService và LookupController."`
-  2. Dòng `280` (Section 9 `Risk Areas`): Loại bỏ nhận định lỗi thời rằng `SaveBatchToRedisAsync` chỉ để `IsDirty=true` chờ 10 phút dễ mất dữ liệu. Ghi nhận chính xác rằng `AttendanceController.SaveBatch` (`P2-LOG-16 FIX`, dòng `147-151`) thực hiện **Write-Through tức thì** xuống PostgreSQL qua `SyncDirtyAttendancesToDatabaseAsync(request.AttendanceDate)` ngay trong cùng HTTP request; chỉ có trường hợp ghi Redis gặp ngoại lệ hoặc luồng mất mạng cục bộ mới dựa vào cơ chế dự phòng khác.
-
-### 6. [`ISS-AUD-006`] Sửa tên DOM ID, Debounce, Cột DB & Thuộc tính DTO trong `FEAT-P5-01`
-- **Vị trí cần sửa:** `AI-Knowledge/05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md` (dòng `25, 37-38, 41, 43`).
-- **Nội dung sửa theo code (`staff-student-lookup.js`, `StudentCodeHistory.cs`, `StaffStudentLookupDtos.cs`):**
-  - Đổi `#staffLookupSearchInput` -> `#staffStudentQuickSearchInput`.
-  - Đổi `debounce 250ms` -> `debounce 280ms`, bỏ điều kiện `"tối thiểu 2 ký tự"` (thực tế chỉ kiểm tra `term.length === 0`).
-  - Đổi `"OldCode hoặc NewCode"` -> `"OriginalCode, ArchivedYearCode hoặc NewCode"`.
-  - Đổi `"MatchedByOldCode và MatchedOldCodeDisplay"` -> `"IsHistoricalMatch và MatchedHistoricalCode"`.
-
-### 7. [`ISS-AUD-007`] Đồng bộ Cooldown `3000ms` & Thông số Mobile UI trong `FAST-QR-CHECKIN` và `FEAT-P5-02`
-- **Vị trí cần sửa 1:** `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md` (dòng `164`).
-  - **Sửa:** Đổi `"UI Client khóa 2.5s giữa các lần quét cùng 1 thẻ"` -> `"UI Client khóa 3s (3000ms) giữa các lần quét cùng 1 thẻ qua recentScannedCodesMap"` (`Views/Attendance/ScanQr.cshtml:865-868`).
-- **Vị trí cần sửa 2:** `AI-Knowledge/05-FEATURES/FEAT-P5-02-MOBILE-FIRST-UI.md` (dòng `42, 44-45`).
-  - **Sửa:** Đổi `54px` -> `56px` (`--mobile-header-height: 56px`); đổi `#mobileUserOffcanvas` -> `#mobileMenuOffcanvas`; đổi `z-index: 1085` -> `z-index: 1070` (với `.offcanvas-footer` là `1075`, `.offcanvas-backdrop.show` là `1065` theo `wwwroot/css/mobile-layout.css:258-290` & `Views/Shared/_LayoutMobileHeader.cshtml:53,73`).
+### 3. `[ISS-AUD-013]` Cập nhật `startLine` cho `43` route bị lệch và bổ sung route thiếu trong `ROUTE-INDEX.jsonl`
+- **Tài liệu cần sửa:**
+  - `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl`
+- **Hiện trạng sai lệch:**
+  - **`43 / 69`** route bị lệch `startLine` across `10` Controller (`AbsenceController.cs`, `AccountController.cs`, `AttendanceController.cs`, `ClassesController.cs`, `LessonPlansController.cs`, `LogsController.cs`, `LookupController.cs`, `PublicRegistrationController.cs`, `SacramentsController.cs`, `StudentsController.cs`).
+  - Route đang hoạt động `POST /Attendance/FlushRedisToDatabase` (`Controllers/AttendanceController.cs:2475`) chưa được thêm vào `ROUTE-INDEX.jsonl`.
+- **Hành động khắc phục:**
+  - Đồng bộ lại toàn bộ `startLine` trong `ROUTE-INDEX.jsonl` theo AST/line thực tế trên `HEAD` (`37a30f3`) và bổ sung `POST /Attendance/FlushRedisToDatabase` cùng các route mới của Phase 6/7 nếu cần.
 
 ---
 
-## Priority 3 — Mức Độ `LOW` (Chuẩn hóa chi tiết & vệ sinh cú pháp)
+## Priority 2 — Mức độ Trung bình (`MEDIUM`)
 
-### 8. [`ISS-AUD-008`] Sửa tên tham số route `{versionId:long}` trong `FEAT-P5-07`
-- **Vị trí cần sửa:** `AI-Knowledge/05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md` (dòng `144-145`).
-- **Sửa:** Đổi `/LessonPlans/GetVersionDetail/{id}` và `/LessonPlans/DownloadCurriculumVersion/{id}` thành `/LessonPlans/GetVersionDetail/{versionId:long}` và `/LessonPlans/DownloadCurriculumVersion/{versionId:long}` để khớp chính xác `Controllers/LessonPlansController.cs:205, 228`.
+### 4. `[ISS-AUD-011]` Cập nhật cơ chế xác thực kép OAuth2 Refresh Token / Service Account vào `TECH-STACK.md` và phần tóm tắt `FEAT-P5-08`
+- **Tài liệu cần sửa:**
+  1. `AI-Knowledge/00-OVERVIEW/TECH-STACK.md` (`line 22`)
+  2. `AI-Knowledge/05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md` (`line 15`)
+- **Hành động khắc phục:**
+  - Tại `TECH-STACK.md:22`: Bổ sung `OAuth2 Refresh Token` (`GoogleAuthorizationCodeFlow` + `UserCredential`) làm chế độ ưu tiên trước `ServiceAccountCredential` đúng theo `GoogleDriveStorageService.cs:766-836` (`37a30f3`).
+  - Tại `FEAT-P5-08:15`: Sửa `"Tải tệp bằng Service Account qua Resumable Upload"` thành `"Tải tệp qua OAuth2 Refresh Token (ưu tiên) hoặc Service Account JSON với Resumable Upload"` để nhất quán với mục 3.2 cùng tài liệu.
 
-### 9. [`ISS-AUD-009`] Đóng block Mermaid & nâng độ phủ số dòng cho Index Baseline
-- **Vị trí cần sửa 1:** `AI-Knowledge/00-OVERVIEW/PROJECT-DEPENDENCY-DIAGRAM.md` (sau dòng `17`).
-  - **Sửa:** Thêm dòng đóng ```` ``` ```` sau `BG --> EF`.
-- **Vị trí cần sửa 2:** `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`, `SYMBOL-INDEX.jsonl`, `ROUTE-INDEX.jsonl`, `DEPENDENCY-INDEX.jsonl`.
-  - **Sửa (bảo trì định kỳ):** Điền `startLine`/`endLine`/`sourceLine` cho nhóm bản ghi baseline (`SYMBOL-INDEX:1-62`, `ROUTE-INDEX:1-29`, `DEPENDENCY-INDEX:1-40`) và từng bước mở rộng phạm vi từ `72` tệp lên đầy đủ `28` Controllers cùng các Service/Entity/View còn lại.
+### 5. `[ISS-AUD-014]` Cập nhật `17` `sourceLine` và bổ sung cạnh `DEPENDENCY-INDEX.jsonl`
+- **Tài liệu cần sửa:**
+  - `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`
+- **Hành động khắc phục:**
+  - Cập nhật lại `sourceLine` cho `17` cạnh bị trôi dòng trên `AbsenceController.cs`, `AttendanceController.cs`, `UsersController.cs`, `RedisAttendanceService.cs`, `SacramentsController.cs`, `GradesController.cs`.
+  - Bổ sung các cạnh phụ thuộc cho `AttendanceWriteBehindBackgroundService` (`IAttendanceFlushSignal`, `IRedisAttendanceService`) và `ProfileHistoryService` (`IProfileHistoryService`).
+
+### 6. `[ISS-AUD-015]` Đồng bộ danh mục kiểm kê tệp nguồn (`SOURCE-INVENTORY.md`, `PROJECT-INVENTORY.json`, `FILE-INDEX.jsonl`)
+- **Tài liệu cần sửa:**
+  1. `AI-Knowledge/00-OVERVIEW/SOURCE-INVENTORY.md`
+  2. `AI-Knowledge/00-OVERVIEW/PROJECT-INVENTORY.json`
+  3. `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`
+- **Hành động khắc phục:**
+  - Bổ sung **`16` tệp C# lõi đang hoạt động** còn thiếu trong `SOURCE-INVENTORY.md` & `PROJECT-INVENTORY.json`: `Controllers/CloudMediaController.cs`, `Services/AttendanceWriteBehindBackgroundService.cs`, `Services/DriveLogUploadBackgroundService.cs`, `Services/DriveLogUploadService.cs`, `Services/GoogleDriveStorageService.cs`, `Services/ImageOptimizationService.cs`, `Services/LocalMediaMigrationService.cs`, `Services/ProfileHistoryService.cs`, `Interface/Services/IDriveLogUploadService.cs`, `Interface/Services/IGoogleDriveStorageService.cs`, `Interface/Services/IImageOptimizationService.cs`, `Interface/Services/ILocalMediaMigrationService.cs`, `Interface/Services/IProfileHistoryService.cs`, `Models/Entities/CloudMediaFile.cs`, `Models/Entities/GradeLevel.cs`, `Models/DTOs/CloudMediaDtos.cs`.
+  - Bổ sung **`3` tệp Service/Interface** còn thiếu trong `FILE-INDEX.jsonl`: `Services/AttendanceWriteBehindBackgroundService.cs`, `Services/ProfileHistoryService.cs`, `Interface/Services/IProfileHistoryService.cs`.
+
+### 7. `[ISS-AUD-017]` Xác minh thực thi DDL thực tế trên PostgreSQL (`NEEDS_VERIFICATION`)
+- **Tài liệu liên quan:** `AI-Knowledge/02-DATABASE/DATABASE-OVERVIEW.md` (`lines 5, 63-64`)
+- **Hành động cần Developer thực hiện:**
+  - Do `ManagerStudentCaltholic/Migrations/` có `0` file migration trong Git, cần chạy kiểm tra trực tiếp trên PostgreSQL đích xác nhận đã áp dụng `script/20261123_CloudMediaFiles_GoogleDrive_FeatP5_08.sql` và `script/20261120_Users_Classes_Students_FeaturePermissionRules_Phase6.sql`, sau đó gỡ ghi chú `NEEDS_VERIFICATION` khi có bằng chứng xác thực từ DBA/môi trường chạy thật.
+
+### 8. `[ISS-AUD-018]` Xác minh cấu hình hạ tầng ngoài Repository (`parish-infra-config`) (`NEEDS_VERIFICATION`)
+- **Tài liệu liên quan:** `AI-Knowledge/00-OVERVIEW/PROJECT.md` (`line 33`), `AI-Knowledge/00-OVERVIEW/TECH-STACK.md`, `AI-Knowledge/04-INTEGRATIONS/INTEGRATION-OVERVIEW.md`, `EXTERNAL-APIS.md`
+- **Hành động cần Developer/DevOps thực hiện:**
+  - Đối chiếu repository hạ tầng `parish-infra-config` (`docker-compose.yml`, `nginx/default.conf`, `.env`) để xác nhận: (1) PostgreSQL connection string bật `SSL Mode=VerifyCA`/`VerifyFull`, (2) Redis cấu hình `--requirepass` & `maxmemory-policy`, (3) biến `GoogleDrive__OAuth*` hoặc secret mount `:ro`, và (4) CIDR mạng Docker của `parish_nginx` khớp `ReverseProxy:KnownNetworks`.
 
 ---
 
-## Trạng Thái Khắc Phục Đợt Vá `2026-11-15` (`9/9 RESOLVED`)
+## Priority 3 — Mức độ Thấp (`LOW`)
 
-| Issue | Mức độ | Trạng thái | Ghi chú xử lý |
-|---|---|---|---|
-| `ISS-AUD-001` | `HIGH` | `RESOLVED` | Cập nhật `MODULE-INVENTORY.json` (`8` module thực), `PROJECT-INVENTORY.json` (`200` file), `SOURCE-INVENTORY.md` (`200` file, đủ `28` Controllers), loại bỏ sạch `Booking/Payment/Hotel`. |
-| `ISS-AUD-002` | `HIGH` | `RESOLVED` | User xác nhận PostgreSQL migrations đã chạy & kiểm chứng; cập nhật `DATABASE-OVERVIEW.md:5`, `UPDATE-LOG.md:95`, `PENDING-UPDATES.md`. |
-| `ISS-AUD-003` | `MEDIUM` | `RESOLVED` | Đồng bộ hoàn chỉnh `43/43` bảng (`Diff = 0`) giữa `DATABASE-OVERVIEW.md`, `TABLE-INDEX.json` và `TABLE-RELATIONSHIPS.md`. |
-| `ISS-AUD-004` | `MEDIUM` | `RESOLVED` | Chuẩn hóa số dòng/chữ ký `HomeController`, `IStaffStudentLookupService`, `StaffStudentLookupService`, `HttpRequestExtensions`; bổ sung `StaffStudentLookupService -> IGradeCalculationService` và `22` symbol gốc (`Missing = 0`). |
-| `ISS-AUD-005` | `MEDIUM` | `RESOLVED` | Cập nhật `ATTENDANCE.md`, `ARCHITECTURE.md`, `Request Flow Diagram.md`, `INTEGRATION-OVERVIEW.md` và XML/code comments (`IRedisAttendanceService.cs`, `RedisAttendanceService.cs`, `Program.cs`) theo luồng Write-Through trực tiếp + Hangfire fallback. |
-| `ISS-AUD-006` | `MEDIUM` | `RESOLVED` | Sửa `#staffStudentQuickSearchInput`, `280ms`, `term.length > 0`, `OriginalCode/ArchivedYearCode/NewCode`, `IsHistoricalMatch/MatchedHistoricalCode` và bảng `LookupViewOptions` trong `FEAT-P5-01`. |
-| `ISS-AUD-007` | `MEDIUM` | `RESOLVED` | Sửa `3s (3000ms)` trong `FAST-QR-CHECKIN` và `56px` / `#mobileMenuOffcanvas` / `z-index 1070` trong `FEAT-P5-02`. |
-| `ISS-AUD-008` | `LOW` | `RESOLVED` | Đổi `{id}` ➔ `{versionId:long}` trong `FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`. |
-| `ISS-AUD-009` | `LOW` | `RESOLVED` | Đóng block Mermaid `PROJECT-DEPENDENCY-DIAGRAM.md`; mở rộng `FILE-INDEX.jsonl` lên `114` file và điền đủ line numbers cho `192` symbols / `52` routes / `66` dependencies (`0` nulls). |
+### 9. `[ISS-AUD-016]` Bổ sung mô tả cụm Cloud Storage vào `PROJECT.md` và dẫn chiếu tab Tài liệu giáo án tại `FEAT-P5-07`
+- **Tài liệu cần sửa:**
+  1. `AI-Knowledge/00-OVERVIEW/PROJECT.md` (`lines 12-30`)
+  2. `AI-Knowledge/05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md` (`lines 137-147`)
+- **Hành động khắc phục:**
+  - Bổ sung tham chiếu `CloudMediaController.cs`, `GoogleDriveStorageService.cs`, `DriveLogUploadService.cs` vào mục 3 của `PROJECT.md`.
+  - Tại bảng mục 5 của `FEAT-P5-07`, thêm ghi chú dẫn chiếu 3 endpoint tài liệu giáo án bổ trợ trên cùng `LessonPlansController` (`UploadDocument`, `DownloadDocument`, `DeleteDocument`) sang đặc tả `FEAT-P5-08`.
+
+### 10. `[ISS-AUD-019]` Xác nhận hai Service DI chưa có caller (`IGradePermissionService`, `ILessonPlanImportService`)
+- **Tài liệu liên quan:** `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`, `AI-Knowledge/06-UPDATE-LOG/UPDATE-REPORT.md` (`lines 96-97`)
+- **Hành động cần Developer thực hiện:**
+  - Kiểm tra xác nhận `IGradePermissionService` (đăng ký tại `ServiceCollectionExtensions.cs:188`) và `ILessonPlanImportService` (inject tại `FacilitiesController.cs:20`) sẽ được nối vào luồng xử lý hay gỡ bỏ để cập nhật dứt điểm trạng thái trong `DEPENDENCY-INDEX.jsonl`.

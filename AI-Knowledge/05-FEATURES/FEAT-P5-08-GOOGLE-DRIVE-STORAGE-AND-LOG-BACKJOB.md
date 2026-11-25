@@ -56,8 +56,8 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
 
 ### 3.1. `TASK-P5-08.0`: Hạ tầng lõi Google Drive Storage & Auth Proxy
 - **Cấu hình `GoogleDriveOptions` (`appsettings.json` section `"GoogleDrive"` — mặc định an toàn không gắn credential/tài khoản trong repo app):**
-  - `Enabled` (`false`), `ServiceAccountKeyPath` (`""`), `RootFolderId` (`""`), `RootFolderName` (`"QLGL_Storage_Root"`), `SharedDriveId` (`""`), `LocalFallbackRoot` (`"PrivateUploads/cloud_fallback"`).
-  - Trên môi trường chạy thật/staging (`parish-infra-config`: `prod/docker-compose.yml` & `prod/.env`), các biến môi trường `GoogleDrive__Enabled`, `GoogleDrive__ServiceAccountKeyPath=/app/secrets/google-service-account.json`, `GoogleDrive__RootFolderId`, `GoogleDrive__SharedDriveId` được nạp từ bên ngoài cùng tệp khóa mount `:ro`.
+  - `Enabled` (`false`), `ServiceAccountKeyPath` (`""`), `OAuthClientId` (`""`), `OAuthClientSecret` (`""`), `OAuthRefreshToken` (`""`), `RootFolderId` (`""`), `RootFolderName` (`"QLGL_Storage_Root"`), `SharedDriveId` (`""`), `LocalFallbackRoot` (`"PrivateUploads/cloud_fallback"`).
+  - Trên môi trường chạy thật/staging (`parish-infra-config`: `prod/docker-compose.yml` & `prod/.env`), các biến môi trường `GoogleDrive__Enabled`, `GoogleDrive__OAuthClientId` / `OAuthClientSecret` / `OAuthRefreshToken` (ưu tiên cho quota Gmail cá nhân) hoặc `GoogleDrive__ServiceAccountKeyPath=/app/secrets/google-service-account.json` (mount `:ro` cho Workspace Shared Drive), cùng `GoogleDrive__RootFolderId` / `GoogleDrive__SharedDriveId` được nạp từ bên ngoài.
   - Giới hạn mặc định: `MaxIncidentImageBytes = 15728640` (15 MB), `MaxLessonPlanBytes = 26214400` (25 MB), `MaxDocumentBytes = 10485760` (10 MB), `MaxAvatarBytes = 5242880` (5 MB).
   - Tham số truyền tải: `UploadChunkSizeBytes = 2097152` (2 MB), `MaxRetryAttempts = 3`.
 - **Thứ tự phân giải thư mục gốc trên Google Drive (`EnsureFolderPathInternalAsync`):**
@@ -65,10 +65,10 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
   2. Ngược lại nếu có `RootFolderId` ➔ dùng `RootFolderId` làm gốc rồi tạo các thư mục con `FolderSegments`.
   3. Ngược lại nếu có `SharedDriveId` ➔ xuất phát từ `SharedDriveId` (kèm `RootFolderName` nếu có) rồi tạo các thư mục con.
   4. Ngược lại nếu có `RootFolderName` ➔ tìm/tạo thư mục gốc trên My Drive của Service Account; nếu cả 4 đều rỗng ➔ trả `null` và kích hoạt `LOCAL_FALLBACK` hoặc `FAILED`.
-  5. Dùng `IMemoryCache` (TTL 30 phút) kết hợp `ConcurrentDictionary<string, SemaphoreSlim>` để chống race condition tạo trùng thư mục; hỗ trợ Shared Drive qua `SupportsAllDrives = true`, `IncludeItemsFromAllDrives = true`, `Corpora = "drive"`, `DriveId`.
+  5. Dùng `IMemoryCache` (TTL 30 phút) kết hợp khóa phân dải cố định `64` phần tử (`FolderLockStripes` / `GetFolderLock`) để chống race condition tạo trùng thư mục mà không rò rỉ handle; hỗ trợ Shared Drive qua `SupportsAllDrives = true`, `IncludeItemsFromAllDrives = true`, `Corpora = "drive"`, `DriveId`.
 - **`GoogleDriveStorageService`:**
-  - Cache `DriveService` singleton theo `(ServiceAccountKeyPath, LastWriteTimeUtc)` để tự nạp lại nếu key đổi trên đĩa.
-  - Upload dùng `Files.Create(...).UploadAsync` (Resumable Upload với chunk size căn chỉnh bội số của `256 KB` trong khoảng `256 KB..2 MB`) và retry tối đa `MaxRetryAttempts` lần với exponential backoff (`500ms * 2^(attempt-1)`).
+  - Hỗ trợ 2 chế độ xác thực trong `TryGetDriveService`: ưu tiên **OAuth2 Refresh Token** (`HasOAuthCredentials()`, cache theo hash `OAuthRefreshToken` cho quota Drive cá nhân) và dự phòng **Service Account JSON** (cache theo `(ServiceAccountKeyPath, LastWriteTimeUtc)` để tự nạp lại nếu key đổi trên đĩa); `GetHealthStatusAsync` đánh dấu `IsServiceAccountKeyFound` khi đã cấu hình OAuth2 hoặc tồn tại file key.
+  - Spool tệp tạm có giới hạn trần `MaxUploadBytes = 30 MB`; Upload dùng `Files.Create(...).UploadAsync` (Resumable Upload với chunk size căn chỉnh bội số của `256 KB` trong khoảng `256 KB..2 MB`) và retry tối đa `MaxRetryAttempts` lần với exponential backoff (`500ms * 2^(attempt-1)`).
   - `TryResolveContainedFallbackPath` và `EnsureContainedPath` chặn tuyệt đối Path Traversal khi đọc/xóa tệp trong `PrivateUploads/cloud_fallback`.
 - **`ImageOptimizationService`:**
   - Hỗ trợ phần mở rộng `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`.
@@ -122,10 +122,10 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
   - `Enabled = false`, `CronExpression = "0 2 * * *"`, `IntervalMinutes = 0`, `LocalLogsPath = "logs"`, `LocalRetentionDays = 1`, `LogsFolderId = ""`, `DeleteLocalAfterVerifiedUpload = true`, `MaxRetriesPerFile = 3`, `RetryDelaySeconds = 10`, `UploadBufferSizeBytes = 65536`.
 - Cơ chế bảo vệ & thực thi trong `DriveLogUploadService.RunUploadCycleAsync`:
   - Khóa đồng thời bằng `SemaphoreSlim(1, 1)` (`RunLock.WaitAsync(0, ct)`).
-  - `IsProtectedActiveLogFile` bảo vệ tệp `.log` của ngày hôm nay theo múi giờ Việt Nam (`yyyyMMdd`) và các tệp nằm trong ngưỡng `LocalRetentionDays` (`cutoffDate = todayVn.AddDays(-(retentionDays - 1))`) theo cả ngày trong tên file lẫn `LastWriteTimeUtc`.
-  - Bỏ qua các tệp đã có bản ghi `Category = SYSTEM_LOG`, `StorageProvider = GOOGLE_DRIVE`, `SyncStatus = SUCCESS` và `ExternalFileId != null`.
-  - Khi trigger `SCHEDULED`, bỏ qua các tệp đã chạm ngưỡng `MaxRetriesPerFile` ở trạng thái `FAILED`; khi trigger thủ công `MANUAL:*`, cho phép thử lại.
-  - Nén GZip streaming bằng `GZipStream` (`CompressionLevel.Optimal`) với buffer thuê từ `ArrayPool<byte>.Shared` (`Clamp(UploadBufferSizeBytes, 4096, 1048576)`) ra thư mục tạm `PrivateUploads/tmp_logs`, upload với **`AllowLocalFallback = false`** vào `System_Logs/{yyyy-MM}` (hoặc `{yyyy-MM}` nếu cấu hình `LogsFolderId`).
+  - `IsProtectedActiveLogFile` bảo vệ tệp `.log` của ngày hôm nay theo múi giờ Việt Nam (`VietnamTimeHelper.Today`, `yyyyMMdd`) và các tệp nằm trong ngưỡng `LocalRetentionDays` (`cutoffDate = todayVn.AddDays(-(retentionDays - 1))`) theo cả ngày trong tên file lẫn `LastWriteTimeUtc`.
+  - Bỏ qua các tệp vượt ngưỡng `MaxLogFileBytes = 200 MB`; đối với tệp đã có bản ghi `Category = SYSTEM_LOG`, `StorageProvider = GOOGLE_DRIVE`, `SyncStatus = SUCCESS` và `ExternalFileId != null`, thực hiện xóa bù file cục bộ nếu `DeleteLocalAfterVerifiedUpload == true` và không thuộc nhóm active.
+  - Khi trigger `SCHEDULED`, bỏ qua các tệp đã chạm ngưỡng `MaxRetriesPerFile` ở trạng thái `FAILED` và tôn trọng thời gian chờ `RetryDelaySeconds` (chờ ngắn tối đa `30s` hoặc hoãn sang chu kỳ sau) đối với bản ghi `RETRY`; khi trigger thủ công `MANUAL:*`, cho phép thử lại.
+  - Nén GZip streaming bằng `GZipStream` (`CompressionLevel.Optimal`) với buffer thuê từ `ArrayPool<byte>.Shared` (`Clamp(UploadBufferSizeBytes, 4096, 1048576)`) ra thư mục tạm `PrivateUploads/tmp_logs` (các file tạm mồ côi `> 2 giờ` tại `tmp_logs` và `cloud_tmp` được `LogRetentionBackgroundService` dọn định kỳ), upload với **`AllowLocalFallback = false`** vào `System_Logs/{yyyy-MM}` (hoặc `{yyyy-MM}` nếu cấu hình `LogsFolderId`).
   - Xóa mềm các bản ghi `FAILED`/`RETRY` cũ của cùng tệp sau khi upload lại để chỉ giữ 1 bản ghi active; **chỉ xóa file `.log` gốc** khi `DeleteLocalAfterVerifiedUpload == true`, đã xác thực `ExternalFileId` từ Drive, và file không thuộc nhóm active.
 
 ### 3.7. `TASK-P5-08.6`: Background Worker chạy lịch Cron (`DriveLogUploadBackgroundService`)
@@ -136,7 +136,7 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
 - Dùng `DelayUntilUtcAsync` chia nhỏ sleep tối đa 12 giờ/lần tránh giới hạn `Task.Delay` dài ngày; khi gặp ngoại lệ bất ngờ trong chu kỳ, log lỗi và delay 1 phút rồi tiếp tục vòng lặp.
 
 ### 3.8. `TASK-P5-08.7`: Giao diện & API Quản trị Drive Storage trên `/Admin/Logs`
-- `LogsController` (`[Authorize(Roles = UserRole.Admin)]`) bổ sung `PopulateDriveStorageSectionAsync` nạp `CloudStorageHealth`, `DriveLogUploads` (30 bản ghi `SYSTEM_LOG` gần nhất), `DriveLogCronSchedule` và `DriveLogEnabled` vào `SystemLogsViewModel`.
+- `LogsController` (`[Authorize(Roles = UserRole.Admin)]`) bổ sung `PopulateDriveStorageSectionAsync` nạp `CloudStorageHealth`, `DriveLogUploads` (30 bản ghi `SYSTEM_LOG` gần nhất), `DriveLogCronSchedule` và `DriveLogEnabled` vào `SystemLogsViewModel`; đồng thời `ParseLogFileEntriesAsync` giới hạn đọc tối đa `5 MB` cuối file / `5.000` dòng / `64 KB` stack trace bằng `StringBuilder` để tránh OOM trên container 450m RAM.
 - `Views/Logs/Index.cshtml` hiển thị card **Lưu trữ Google Drive, Backjob Log & Đồng bộ Dữ liệu cũ (FEAT-P5-08)** với các badge trạng thái (`IsDriveEnabled`, `IsServiceAccountKeyFound`, `IsRootFolderConfigured`, tổng file, đã lên Drive, chờ fallback, lỗi, lịch Cron), 4 nút thao tác (`Chạy Upload Log Ngay`, `Đồng bộ lại File Fallback`, `Quét Kiểm Tra (Dry-Run)`, `Di Chuyển Dữ Liệu Cũ lên Drive` kèm checkbox cảnh báo xóa file gốc), vùng log phản hồi và bảng lịch sử 30 lượt nén/upload log gần nhất có link tải qua `/CloudMedia/File/{id}?download=true`.
 - Endpoints `POST` có `[ValidateAntiForgeryToken]`:
   - `/Admin/Logs/TriggerDriveLogUpload`
@@ -163,19 +163,20 @@ Khi vận hành ứng dụng trên Docker Alpine container có giới hạn RAM/
 | `SYSTEM_LOG` | **Cho phép** | Từ chối (`403`) | Từ chối (`403`) | Từ chối (`403`) | Từ chối (`403`) |
 | `LESSON_PLAN` | **Cho phép** | **Cho phép** | Đúng khối `ManagedGradeLevel` hoặc lớp được phân công | Đúng lớp được phân công trong `ClassTeachers` | Từ chối (`403`) |
 | `INCIDENT_IMAGE` | **Cho phép** | **Cho phép** | Chỉ người báo cáo (`RoomIncidentReport.ReporterUserId == currentUserId`) | Chỉ người báo cáo (`ReporterUserId == currentUserId`) | Từ chối (`403`) |
-| `AVATAR` (`EntityName = User`) | **Cho phép** | **Cho phép** | **Cho phép** | **Cho phép** | Chỉ chính chủ (`EntityId == currentUserId`) |
-| `AVATAR` (`EntityName = Student`) | **Cho phép** | **Cho phép** | **Cho phép** | **Cho phép** | Từ chối (`403`) |
-| `SACRAMENT_DOC` | **Cho phép** | **Cho phép** | Học sinh học lớp thuộc `ManagedGradeLevel` (niên khóa hiện hành) hoặc lớp phụ trách | Học sinh nằm trong lớp được phân công `ClassTeachers` | Từ chối (`403`) |
-| `ANNOUNCEMENT_DOC` | **Cho phép** | **Cho phép** | `ALL`/`PARISH`: Cho phép; `GRADE`: đúng khối phụ trách/dạy; `CLASS`: đúng khối hoặc lớp phụ trách | `ALL`/`PARISH`: Cho phép; `GRADE`: có dạy lớp trong khối; `CLASS`: đúng lớp phụ trách | Từ chối (`403`) |
-| `ABSENCE_DOC` | **Cho phép** | **Cho phép** | Thuộc lớp/học sinh trong khối `ManagedGradeLevel` hoặc lớp phụ trách | Thuộc lớp/học sinh trong lớp được phân công `ClassTeachers` | Từ chối (`403`) |
+| `AVATAR` (`EntityName = User`) | **Cho phép** | **Cho phép** | Chính chủ hoặc nhân sự cùng khối/lớp (`CanStaffAccessUserAvatarAsync`) | Chính chủ hoặc nhân sự cùng lớp (`CanStaffAccessUserAvatarAsync`) | Chỉ chính chủ (`EntityId == currentUserId`) |
+| `AVATAR` (`EntityName = Student`) | **Cho phép** | **Cho phép** | Học sinh trong khối `ManagedGradeLevel` niên khóa hiện hành (fail-closed) | Học sinh trong lớp `ClassTeachers` niên khóa hiện hành (`!IsAfternoonSession` với Dự Bị) | Từ chối (`403`) |
+| `SACRAMENT_DOC` | **Cho phép** | **Cho phép** | Học sinh học lớp thuộc `ManagedGradeLevel` (niên khóa hiện hành) | Học sinh nằm trong lớp `ClassTeachers` niên khóa hiện hành (`!IsAfternoonSession` với Dự Bị) | Từ chối (`403`) |
+| `ANNOUNCEMENT_DOC` | **Cho phép** | **Cho phép** | `ALL`/`PARISH`: Cho phép; `GRADE`: đúng khối phụ trách; `CLASS`: đúng khối phụ trách | `ALL`/`PARISH`: Cho phép; `GRADE`: có dạy lớp Ca Sáng/đúng khối; `CLASS`: đúng lớp phụ trách hiện hành | Từ chối (`403`) |
+| `ABSENCE_DOC` | **Cho phép** | **Cho phép** | Thuộc lớp/học sinh trong khối `ManagedGradeLevel` niên khóa hiện hành | Thuộc lớp/học sinh trong lớp `ClassTeachers` niên khóa hiện hành (`!IsAfternoonSession` với Dự Bị) | Từ chối (`403`) |
 
 **HTTP Response Headers của Proxy:**
 - Luôn gắn `X-Content-Type-Options: nosniff`.
+- Với `application/pdf`, gắn `Content-Security-Policy: sandbox`.
 - `Cache-Control`:
   - `SYSTEM_LOG`, `SACRAMENT_DOC`: `no-store, no-cache, must-revalidate`
   - `INCIDENT_IMAGE`, `AVATAR`: `private, max-age=300`
   - Các loại còn lại (`LESSON_PLAN`, `ANNOUNCEMENT_DOC`, `ABSENCE_DOC`): `private, no-cache`
-- Chỉ trả `Content-Disposition: inline` khi `!download` và `ContentType` thuộc danh sách an toàn (`image/webp`, `image/jpeg`, `image/png`, `image/gif`, `application/pdf`); mọi trường hợp khác trả `File(..., contentType, safeFileName)` dạng `attachment` để tránh Stored XSS qua file HTML/SVG.
+- Chỉ trả `Content-Disposition: inline` khi `!download`, `Category != ABSENCE_DOC` (tệp minh chứng nghỉ học do người dùng công khai tải lên luôn ép `attachment`) và `ContentType` thuộc danh sách an toàn (`image/webp`, `image/jpeg`, `image/png`, `image/gif`, `application/pdf`); mọi trường hợp khác trả `File(..., contentType, safeFileName)` dạng `attachment` để tránh Stored XSS qua file HTML/SVG.
 
 ---
 

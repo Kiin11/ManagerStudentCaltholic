@@ -2,6 +2,42 @@
 
 ## Lịch sử Cập nhật (Changelog)
 
+### Phiên cập nhật: Đồng bộ Bảo mật, Đồng thời, Múi giờ, Hiệu năng (`Fix-Sec-Inf` / PR `#99`) & OAuth2 Drive (`37a30f3`)
+- **Thời gian cập nhật:** `2026-11-24T12:32:00+07:00`
+- **Commit nguồn (`main`):** `37a30f3` (`feat(storage): add OAuth2 Refresh Token auth mode for personal Google Drive quota`), nối tiếp `e147f88` (`Merge pull request #99 from Kiin11/Fix-Sec-Inf`), `997507f` và nhánh `Fix-Sec-Inf` (`9eeafed` ➔ `dbd1571`).
+- **Mục tiêu:** Đồng bộ tài liệu kiến trúc, quy chuẩn lập trình, chỉ mục mã nguồn, tích hợp, module điểm danh và đặc tả tính năng từ `91` tệp thay đổi (`9 Added`, `78 Modified`, `4 Deleted`) trong phạm vi `e183ccd..HEAD` (`e147f88`).
+- **Nội dung mã nguồn đã triển khai & xác minh:**
+  1. **4 Helper Nền tảng & Bộ Test xUnit (`tests/ManagerStudentCaltholic.Tests`):** `VietnamTimeHelper` (múi giờ UTC+7 `Asia/Ho_Chi_Minh`), `AgeValidationHelper` (ràng buộc `>= 18` tuổi & năm nhuận `29/02`), `FileUploadSecurityHelper` (Magic Bytes, safe MIME, `TryResolveContainedPath`), `StaffSelfActionGuard` (chặn tự thao tác `LinkedStudentId`); `41/41` unit tests pass.
+  2. **Chống IDOR, Tự thao tác & Củng cố Phân quyền (`SEC-APP-01`, `02`, `04`):** Siết `HomeController` (`[Authorize(Policy = "RequireStaff")]` + lọc phạm vi trước cache 360 trong `StaffStudentLookupService`), `CloudMediaController` (kiểm tra `AVATAR`, `CSP: sandbox` PDF, `attachment` cho `ABSENCE_DOC`), `AttendanceController` / `RedisAttendanceService`, `GradesController` / `ClassEvaluationService`, `SacramentsController` / `SacramentEvaluationService` (`batchId` & allow-list `grade`), `LessonPlansController` / `ClassCurriculumService` (`versionId` & fail-closed `ClassRoom == null`), `ClassesController`, `MassCampaignService`, `GradePermissionService`, `AccountController`, `UsersController`, `GovernanceController`, `StudentsController`.
+  3. **Anti-Abuse, XSS & Upload Security (`SEC-APP-03`, `05`, `06`):** Redis lockout (`ICacheService`) cho `/TraCuu`, `/Absence`, `/PublicRegistration`, `WebsiteUrlHoneypot`, gộp thông báo lỗi chung, chặn trùng/quá 5 đơn nghỉ phép; thay `@Html.Raw`/unescaped `innerHTML` trên 18 views & 2 file JS; kiểm tra magic bytes + `WebP` re-encode; bật `GlobalLimiter` (`200 req/min/IP`), thu hẹp `ReverseProxy` qua `appsettings.json`, chuẩn hóa `GetClientIpKey`.
+  4. **Đồng thời Offline/Undo, Logic Học vụ, Múi giờ & Hiệu năng (`LOG-CON-01..02`, `LOG-BIZ-01..02`, `LOG-TZ-01`, `LOG-PERF-01`, `INF-CFG-01`):** Khóa phân dải `ExecuteWithPartitionsFlushLockAsync`, idempotency `ATT:OFFLINE:IDEMP:*`, retry `23505`, IndexedDB `DB_VERSION = 2`; khóa nguyên tử `ClassFlushLock -> ClassSheetLock` + grace `15s` + audit `QR_UNDO`; transaction `CreateExecutionStrategy` cho `IsGradeLocked` & `IsCurrent`; sửa `EvaluateGradeFormula` (`null != 0.0`) và chia cho 0 khi 0 buổi Chúa Nhật; streaming `Stream`/`PhysicalFile` (`IClassCurriculumService.GetVersionFileAsync`), SQL `GroupBy` báo cáo toàn xứ, giới hạn đọc tail log `5 MB`/`5.000` dòng, `64-stripe` `FolderLockStripes`, dọn file tạm `> 2h` và chuẩn hóa `dotnet_app` + `/health`.
+- **Danh sách tài liệu `AI-Knowledge` đã cập nhật:**
+  - `AI-Knowledge/00-OVERVIEW/PROJECT.md`
+  - `AI-Knowledge/00-OVERVIEW/ARCHITECTURE.md`
+  - `AI-Knowledge/00-OVERVIEW/CODING-RULES.md`
+  - `AI-Knowledge/00-OVERVIEW/TECH-STACK.md`
+  - `AI-Knowledge/00-OVERVIEW/SOURCE-INVENTORY.md`
+  - `AI-Knowledge/00-OVERVIEW/PROJECT-INVENTORY.json`
+  - `AI-Knowledge/01-MODULES/ATTENDANCE.md`
+  - `AI-Knowledge/03-CODE-INDEX/FILE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/SYMBOL-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/ROUTE-INDEX.jsonl`
+  - `AI-Knowledge/03-CODE-INDEX/DEPENDENCY-INDEX.jsonl`
+  - `AI-Knowledge/04-INTEGRATIONS/INTEGRATION-OVERVIEW.md`
+  - `AI-Knowledge/04-INTEGRATIONS/EXTERNAL-APIS.md`
+  - `AI-Knowledge/05-FEATURES/FAST-QR-CHECKIN-AND-OFFLINE-SYNC.md`
+  - `AI-Knowledge/05-FEATURES/FEAT-P5-01-STAFF-QUICK-LOOKUP.md`
+  - `AI-Knowledge/05-FEATURES/FEAT-P5-04-QR-SCANNER-UPGRADE.md`
+  - `AI-Knowledge/05-FEATURES/FEAT-P5-07-CLASS-CURRICULUM-MANAGEMENT.md`
+  - `AI-Knowledge/05-FEATURES/FEAT-P5-08-GOOGLE-DRIVE-STORAGE-AND-LOG-BACKJOB.md`
+  - `AI-Knowledge/05-FEATURES/FEAT-P6-01-PROBATIONARY-TEACHER-AND-AFTERNOON-SESSION.md`
+  - `AI-Knowledge/06-UPDATE-LOG/KNOWLEDGE-BASELINE.json`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-LOG.md`
+  - `AI-Knowledge/06-UPDATE-LOG/PENDING-UPDATES.md`
+  - `AI-Knowledge/06-UPDATE-LOG/UPDATE-REPORT.md`
+
+---
+
 ### Phiên cập nhật: Hoàn tất `FEAT-P5-08` — Lưu trữ Google Drive, Tối ưu ảnh WebP, Backjob Nén Log & Di chuyển Dữ liệu Cục bộ (`TASK-P5-08.0` ➔ `08.8`)
 - **Thời gian cập nhật:** `2026-11-23T10:06:00+07:00`
 - **Commit nguồn (`Phase-F5.8`):** `4589783` (hợp nhất từ `ed1518d`, `186cb6c`, `c7e53a8`, `6ca8177`, `d0c1fd5`)

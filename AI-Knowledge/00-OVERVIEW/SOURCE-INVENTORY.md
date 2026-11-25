@@ -3,8 +3,8 @@
 ## Tổng quan dự án
 - **Project Name:** ManagerStudentCaltholic (Hệ thống Quản lý Thiếu Nhi Thánh Thể - Giáo xứ Phú Trung)
 - **Architecture:** Monolith MVC (ASP.NET Core 8 / .NET 8, C# 12, PostgreSQL, Redis, Hangfire)
-- **Ngày cập nhật kiểm kê:** 2026-11-15
-- **Tổng số file đã kiểm kê:** 200 files (bao gồm toàn bộ 28 Controllers, Services, Interfaces, Entities, DTOs/ViewModels, Extensions, Middlewares, Key Razor Views, Client Assets, Config & SQL DDL)
+- **Ngày cập nhật kiểm kê:** 2026-11-24
+- **Tổng số file đã kiểm kê:** 209 files (bao gồm toàn bộ Controllers, Services, Helpers, Interfaces, Entities, DTOs/ViewModels, Extensions, Middlewares, Key Razor Views, Client Assets, Config, SQL DDL & Unit Tests)
 
 ---
 
@@ -209,6 +209,15 @@
 | 195 | `ManagerStudentCaltholic/wwwroot/js/pwa-installer.js` | pwa-installer.js | .js | JavaScript | ManagerStudentCaltholic | Lookup & Public Portal | Client Assets | Complete (100%) | No | High |
 | 196 | `ManagerStudentCaltholic/wwwroot/sw.js` | sw.js | .js | JavaScript | ManagerStudentCaltholic | Lookup & Public Portal | Client Assets | Complete (100%) | No | High |
 | 197 | `ManagerStudentCaltholic/wwwroot/manifest.json` | manifest.json | .json | JSON | ManagerStudentCaltholic | Lookup & Public Portal | Client Assets | Complete (100%) | No | High |
-| 198 | `docker-compose.yml` | docker-compose.yml | .yml | YAML | ManagerStudentCaltholic | Governance, Security & System | Configuration | Complete (100%) | No | High |
-| 199 | `nginx/default.conf` | default.conf | .conf | Nginx Config | ManagerStudentCaltholic | Governance, Security & System | Configuration | Complete (100%) | No | High |
+| 198 | `docker-compose.yml` | docker-compose.yml | .yml | YAML | ManagerStudentCaltholic | Governance, Security & System | Configuration | Removed from app repo (`parish-infra-config`) | No | High |
+| 199 | `nginx/default.conf` | default.conf | .conf | Nginx Config | ManagerStudentCaltholic | Governance, Security & System | Configuration | Removed from app repo (`parish-infra-config`) | No | High |
 | 200 | `script/seed-curriculum-data.sql` | seed-curriculum-data.sql | .sql | SQL | ManagerStudentCaltholic | Curriculum & Lesson Plans | SQL / Database | Complete (100%) | No | High |
+| 201 | `ManagerStudentCaltholic/Services/AgeValidationHelper.cs` | AgeValidationHelper.cs | .cs | C# | ManagerStudentCaltholic | Governance, Security & System | Services | Complete (100%) | No | High |
+| 202 | `ManagerStudentCaltholic/Services/FileUploadSecurityHelper.cs` | FileUploadSecurityHelper.cs | .cs | C# | ManagerStudentCaltholic | Governance, Security & System | Services | Complete (100%) | No | High |
+| 203 | `ManagerStudentCaltholic/Services/StaffSelfActionGuard.cs` | StaffSelfActionGuard.cs | .cs | C# | ManagerStudentCaltholic | Governance, Security & System | Services | Complete (100%) | No | High |
+| 204 | `ManagerStudentCaltholic/Services/VietnamTimeHelper.cs` | VietnamTimeHelper.cs | .cs | C# | ManagerStudentCaltholic | Governance, Security & System | Services | Complete (100%) | No | High |
+| 205 | `tests/ManagerStudentCaltholic.Tests/ManagerStudentCaltholic.Tests.csproj` | ManagerStudentCaltholic.Tests.csproj | .csproj | MSBuild XML | ManagerStudentCaltholic.Tests | Testing & QA | Configuration | Complete (100%) | No | High |
+| 206 | `tests/ManagerStudentCaltholic.Tests/AgeValidationTests.cs` | AgeValidationTests.cs | .cs | C# | ManagerStudentCaltholic.Tests | Testing & QA | Tests | Complete (100%) | No | High |
+| 207 | `tests/ManagerStudentCaltholic.Tests/GradeAndSacramentLogicTests.cs` | GradeAndSacramentLogicTests.cs | .cs | C# | ManagerStudentCaltholic.Tests | Testing & QA | Tests | Complete (100%) | No | High |
+| 208 | `tests/ManagerStudentCaltholic.Tests/SecurityHelpersTests.cs` | SecurityHelpersTests.cs | .cs | C# | ManagerStudentCaltholic.Tests | Testing & QA | Tests | Complete (100%) | No | High |
+| 209 | `tests/ManagerStudentCaltholic.Tests/VietnamTimeHelperTests.cs` | VietnamTimeHelperTests.cs | .cs | C# | ManagerStudentCaltholic.Tests | Testing & QA | Tests | Complete (100%) | No | High |

@@ -54,17 +54,20 @@ Html5Qrcode Camera (15 FPS, Continuous)
 
 ### 2.2. Luồng Hoàn Tác Điểm Danh 5 Giây (TASK-P5-04.3)
 ```text
-Người dùng nhấn "Hoàn tác (Xs)" trong vòng 5 giây
-   ├── Nếu Online: POST /Attendance/UndoScanCheckIn { enrollmentId, classId, activityType, ... }
-   │      ├── Thu hồi cờ điểm danh trong Redis ClassSheet
-   │      ├── Reset bản ghi trong PostgreSQL Attendances
+Người dùng nhấn "Hoàn tác (Xs)" trong vòng 5 giây (Tắt hẳn khi isDuplicate === true)
+   ├── Nếu Online: POST /Attendance/UndoScanCheckIn { enrollmentId, classId, attendanceDate, activityType, ... }
+   │      ├── Kiểm tra CanAccessClassAsync & StaffSelfActionGuard (403 nếu vi phạm)
+   │      ├── Giữ khóa ClassFlushLock -> ClassSheetLock; kiểm tra grace 15s & người quét gốc
+   │      ├── Thu hồi cờ điểm danh trong Redis ClassSheet & xóa CampaignScanMarker
+   │      ├── Reset bản ghi trong PostgreSQL Attendances + ghi AttendanceAuditLog (QR_UNDO)
    │      └── Trả về success: true
    └── Nếu Offline: ParishOfflineEngine.undoOfflineQrScan(clientRecordId)
-          └── Xóa bản ghi trong IndexedDB pending_attendances
+          ├── Nếu chưa sync: Xóa bản ghi trong IndexedDB pending_scans
+          └── Nếu đã tự sync khi có mạng (alreadySynced): fallback gọi POST /Attendance/UndoScanCheckIn
    ──> UI:
           ├── Giảm bộ đếm sĩ số ca quét (-1)
-          ├── Đánh dấu dòng lịch sử: "Đã hoàn tác"
-          ├── Phát âm âm báo hoàn tác và ẩn nút Undo
+          ├── Đánh dấu dòng lịch sử: "Đã hoàn tác" (render bằng DOM textContent an toàn XSS)
+          ├── Phát âm báo hoàn tác và ẩn nút Undo
 ```
 
 ---

@@ -2398,5 +2398,113 @@
         "isGenerated":  false,
         "isComplete":  true,
         "confidence":  "high"
+    },
+    {
+        "filePath":  "ManagerStudentCaltholic/Services/AgeValidationHelper.cs",
+        "fileName":  "AgeValidationHelper.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic",
+        "module":  "Governance, Security \u0026 System",
+        "category":  "Services",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "ManagerStudentCaltholic/Services/FileUploadSecurityHelper.cs",
+        "fileName":  "FileUploadSecurityHelper.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic",
+        "module":  "Governance, Security \u0026 System",
+        "category":  "Services",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "ManagerStudentCaltholic/Services/StaffSelfActionGuard.cs",
+        "fileName":  "StaffSelfActionGuard.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic",
+        "module":  "Governance, Security \u0026 System",
+        "category":  "Services",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "ManagerStudentCaltholic/Services/VietnamTimeHelper.cs",
+        "fileName":  "VietnamTimeHelper.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic",
+        "module":  "Governance, Security \u0026 System",
+        "category":  "Services",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "tests/ManagerStudentCaltholic.Tests/ManagerStudentCaltholic.Tests.csproj",
+        "fileName":  "ManagerStudentCaltholic.Tests.csproj",
+        "extension":  ".csproj",
+        "language":  "MSBuild XML",
+        "project":  "ManagerStudentCaltholic.Tests",
+        "module":  "Testing",
+        "category":  "Configuration",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "tests/ManagerStudentCaltholic.Tests/AgeValidationTests.cs",
+        "fileName":  "AgeValidationTests.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic.Tests",
+        "module":  "Testing",
+        "category":  "Tests",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "tests/ManagerStudentCaltholic.Tests/GradeAndSacramentLogicTests.cs",
+        "fileName":  "GradeAndSacramentLogicTests.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic.Tests",
+        "module":  "Testing",
+        "category":  "Tests",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "tests/ManagerStudentCaltholic.Tests/SecurityHelpersTests.cs",
+        "fileName":  "SecurityHelpersTests.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic.Tests",
+        "module":  "Testing",
+        "category":  "Tests",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
+    },
+    {
+        "filePath":  "tests/ManagerStudentCaltholic.Tests/VietnamTimeHelperTests.cs",
+        "fileName":  "VietnamTimeHelperTests.cs",
+        "extension":  ".cs",
+        "language":  "C#",
+        "project":  "ManagerStudentCaltholic.Tests",
+        "module":  "Testing",
+        "category":  "Tests",
+        "isGenerated":  false,
+        "isComplete":  true,
+        "confidence":  "high"
     }
 ]

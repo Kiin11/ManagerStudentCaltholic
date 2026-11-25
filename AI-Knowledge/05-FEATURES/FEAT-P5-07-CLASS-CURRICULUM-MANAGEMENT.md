@@ -29,10 +29,10 @@ Trong công tác quản lý năm học của Xứ Đoàn Thiếu Nhi Thánh Th�
 | **Entity** | `Models/Entities/ClassLessonPlan.cs` | `ClassLessonPlan` | Bổ sung `CurriculumDocumentId`, `CurriculumDocument`, `WeekNumber`, `Semester` để đồng bộ |
 | **DTO** | `Models/DTOs/CurriculumDtos.cs` | `CurriculumItemDto`, `ClassCurriculumDocumentDto`, `ClassCurriculumVersionDto`, `SaveCurriculumRequestDto`, `CurriculumParseResultDto` | DTOs trao đổi dữ liệu JSON giữa Client và Server |
 | **ViewModel** | `Models/ViewModels/LessonPlansViewModel.cs` | `LessonPlanWorkspaceViewModel` | ViewModel phục vụ hiển thị toàn diện trang quản lý kế hoạch lớp |
-| **Interface** | `Interface/Services/IClassCurriculumService.cs` | `IClassCurriculumService` | Giao diện định nghĩa các nghiệp vụ đọc file, biên tập, xuất Excel, quản lý version và rollback |
-| **Service** | `Services/ClassCurriculumService.cs` | `ClassCurriculumService` | Triển khai đọc file đa định dạng (`ClosedXML`, `OpenXML`, `StreamReader`, `PdfPig`), sinh file Excel, đồng bộ DB bằng `IExecutionStrategy` |
-| **Controller** | `Controllers/LessonPlansController.cs` | `LessonPlansController` | Các actions `Index`, `ParseCurriculumFile`, `SaveCurriculum`, `RollbackCurriculum`, `GetVersionDetail`, `DownloadCurriculumVersion`, `ExportCurrentCurriculumExcel` |
-| **View** | `Views/LessonPlans/Index.cshtml` | Razor View | Giao diện 3 tab: Trình biên tập trực tuyến, Lịch sử phiên bản, Tài liệu giáo án bổ trợ, cùng các modal nạp file và xem chi tiết |
+| **Interface** | `Interface/Services/IClassCurriculumService.cs` | `IClassCurriculumService` | Giao diện định nghĩa các nghiệp vụ đọc file, biên tập, xuất Excel, quản lý version, rollback và `GetVersionFileAsync` trả `Stream` |
+| **Service** | `Services/ClassCurriculumService.cs` | `ClassCurriculumService` | Triển khai đọc file đa định dạng (max 15 MB + kiểm tra magic bytes qua `FileUploadSecurityHelper`), sinh Excel, kiểm tra `ClassCurriculumDocumentId`, tải `Stream` & `TryResolveContainedPath`, đồng bộ DB bằng `IExecutionStrategy` |
+| **Controller** | `Controllers/LessonPlansController.cs` | `LessonPlansController` | Các actions `Index`, `ParseCurriculumFile`, `SaveCurriculum`, `RollbackCurriculum`, `GetVersionDetail`, `DownloadCurriculumVersion`, `ExportCurrentCurriculumExcel` (fail-closed khi `ClassRoom == null`, chặn Dự Bị ca chiều) |
+| **View** | `Views/LessonPlans/Index.cshtml` | Razor View | Giao diện 3 tab: Trình biên tập trực tuyến, Lịch sử phiên bản, Tài liệu giáo án bổ trợ (escape HTML trong `viewVersionDetail` và ngày local) |
 
 ---
 
@@ -141,7 +141,7 @@ erDiagram
 | `/LessonPlans?classRoomId={id}` | `GET` | `RequireStaff` | Xem trang quản lý kế hoạch lớp, danh sách tuần và lịch sử phiên bản |
 | `/LessonPlans/ParseCurriculumFile` | `POST` | `Admin, ExecutiveBoard, BranchHead, Teacher` | Nạp file `.xlsx`, `.docx`, `.csv`, `.md`, `.pdf` và chuyển đổi thành JSON danh sách tuần |
 | `/LessonPlans/SaveCurriculum` | `POST` | `Admin, ExecutiveBoard, BranchHead, Teacher` | Lưu kế hoạch lớp trực tuyến, sinh file Excel đính kèm và đồng bộ `ClassLessonPlans` |
-| `/LessonPlans/GetVersionDetail/{versionId:long}` | `GET` | `RequireStaff` | Lấy chi tiết snapshot nội dung tuần học của một phiên bản cũ |
-| `/LessonPlans/DownloadCurriculumVersion/{versionId:long}` | `GET` | `RequireStaff` | Tải file Excel tự động sinh của một phiên bản ngày sửa |
-| `/LessonPlans/ExportCurrentCurriculumExcel` | `GET` | `RequireStaff` | Xuất file Excel bảng kế hoạch lớp phiên bản hiện hành |
+| `/LessonPlans/GetVersionDetail/{versionId:long}` | `GET` | `RequireStaff` (đúng lớp/khối, `ClassRoom != null`) | Lấy chi tiết snapshot nội dung tuần học của một phiên bản cũ |
+| `/LessonPlans/DownloadCurriculumVersion/{versionId:long}` | `GET` | `RequireStaff` (đúng lớp/khối, `ClassRoom != null`) | Stream trực tiếp (`Stream`) file Excel của một phiên bản ngày sửa |
+| `/LessonPlans/ExportCurrentCurriculumExcel` | `GET` | `RequireStaff` (kiểm tra `version.ClassCurriculumDocumentId == documentId`) | Xuất file Excel bảng kế hoạch lớp phiên bản hiện hành hoặc version thuộc cùng document |
 | `/LessonPlans/RollbackCurriculum` | `POST` | `Admin, ExecutiveBoard, BranchHead` | Khôi phục kế hoạch lớp về phiên bản ngày sửa cũ |

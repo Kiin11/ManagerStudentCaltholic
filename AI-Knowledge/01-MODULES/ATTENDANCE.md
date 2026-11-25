@@ -135,10 +135,10 @@
 * **Input:** `QrScanRequestDto` (`StudentCode`, `ScanTimestamp`, `SessionMode`, `CampaignId`).
 
 
-* **Validation:** `OnValidatePrincipal` kiểm tra trạng thái nhân sự từ cache ngắn hạn 60s (`auth:user_state:{userId}`); `ScanCheckIn` kiểm tra null/trống mã QR.
+* **Validation:** `OnValidatePrincipal` kiểm tra trạng thái nhân sự từ cache ngắn hạn 60s (`auth:user_state:{userId}`); `ScanCheckIn` kiểm tra null/trống mã QR và truyền `User` vào `ProcessQrCheckInViaRedisAsync(request, User)` để kiểm tra quyền lớp (`CanCallerAccessClassAsync`: fail-closed `BranchHead`, lọc `ClassTeachers` đúng `AcademicYearId`, chặn `ProbationaryTeacher` ca chiều) và chặn tự điểm danh qua `StaffSelfActionGuard` (`403 Forbidden`).
 
 
-* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync` -> Lookup Redis `ATT:QR:DATE:{date}:CODE:{code}` (đã pre-warm cả mã năm cũ; có Negative Cache 30s `ATT:QR:MISS:*`; fallback `Enrollments` / `StudentCodeHistories` với `.AsNoTracking()` + projection gọn) -> Đánh giá thời gian bằng `AttendanceTimeHelper` -> Cập nhật lưới lớp trên Redis dưới striped lock (`IsDirty = true`, `Revision++`, `DirtyEnrollmentIds`, `DirtyAuditMetaByEnrollment`, `PendingCampaignCheckIns`).
+* **Business processing:** Gọi `RedisAttendanceService.ProcessQrCheckInViaRedisAsync(request, User)` -> Chuẩn hóa `ScanTimestamp` qua `VietnamTimeHelper.ToVietnamTime` -> Lookup Redis `ATT:QR:DATE:{date}:CODE:{code}` (đã pre-warm cả mã năm cũ; có Negative Cache 30s `ATT:QR:MISS:*`; fallback `Enrollments` / `StudentCodeHistories` với `.AsNoTracking()` + projection gọn) -> Kiểm tra `ValidateCallerScanAccessAsync` & đánh giá thời gian bằng `EvaluateSessionCheckIn` / `AttendanceTimeHelper` -> Cập nhật lưới lớp trên Redis dưới striped lock (`IsDirty = true`, `Revision++`, `DirtyEnrollmentIds`, `DirtyAuditMetaByEnrollment`, `PendingCampaignCheckIns`, đồng thời lưu metadata `ATT:QR:UNDO:{classId}:{date}:{enrollmentId}` TTL 5 phút để xác thực hoàn tác).
 
 
 * **Database access:**
@@ -187,25 +187,21 @@
 * **Input:** `OfflineSyncQueueRequestDto` (Mảng dữ liệu điểm danh offline từ IndexedDB).
 
 
-* **Validation:** Kiểm tra quyền `CanAccessClassAsync`, rà soát khớp EnrollmentId hoặc StudentCode (kèm tra cứu `HistoricalCodes` tải từ `StudentCodeHistories`).
+* **Validation:** Kiểm tra quyền `GetAuthorizedClassesAsync` (fail-closed `BranchHead`, `ClassTeachers.AcademicYearId`, chặn Dự Bị ca chiều) + kiểm tra từng bản ghi theo quyền lớp và `StaffSelfActionGuard` (bỏ qua có báo `skippedRecords` nếu tự đồng bộ), deduplicate idempotency qua Redis `ATT:OFFLINE:IDEMP:{clientRecordId}` (TTL 24h), rà soát khớp EnrollmentId hoặc StudentCode (kèm tra cứu `HistoricalCodes` tải từ `StudentCodeHistories`), và đánh giá lại trạng thái phía Server theo `VietnamTimeHelper.ToVietnamTime`.
 
 
 * **Business processing (Conflict Resolution):**
-* Ưu tiên giữ trạng thái có mặt (`AttendedMass = true`).
-
-
-* Ưu tiên giữ thời gian quét QR sớm nhất (`MassCheckInTime < existing`).
-
-
-* Qr Scan được ưu tiên hơn Grid Save nếu có xung đột.
+* Giữ khóa phân vùng qua `IRedisAttendanceService.ExecuteWithPartitionsFlushLockAsync` để không race với `FlushSingleClassByIdAsync`, có retry khi đụng ràng buộc duy nhất PostgreSQL `23505`.
+* Ưu tiên giữ trạng thái có mặt (`AttendedMass = true`), bảo vệ chống ghi đè `ABSENT_PERMITTED` mới hơn hoặc để `BATCH_ROW` hạ cấp `LINED_UP`/`PRESENT` xuống `LATE`.
+* Ưu tiên giữ thời gian quét QR sớm nhất (`MassCheckInTime < existing`) và ưu tiên QR Scan hơn Grid Save khi xung đột hợp lệ.
 
 
 
 
-* **Database access:** Mở `BeginTransactionAsync`, Upsert dữ liệu vào bảng `Attendances`, sau đó xóa cache Redis (`ClassSheet`, `ClassSessionInfo`) và `staff_lookup:student_360:{studentId}` cho các lớp/ngày vừa đồng bộ (tương tự `AbsenceController.Review` xóa cache Redis khi duyệt đơn xin phép).
+* **Database access:** Mở `BeginTransactionAsync`, Upsert dữ liệu vào bảng `Attendances` + `AttendanceAuditLogs`, sau đó gọi `FinalizePartitionsAfterExternalSyncAsync` và xóa cache `staff_lookup:student_360:{studentId}` cho các lớp/ngày vừa đồng bộ (tương tự `AbsenceController.Review` xóa cache Redis khi duyệt đơn xin phép).
 
 
-* **Output:** JSON báo cáo số lượng bản ghi đã đồng bộ (`syncedCount`).
+* **Output:** JSON báo cáo `syncedCount`, `syncedClientIds`, `skippedCount`, `skippedRecords`.
 
 
 
@@ -233,7 +229,7 @@
 * **Input:** `UndoScanRequestDto` (`EnrollmentId`, `ClassId`, `StudentCode`, `AttendanceDate`, `ActivityType`, `SessionMode`).
 
 
-* **Business processing & Database access:** Gọi `RedisAttendanceService.UndoScanCheckInAsync` thu hồi trạng thái trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), đánh dấu `IsDirty = true`, đồng thời cập nhật reset bản ghi trong PostgreSQL (`Attendances`, và `MassCampaignRecords` nếu `ActivityType` chứa `"CHIẾN DỊCH"`).
+* **Business processing & Database access:** `AttendanceController.UndoScanCheckIn` kiểm tra `CanAccessClassAsync` & `StaffSelfActionGuard` (`403` nếu vi phạm), rồi gọi `RedisAttendanceService.UndoScanCheckInAsync(request, User)`: giữ khóa nguyên tử `ClassFlushLock -> ClassSheetLock`, kiểm tra cửa sổ thời gian `15 giây` và người quét gốc (trừ Leadership) qua `QrScanUndoMetaKey`, thu hồi trạng thái trên Redis ClassSheet (`ATT:CLASS:{classId}:DATE:{date}`), xóa `CampaignScanMarker` đang mở trong DB/Redis, luôn ghi audit log `QR_UNDO` và cập nhật reset bản ghi trong PostgreSQL (`Attendances`, `MassCampaignRecords`). Trên UI (`ScanQr.cshtml`), tắt nút Hoàn tác nếu `isDuplicate === true` và fallback gọi server undo nếu bản ghi offline đã tự đồng bộ khi có mạng.
 
 
 * **Output:** JSON `{ success, message }`.
@@ -258,12 +254,17 @@
 * `LINED_UP` = 1.0; `PRESENT` = 1.0; `LATE` = 0.8; `ABSENT_PERMITTED` = 0.5. (Tùy chỉnh được thông qua `AttendanceRuleConfigs`).
 
 
-* **Quy tắc cấp quyền truy cập lớp học (GetAuthorizedClassesAsync):**
+* **Quy tắc cấp quyền truy cập lớp học (GetAuthorizedClassesAsync & CanAccessClassAsync):**
 
 
 * *Leadership (Admin, Cha Xứ, BĐH):* Xem tất cả các lớp.
-* *BranchHead (Trưởng khối):* Xem lớp thuộc khối được phân công + lớp đứng dạy.
-* *Teacher (GLV):* Chỉ xem các lớp có gán `UserId` trong bảng `ClassTeachers`.
+* *BranchHead (Trưởng khối):* Chỉ xem/thao tác lớp thuộc khối `ManagedGradeLevel` (fail-closed nếu `ManagedGradeLevel` rỗng/null).
+* *Teacher (GLV):* Chỉ xem/thao tác các lớp có gán `UserId` trong `ClassTeachers` đúng `AcademicYearId` hiện hành.
+* *ProbationaryTeacher (GLV Dự Bị):* Chỉ xem/thao tác lớp được phân công đúng `AcademicYearId` ở Ca Sáng (`!GradeLevel.IsAfternoonSession`), và bị chặn tự điểm danh/hoàn tác/duyệt đơn cho `LinkedStudentId` qua `StaffSelfActionGuard`.
+
+* **Chống enumeration & spam tại Cổng công khai (`AbsenceController`, `AttendanceDisputeService`):**
+  * Gộp thông báo lỗi xác thực phản ánh (`GenericParentVerificationFailedMessage`) và đơn nghỉ phép (`GenericVerificationError`) thành một thông báo chung.
+  * `AbsenceController`: áp dụng Redis lockout (`ICacheService`), `WebsiteUrlHoneypot`, cửa sổ ngày `[VietnamTimeHelper.Today - 7, +60]`, giới hạn tối đa 5 đơn chờ duyệt và chặn nộp trùng đơn cùng `(EnrollmentId, AbsenceDate, SessionType)`.
 
 
 
